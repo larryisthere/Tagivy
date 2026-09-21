@@ -17,7 +17,7 @@
 - Swift 6.3.2
 - macOS 26.5 SDK
 - AppKit、AVFoundation、LocalAuthentication、CoreServices/FSEvents、SQLite3 均可由 Swift 工程直接引用
-- 目标项目目录：`/Users/larryisthere/Public/Local Projects/<repo-name>`
+- 目标项目目录：`/Users/larryisthere/Public/Projects/<repo-name>`
 
 项目形态建议使用标准 Xcode macOS App 工程。应用需要 App Sandbox、文件访问授权、签名、Entitlements、Info.plist、Unit Test 与 UI Test target，Xcode 工程适合作为主入口。
 
