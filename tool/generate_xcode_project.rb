@@ -62,20 +62,20 @@ end
 
 app_target.build_configurations.each do |configuration|
   settings = configuration.build_settings
-  settings["APP_DISPLAY_NAME"] = "FileFacet"
+  settings["APP_DISPLAY_NAME"] = "Tagivy"
   settings["CODE_SIGN_ENTITLEMENTS"] = "Config/VideoTagManager.entitlements"
   settings["CODE_SIGN_STYLE"] = "Automatic"
   settings["COMBINE_HIDPI_IMAGES"] = "YES"
-  settings["CURRENT_PROJECT_VERSION"] = "13"
+  settings["CURRENT_PROJECT_VERSION"] = "14"
   settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon"
   settings["ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME"] = "AccentColor"
   settings["ENABLE_APP_SANDBOX"] = "YES"
   settings["ENABLE_HARDENED_RUNTIME"] = "YES"
   settings["GENERATE_INFOPLIST_FILE"] = "NO"
   settings["INFOPLIST_FILE"] = "Config/Info.plist"
-  settings["MARKETING_VERSION"] = "1.0.12"
-  settings["PRODUCT_BUNDLE_IDENTIFIER"] = "com.larryisthere.video-tag-manager"
-  settings["PRODUCT_NAME"] = "FileFacet"
+  settings["MARKETING_VERSION"] = "1.0.13"
+  settings["PRODUCT_BUNDLE_IDENTIFIER"] = "com.larryisthere.tagivy"
+  settings["PRODUCT_NAME"] = "Tagivy"
   settings["SDKROOT"] = "macosx"
 end
 
@@ -84,10 +84,10 @@ test_target.build_configurations.each do |configuration|
   settings["BUNDLE_LOADER"] = "$(TEST_HOST)"
   settings["CODE_SIGN_STYLE"] = "Automatic"
   settings["GENERATE_INFOPLIST_FILE"] = "YES"
-  settings["PRODUCT_BUNDLE_IDENTIFIER"] = "com.larryisthere.video-tag-manager.tests"
+  settings["PRODUCT_BUNDLE_IDENTIFIER"] = "com.larryisthere.tagivy.tests"
   settings["PRODUCT_NAME"] = "VideoTagManagerTests"
   settings["SDKROOT"] = "macosx"
-  settings["TEST_HOST"] = "$(BUILT_PRODUCTS_DIR)/FileFacet.app/Contents/MacOS/FileFacet"
+  settings["TEST_HOST"] = "$(BUILT_PRODUCTS_DIR)/Tagivy.app/Contents/MacOS/Tagivy"
 end
 
 project.save
