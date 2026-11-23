@@ -33,9 +33,15 @@ final class InspectorViewController: NSViewController {
         }
     }
 
+    private static let horizontalInset: CGFloat = 16
+    private static let documentTopInset: CGFloat = 10
+    private static let documentBottomInset: CGFloat = 16
+
     private let stack = NSStackView()
     private let contentScrollView = NSScrollView()
-    private let contentStack = InspectorContentStackView()
+    private let scrollDocument = InspectorScrollDocumentView()
+    private let contentStack = NSStackView()
+    private lazy var contentWidth = contentStack.widthAnchor.constraint(equalToConstant: 1)
     private let actionContainer = NSStackView()
     private let draftStatusLabel = NSTextField(wrappingLabelWithString: "")
     private lazy var discardButton = NSButton(
@@ -125,20 +131,26 @@ final class InspectorViewController: NSViewController {
         let container = NSView()
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
-        stack.alignment = .leading
+        stack.alignment = .centerX
         stack.spacing = 12
-        // The scroll document is frame-sized below; an autoresizing height constraint
-        // would make fitting-size measurement compress long tag lists into the old frame.
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
         contentStack.spacing = 9
+        scrollDocument.addSubview(contentStack)
+        NSLayoutConstraint.activate([
+            contentStack.leadingAnchor.constraint(equalTo: scrollDocument.leadingAnchor,
+                                                  constant: Self.horizontalInset),
+            contentStack.topAnchor.constraint(equalTo: scrollDocument.topAnchor,
+                                              constant: Self.documentTopInset),
+            contentWidth,
+        ])
         contentScrollView.translatesAutoresizingMaskIntoConstraints = false
         contentScrollView.hasVerticalScroller = true
         contentScrollView.hasHorizontalScroller = false
         contentScrollView.autohidesScrollers = true
         contentScrollView.drawsBackground = false
-        contentScrollView.documentView = contentStack
+        contentScrollView.documentView = scrollDocument
         contentScrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
         contentScrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         configureActionArea()
@@ -146,16 +158,21 @@ final class InspectorViewController: NSViewController {
         stack.addArrangedSubview(tagSearchField)
         stack.addArrangedSubview(contentScrollView)
         stack.addArrangedSubview(actionContainer)
+        // The document owns the body padding so the end of the list scrolls clear of the viewport edge.
+        stack.setCustomSpacing(0, after: tagSearchField)
         container.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             stack.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16),
-            sectionControl.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            tagSearchField.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor),
+            sectionControl.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: Self.horizontalInset),
+            sectionControl.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -Self.horizontalInset),
+            tagSearchField.leadingAnchor.constraint(equalTo: sectionControl.leadingAnchor),
+            tagSearchField.trailingAnchor.constraint(equalTo: sectionControl.trailingAnchor),
             contentScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            actionContainer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            actionContainer.leadingAnchor.constraint(equalTo: sectionControl.leadingAnchor),
+            actionContainer.trailingAnchor.constraint(equalTo: sectionControl.trailingAnchor),
         ])
         view = container
         setSelection([])
@@ -721,7 +738,7 @@ final class InspectorViewController: NSViewController {
         let label = InspectorWrappingHelpLabel(value)
         contentStack.addArrangedSubview(label)
         label.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        label.updateMeasuredWidth(contentScrollView.contentSize.width)
+        label.updateMeasuredWidth(contentWidth.constant)
     }
 
     private func addField(title: String, value: String) {
@@ -966,7 +983,10 @@ final class InspectorViewController: NSViewController {
             case .on: button.state = .on
             }
             button.isEnabled = isApplyingTagChanges == false
+            button.lineBreakMode = .byTruncatingTail
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             contentStack.addArrangedSubview(button)
+            button.widthAnchor.constraint(lessThanOrEqualTo: contentStack.widthAnchor).isActive = true
         }
         if tagSearchText.isEmpty, assignableTags.isEmpty, draftTagCreations.isEmpty {
             addSecondaryText(String(localized: .tagEmpty))
@@ -1281,6 +1301,7 @@ final class InspectorViewController: NSViewController {
         actionContainer.orientation = .vertical
         actionContainer.alignment = .leading
         actionContainer.spacing = 8
+        actionContainer.edgeInsets.bottom = Self.documentBottomInset
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -1361,15 +1382,24 @@ final class InspectorViewController: NSViewController {
 
     private func updateScrollDocumentSize() {
         guard isViewLoaded else { return }
-        let width = contentScrollView.contentSize.width
+        let clipWidth = contentScrollView.contentSize.width
+        guard clipWidth > Self.horizontalInset else { return }
+
+        // A legacy scrollbar may occupy part of the external trailing gutter.
+        let documentWidth = max(0, contentScrollView.bounds.width - 2 * Self.horizontalInset)
+        let width = min(documentWidth, clipWidth - Self.horizontalInset)
         guard width > 0 else { return }
-        contentStack.setFrameSize(NSSize(width: width, height: contentStack.frame.height))
+        contentWidth.constant = width
         for case let help as InspectorWrappingHelpLabel in contentStack.arrangedSubviews {
             help.updateMeasuredWidth(width)
         }
-        let fittingHeight = max(1, contentStack.fittingSize.height)
-        contentStack.setFrameSize(NSSize(width: width, height: fittingHeight))
-        contentStack.layoutSubtreeIfNeeded()
+        let height = ceil(contentStack.fittingSize.height) + Self.documentTopInset + Self.documentBottomInset
+        let size = NSSize(width: clipWidth, height: height)
+        if scrollDocument.frame.size != size {
+            scrollDocument.setFrameSize(size)
+        }
+        scrollDocument.layoutSubtreeIfNeeded()
+        contentScrollView.reflectScrolledClipView(contentScrollView.contentView)
     }
 
 }
@@ -1422,7 +1452,7 @@ final class InspectorWrappingHelpLabel: NSTextField {
     }
 }
 
-private final class InspectorContentStackView: NSStackView {
+private final class InspectorScrollDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
 

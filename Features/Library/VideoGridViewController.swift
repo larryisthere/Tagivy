@@ -98,7 +98,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     private let collectionView = VideoCollectionView()
-    private let scrollView = NSScrollView()
+    private let scrollViewport = NSView()
+    private var scrollView = NSScrollView()
     private let onOpenVideo: (VideoRecord) -> Void
     private let onRevealVideo: (VideoRecord) -> Void
     private let onCopyPath: (VideoRecord) -> Void
@@ -115,7 +116,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let onDismissNotification: () -> Void
     var onViewVideos: ((VideoRevealRequest) -> Void)?
     private let importStatusView = ImportStatusView()
-    private var importStatusHeightConstraint: NSLayoutConstraint?
+    private var scrollTopWithoutStatus: NSLayoutConstraint?
+    private var statusLayout: [NSLayoutConstraint] = []
     private var importState: LibraryImportState = .idle
     private var operationStatus: LibraryOperationStatus?
     private var relinkingVideoID: String?
@@ -211,11 +213,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             self?.requestRemoveSelectedVideos()
         }
 
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-        scrollView.documentView = collectionView
+        scrollViewport.translatesAutoresizingMaskIntoConstraints = false
+        installScrollView(scrollView)
 
         emptyState.translatesAutoresizingMaskIntoConstraints = false
         emptyState.orientation = .vertical
@@ -251,34 +250,83 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                   case let .relinkFailed(videoID, _) = operationStatus else { return }
             onRetryRelinkVideo(videoID)
         }
-        container.addSubview(scrollView)
+        container.addSubview(scrollViewport)
         container.addSubview(emptyState)
-        container.addSubview(importStatusView)
-        let importStatusHeightConstraint = importStatusView.heightAnchor.constraint(equalToConstant: 0)
-        self.importStatusHeightConstraint = importStatusHeightConstraint
-        NSLayoutConstraint.activate([
+        let scrollTopWithoutStatus = scrollViewport.topAnchor.constraint(equalTo: container.topAnchor)
+        self.scrollTopWithoutStatus = scrollTopWithoutStatus
+        statusLayout = [
             importStatusView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             importStatusView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            importStatusView.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
-            importStatusHeightConstraint,
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: importStatusView.bottomAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            emptyState.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
-            emptyState.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor, constant: -24),
+            importStatusView.topAnchor.constraint(equalTo: container.topAnchor),
+            importStatusView.heightAnchor.constraint(equalToConstant: 52),
+            scrollViewport.topAnchor.constraint(equalTo: importStatusView.bottomAnchor),
+        ]
+        NSLayoutConstraint.activate([
+            scrollViewport.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollViewport.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollTopWithoutStatus,
+            scrollViewport.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            emptyState.centerXAnchor.constraint(equalTo: scrollViewport.centerXAnchor),
+            emptyState.centerYAnchor.constraint(equalTo: scrollViewport.centerYAnchor, constant: -24),
             emptyState.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
         ])
-        importStatusView.isHidden = true
         view = container
         rebuildSections()
         updateEmptyState()
+    }
+
+    private func installScrollView(_ scroll: NSScrollView) {
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.hasVerticalScroller = !videos.isEmpty
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        // The viewport is already below the rule bar and any active status.
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentView.clipsToBounds = true
+        scrollViewport.addSubview(scroll)
+        scroll.documentView = collectionView
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: scrollViewport.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: scrollViewport.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: scrollViewport.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: scrollViewport.bottomAnchor),
+        ])
+    }
+
+    private func renewScrollViewAfterPinnedHeaders() {
+        // On macOS 26+, AppKit can keep the old pinned header's blur after
+        // removing its supplementary view. Replacing the host removes that effect.
+        let oldScroll = scrollView
+        let origin = oldScroll.contentView.bounds.origin
+        let window = oldScroll.window
+        let firstResponder = window?.firstResponder
+        let focusedGrid = firstResponder === collectionView
+            || (firstResponder as? NSView)?.isDescendant(of: collectionView) == true
+        let focusedScroll = firstResponder === oldScroll
+
+        oldScroll.documentView = nil
+        oldScroll.removeFromSuperview()
+        let replacement = NSScrollView()
+        scrollView = replacement
+        installScrollView(replacement)
+        scrollViewport.layoutSubtreeIfNeeded()
+        replacement.contentView.scroll(to: origin)
+        replacement.reflectScrolledClipView(replacement.contentView)
+
+        if focusedGrid {
+            window?.makeFirstResponder(firstResponder)
+        } else if focusedScroll {
+            window?.makeFirstResponder(replacement)
+        }
     }
 
     func setGrouping(_ preference: VideoGroupingPreference) {
         loadViewIfNeeded()
         guard grouping != preference else { return }
         let wasGrouped = grouping.key != .none
+        if #available(macOS 26.0, *), wasGrouped, preference.key == .none {
+            renewScrollViewAfterPinnedHeaders()
+        }
         grouping = preference
         collapsedGroupIDs.removeAll()
         rebuildSections()
@@ -552,8 +600,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private func renderImportState(_ state: LibraryImportState) {
         switch state {
         case .idle:
-            importStatusView.isHidden = true
-            importStatusHeightConstraint?.constant = 0
+            hideImportStatus()
         case let .importing(title, detail, progress):
             importStatusView.configureImporting(title: title, detail: detail, progress: progress)
             showImportStatus()
@@ -747,8 +794,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     private func showImportStatus() {
-        importStatusView.isHidden = false
-        importStatusHeightConstraint?.constant = 52
+        guard importStatusView.superview == nil else { return }
+        view.addSubview(importStatusView)
+        scrollTopWithoutStatus?.isActive = false
+        NSLayoutConstraint.activate(statusLayout)
+    }
+
+    private func hideImportStatus() {
+        guard importStatusView.superview != nil else { return }
+        NSLayoutConstraint.deactivate(statusLayout)
+        importStatusView.removeFromSuperview()
+        scrollTopWithoutStatus?.isActive = true
     }
 
     func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false) {

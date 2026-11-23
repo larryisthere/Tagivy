@@ -1822,6 +1822,23 @@
         }
       }
     },
+    "error.librarySupplementalRead" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some library information could not be loaded."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分资料库信息未能载入。"
+          }
+        }
+      }
+    },
     "error.remove" : {
       "extractionState" : "manual",
       "localizations" : {

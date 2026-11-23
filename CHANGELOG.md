@@ -4,6 +4,14 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-11-23
+
+### Fixed
+
+- The Inspector keeps both tabs aligned with their header, and scrolling leaves room around the first and last rows.
+- The library toolbar stays usable when optional library information cannot be loaded.
+- Import and operation messages occupy space only while visible. Returning from Recently Added to All Videos no longer leaves a blur over the first thumbnails.
+
 ## [1.0.15] - 2026-11-23
 
 ### Changed

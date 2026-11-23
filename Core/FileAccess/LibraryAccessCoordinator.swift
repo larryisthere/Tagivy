@@ -642,9 +642,26 @@ final class LibraryAccessCoordinator {
                 }
                 try await refreshTags(libraryID: LibraryRecord.primaryID)
                 try await refreshResolvedVideoURLs()
-                try await refreshVisibleVideosNow()
-                let existingVideos = try await database.fetchVideos(libraryID: LibraryRecord.primaryID)
-                startMediaProcessing(videos: existingVideos)
+                try await publishVisibleVideosNow()
+
+                // These independent reads can fail after the video index is already usable.
+                var didFailSupplementalRead = false
+                if await restoreSupplementalData("sidebar-counts", operation: refreshSidebarFilterCounts) == false {
+                    didFailSupplementalRead = true
+                }
+                if await restoreSupplementalData("smart-collections", operation: {
+                    try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+                }) == false { didFailSupplementalRead = true }
+                if await restoreSupplementalData("recovery-candidates", operation: refreshRecoveryCandidates) == false {
+                    didFailSupplementalRead = true
+                }
+                if await restoreSupplementalData("media-queue", operation: {
+                    let existingVideos = try await database.fetchVideos(libraryID: LibraryRecord.primaryID)
+                    startMediaProcessing(videos: existingVideos)
+                }) == false { didFailSupplementalRead = true }
+                if didFailSupplementalRead {
+                    onOperationError?(String(localized: .errorLibrarySupplementalRead))
+                }
                 if sourceURLs.isEmpty == false { scheduleMaintenance() }
             } catch {
                 AppLogger.library.error("Library restore failed with category: \(String(describing: type(of: error)), privacy: .public)")
@@ -3298,7 +3315,29 @@ final class LibraryAccessCoordinator {
         }
     }
 
+    private func restoreSupplementalData(
+        _ phase: String,
+        operation: () async throws -> Void
+    ) async -> Bool {
+        do {
+            try await operation()
+            return true
+        } catch {
+            AppLogger.library.error(
+                "Optional library restore failed: phase=\(phase, privacy: .public), category=\(String(describing: type(of: error)), privacy: .public)"
+            )
+            return false
+        }
+    }
+
     private func refreshVisibleVideosNow() async throws {
+        try await publishVisibleVideosNow()
+        try await refreshSidebarFilterCounts()
+        try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+        try await refreshRecoveryCandidates()
+    }
+
+    private func publishVisibleVideosNow() async throws {
         queryTask?.cancel()
         let filter = currentFilter
         let records = try await database.fetchVideos(
@@ -3315,14 +3354,14 @@ final class LibraryAccessCoordinator {
                 ? orderedUnavailableVideos(videos)
                 : videos
         )
-        try await refreshSidebarFilterCounts()
-        try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
-        if recoveryTask == nil {
-            recoveryCandidates = try await database.fetchVideos(libraryID: LibraryRecord.primaryID)
-                .map { presentedVideo($0) }.filter { $0.unavailableReason == .accessLost }
-            recoveryStatus.candidateCount = recoveryCandidates.count
-            publishRecoveryStatus()
-        }
+    }
+
+    private func refreshRecoveryCandidates() async throws {
+        guard recoveryTask == nil else { return }
+        recoveryCandidates = try await database.fetchVideos(libraryID: LibraryRecord.primaryID)
+            .map { presentedVideo($0) }.filter { $0.unavailableReason == .accessLost }
+        recoveryStatus.candidateCount = recoveryCandidates.count
+        publishRecoveryStatus()
     }
 
     private func refreshSidebarFilterCounts() async throws {
