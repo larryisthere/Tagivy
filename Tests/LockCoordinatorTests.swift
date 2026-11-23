@@ -181,6 +181,55 @@ final class RecoveryReadBudgetTests: XCTestCase {
         XCTAssertNil(destination(directoryEvents))
     }
 
+    @MainActor
+    func testTextUndoCannotFallThroughToLibraryMutation() {
+        var catalogUndos = 0
+        let undoCatalog = { catalogUndos += 1 }
+        let textManager = UndoManager()
+        textManager.groupsByEvent = false
+        textManager.beginUndoGrouping()
+        let target = UndoFixture()
+        textManager.registerUndo(withTarget: target) { target in target.value = "original" }
+        textManager.endUndoGrouping()
+        LibraryUndoRouting.perform(editingText: true, textUndo: textManager,
+                                   isLibraryKey: true, catalogUndo: undoCatalog)
+        XCTAssertEqual(target.value, "original")
+        LibraryUndoRouting.perform(editingText: true, textUndo: nil,
+                                   isLibraryKey: true, catalogUndo: undoCatalog)
+        LibraryUndoRouting.perform(editingText: false, textUndo: nil,
+                                   isLibraryKey: false, catalogUndo: undoCatalog)
+        XCTAssertEqual(catalogUndos, 0)
+        LibraryUndoRouting.perform(editingText: false, textUndo: nil,
+                                   isLibraryKey: true, catalogUndo: undoCatalog)
+        XCTAssertEqual(catalogUndos, 1)
+    }
+
+    @MainActor
+    func testInspectorHelpReservesTwoLinesInDefaultAndNarrowPanels() {
+        let label = InspectorWrappingHelpLabel("Select one or more videos to view tags or details.")
+        label.updateMeasuredWidth(400)
+        let oneLine = label.fittingSize.height
+        label.updateMeasuredWidth(248)
+        XCTAssertGreaterThan(label.fittingSize.height, oneLine + 8)
+        label.updateMeasuredWidth(208)
+        XCTAssertGreaterThan(label.fittingSize.height, oneLine + 8)
+        label.updateMeasuredWidth(400)
+        XCTAssertEqual(label.fittingSize.height, oneLine, accuracy: 1)
+    }
+
+    @MainActor
+    func testFilteredEmptyNeverOffersImportAndUnavailableIndexHidesEmptyPrompt() {
+        typealias Empty = VideoGridViewController.EmptyContent
+        XCTAssertEqual(Empty.resolve(libraryAvailable: true, hasConstraints: false, libraryCount: 0), .importVideos)
+        XCTAssertEqual(Empty.resolve(libraryAvailable: true, hasConstraints: true, libraryCount: 0), .noMatches)
+        XCTAssertEqual(Empty.resolve(libraryAvailable: true, hasConstraints: true, libraryCount: 1), .noMatches)
+        XCTAssertEqual(Empty.resolve(libraryAvailable: false, hasConstraints: false, libraryCount: 0), .hidden)
+    }
+
+    private final class UndoFixture {
+        var value = "changed"
+    }
+
     func testRecoveryMediaExclusionSurvivesReplayAndStopUntilExactExplicitIntent() {
         for restoreBeforeStop in [false, true] {
             var exclusion = RecoveryMediaExclusions()

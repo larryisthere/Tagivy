@@ -53,6 +53,23 @@ struct VideoRevealRequest: Equatable, Sendable {
 
 @MainActor
 final class VideoGridViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
+    static let contentLeadingInset: CGFloat = 20
+
+    enum EmptyContent: Equatable {
+        case importVideos, noMatches, hidden
+
+        static func resolve(libraryAvailable: Bool, hasConstraints: Bool, libraryCount: Int) -> Self {
+            guard libraryAvailable else { return .hidden }
+            return !hasConstraints && libraryCount == 0 ? .importVideos : .noMatches
+        }
+    }
+    private var emptyContent: EmptyContent = .importVideos
+
+    func setEmptyContent(_ content: EmptyContent) {
+        emptyContent = content
+        if isViewLoaded { updateEmptyState() }
+    }
+
     private static let itemIdentifier = NSUserInterfaceItemIdentifier("VideoCollectionViewItem")
     private static let groupHeaderIdentifier = NSUserInterfaceItemIdentifier("VideoGroupHeaderView")
     private static let gridItemWidthDefaultsKey = "VideoGridItemWidth"
@@ -164,7 +181,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth())
         layout.minimumInteritemSpacing = 16
         layout.minimumLineSpacing = 20
-        layout.sectionInset = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        layout.sectionInset = NSEdgeInsets(top: 20, left: Self.contentLeadingInset, bottom: 20, right: 20)
         collectionView.collectionViewLayout = layout
         collectionView.dataSource = self
         collectionView.delegate = self
@@ -466,7 +483,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         layout.sectionHeadersPinToVisibleBounds = isGrouped
         layout.sectionInset = NSEdgeInsets(
             top: isGrouped ? 8 : 20,
-            left: 20,
+            left: Self.contentLeadingInset,
             bottom: 20,
             right: 20
         )
@@ -953,9 +970,16 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     private func updateEmptyState() {
-        emptyState.isHidden = videos.isEmpty == false
-        emptyTitleLabel.stringValue = String(localized: .importEmptyTitle)
-        emptyDetailLabel.stringValue = String(localized: .importEmptyDetail)
+        emptyState.isHidden = !videos.isEmpty || emptyContent == .hidden
+        switch emptyContent {
+        case .importVideos, .hidden:
+            emptyTitleLabel.stringValue = String(localized: .importEmptyTitle)
+            emptyDetailLabel.stringValue = String(localized: .importEmptyDetail)
+        case .noMatches:
+            emptyTitleLabel.stringValue = String(localized: "library.noMatches", defaultValue: "No Matching Videos")
+            emptyDetailLabel.stringValue = String(localized: "library.noMatches.detail",
+                                                  defaultValue: "Try a different search or change the filters.")
+        }
     }
 
     private func openVideo(at indexPath: IndexPath) {

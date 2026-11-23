@@ -718,9 +718,10 @@ final class InspectorViewController: NSViewController {
     }
 
     private func addSecondaryText(_ value: String) {
-        let label = NSTextField(wrappingLabelWithString: value)
-        label.textColor = .secondaryLabelColor
+        let label = InspectorWrappingHelpLabel(value)
         contentStack.addArrangedSubview(label)
+        label.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        label.updateMeasuredWidth(contentScrollView.contentSize.width)
     }
 
     private func addField(title: String, value: String) {
@@ -1363,11 +1364,62 @@ final class InspectorViewController: NSViewController {
         let width = contentScrollView.contentSize.width
         guard width > 0 else { return }
         contentStack.setFrameSize(NSSize(width: width, height: contentStack.frame.height))
+        for case let help as InspectorWrappingHelpLabel in contentStack.arrangedSubviews {
+            help.updateMeasuredWidth(width)
+        }
         let fittingHeight = max(1, contentStack.fittingSize.height)
         contentStack.setFrameSize(NSSize(width: width, height: fittingHeight))
         contentStack.layoutSubtreeIfNeeded()
     }
 
+}
+
+// A frame-sized scroll document does not give its stack a horizontal
+// fitting proposal. Measure its help text against the actual clip width.
+final class InspectorWrappingHelpLabel: NSTextField {
+    private var measuredHeight: NSLayoutConstraint?
+    private var measuredWidth: CGFloat = 0
+
+    init(_ text: String) {
+        super.init(frame: .zero)
+        stringValue = text
+        isEditable = false
+        isSelectable = false
+        isBezeled = false
+        isBordered = false
+        drawsBackground = false
+        font = .systemFont(ofSize: NSFont.systemFontSize)
+        textColor = .secondaryLabelColor
+        cell?.usesSingleLineMode = false
+        maximumNumberOfLines = 0
+        lineBreakMode = .byWordWrapping
+        cell?.wraps = true
+        cell?.isScrollable = false
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func updateMeasuredWidth(_ width: CGFloat) {
+        guard width > 0, abs(measuredWidth - width) > 0.5 else { return }
+        measuredWidth = width
+        preferredMaxLayoutWidth = width
+        let textFont = font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        let textSize = (stringValue as NSString).boundingRect(
+            with: NSSize(width: max(1, width - 6), height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: textFont]
+        ).size
+        let minimumHeight = ceil(textSize.height) + 4
+        if let measuredHeight {
+            measuredHeight.constant = minimumHeight
+        } else {
+            let constraint = heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight)
+            constraint.isActive = true
+            measuredHeight = constraint
+        }
+    }
 }
 
 private final class InspectorContentStackView: NSStackView {

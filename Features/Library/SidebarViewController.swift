@@ -1363,7 +1363,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         cell.actionButtonTrailingConstraint = actionButtonTrailingConstraint
         cell.actionButtonWidthConstraint = actionButtonWidthConstraint
         NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: -6),
+            imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
             imageView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             imageView.widthAnchor.constraint(equalToConstant: 16),
             imageView.heightAnchor.constraint(equalToConstant: 16),
