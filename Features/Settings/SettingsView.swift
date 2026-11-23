@@ -34,24 +34,29 @@ struct SettingsView: View {
     let setAuthenticationEnabled: (Bool) -> Void
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(SettingsSection.allCases, selection: $navigation.selection) { section in
                 Label(section.title, systemImage: section.systemImage)
                     .tag(section)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 160, ideal: 188, max: 220)
-        } detail: {
-            switch navigation.selection ?? .privacy {
-            case .importOptions:
-                importView
-            case .privacy:
-                privacyView
-            case .about:
-                aboutView
+            .frame(width: 188)
+
+            Divider()
+
+            Group {
+                switch navigation.selection ?? .privacy {
+                case .importOptions:
+                    importView
+                case .privacy:
+                    privacyView
+                case .about:
+                    aboutView
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .navigationSplitViewStyle(.balanced)
+        .navigationTitle((navigation.selection ?? .privacy).title)
     }
 
     private var importView: some View {
@@ -86,7 +91,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(String(localized: .settingsImport))
         .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 24)
     }
@@ -116,7 +120,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(String(localized: .settingsPrivacy))
         .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 24)
     }
@@ -150,6 +153,5 @@ struct SettingsView: View {
             .frame(maxWidth: 680, alignment: .leading)
             .padding(32)
         }
-        .navigationTitle(String(localized: .settingsAbout))
     }
 }

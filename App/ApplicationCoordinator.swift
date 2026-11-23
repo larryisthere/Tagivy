@@ -124,8 +124,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
                 completion: completion
             )
         },
-        loadTagStates: { [weak self] videoIDs, completion in self?.libraryAccessCoordinator?.tagAssignmentStates(videoIDs: videoIDs, completion: completion) },
-        settingsViewController: settingsViewController
+        loadTagStates: { [weak self] videoIDs, completion in self?.libraryAccessCoordinator?.tagAssignmentStates(videoIDs: videoIDs, completion: completion) }
     )
 
     private lazy var libraryAccessCoordinator: LibraryAccessCoordinator? = {
@@ -149,6 +148,28 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             }
         )
     )
+
+    private lazy var settingsWindowController: NSWindowController = {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        window.title = String(localized: .toolbarSettings)
+        window.contentViewController = settingsViewController
+        window.setContentSize(NSSize(width: 720, height: 480))
+        window.contentMinSize = NSSize(width: 560, height: 380)
+        window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
+        window.center()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsWindowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: window
+        )
+        return NSWindowController(window: window)
+    }()
+    private weak var presentedSettingsWindow: NSWindow?
+    private var settingsWasKeyBeforePrivacyHide: Bool?
 
     override init() {
         let preferencesStore = PreferencesStore()
@@ -261,6 +282,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         case .unlocked:
             windowController.setRootViewController(libraryViewController)
         case .locked, .authenticating, .failed:
+            settingsWasKeyBeforePrivacyHide = nil
+            presentedSettingsWindow?.close()
             libraryViewController.setPresetShortcutHintsVisible(false)
             quickLookCoordinator.close()
             let view = LockView(
@@ -271,7 +294,19 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         }
     }
 
+    @objc private func enableNativeFieldUndo(_ notification: Notification) {
+        let editor = notification.userInfo?["NSFieldEditor"] as? NSTextView
+            ?? (notification.object as? NSTextField)?.currentEditor() as? NSTextView
+        editor?.allowsUndo = true
+    }
+
     private func registerForPrivacyEvents() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(enableNativeFieldUndo(_:)),
+            name: NSControl.textDidBeginEditingNotification,
+            object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(applicationWillResignActive),
@@ -319,6 +354,10 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     @objc private func applicationWillResignActive() {
         libraryViewController.setPresetShortcutHintsVisible(false)
         guard lockCoordinator.isAuthenticationEnabled else { return }
+        if let settings = presentedSettingsWindow, settings.isVisible, !settings.isMiniaturized {
+            settingsWasKeyBeforePrivacyHide = settings.isKeyWindow
+            settings.orderOut(nil)
+        }
         installPrivacyShield()
         if preferencesStore.idleLockInterval == .immediately,
            lockCoordinator.state == .unlocked {
@@ -329,6 +368,19 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     @objc private func applicationDidBecomeActive() {
         render(lockState: lockCoordinator.state)
         removePrivacyShield()
+        guard let settingsWasKey = settingsWasKeyBeforePrivacyHide else { return }
+        settingsWasKeyBeforePrivacyHide = nil
+        guard lockCoordinator.state == .unlocked, let settings = presentedSettingsWindow else { return }
+        if !settingsWasKey, let library = windowController.window, library.isKeyWindow {
+            settings.order(.below, relativeTo: library.windowNumber)
+        } else {
+            settings.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    @objc private func settingsWindowWillClose(_ notification: Notification) {
+        settingsWasKeyBeforePrivacyHide = nil
+        presentedSettingsWindow = nil
     }
 
     @objc private func windowDidResignKey() {
@@ -391,10 +443,20 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
 
     private func presentSettings(section: SettingsSection) {
         guard lockCoordinator.state == .unlocked else { return }
+        settingsWasKeyBeforePrivacyHide = nil
         settingsNavigation.selection = section
-        libraryViewController.showSettings()
-        windowController.window?.makeKeyAndOrderFront(nil)
+        let controller = settingsWindowController
+        presentedSettingsWindow = controller.window
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showLibraryWindow() {
+        windowController.showWindow(nil)
+        guard let window = windowController.window else { return }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
     }
 
     @objc private func importVideos() {
@@ -443,8 +505,25 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
 
     @objc private func undoLastMutation() {
         guard lockCoordinator.state == .unlocked else { return }
-        libraryAccessCoordinator?.undoLastMutation()
+        LibraryUndoRouting.perform(
+            editingText: activeTextEditor != nil,
+            textUndo: activeTextEditor?.undoManager,
+            isLibraryKey: NSApp.keyWindow === windowController.window
+        ) { [weak self] in
+            self?.libraryAccessCoordinator?.undoLastMutation()
+        }
     }
+
+    private var activeTextEditor: NSTextView? {
+        guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView,
+              editor.isEditable else { return nil }
+        return editor
+    }
+
+    @objc private func toggleLibrarySidebar() { libraryViewController.toggleSidebar() }
+    @objc private func toggleLibraryInspector() { libraryViewController.toggleInspector() }
+    @objc private func increaseThumbnailSize() { libraryViewController.adjustZoom(by: 10) }
+    @objc private func decreaseThumbnailSize() { libraryViewController.adjustZoom(by: -10) }
 
     @objc private func createRootTag() {
         guard lockCoordinator.state == .unlocked else { return }
@@ -499,30 +578,42 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let libraryIsKey = NSApp.keyWindow === windowController.window
         if menuItem.action == #selector(importVideos) {
-            return lockCoordinator.state == .unlocked && databaseStore != nil
+            return lockCoordinator.state == .unlocked && libraryIsKey && databaseStore != nil
         }
         if menuItem.action == #selector(scanForNewVideos) {
-            return lockCoordinator.state == .unlocked
+            return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
                 && libraryViewController.canScanForNewVideos
         }
         if menuItem.action == #selector(undoLastMutation) {
-            return lockCoordinator.state == .unlocked
+            guard lockCoordinator.state == .unlocked else { return false }
+            if let editor = activeTextEditor {
+                menuItem.title = String(localized: "menu.undoTyping", defaultValue: "Undo Typing")
+                return editor.undoManager?.canUndo == true
+            }
+            menuItem.title = String(localized: .menuUndoLastAction)
+            return NSApp.keyWindow === windowController.window
                 && libraryAccessCoordinator?.canUndoLastMutation == true
         }
+        if menuItem.action == #selector(toggleLibrarySidebar) || menuItem.action == #selector(toggleLibraryInspector)
+            || menuItem.action == #selector(increaseThumbnailSize) || menuItem.action == #selector(decreaseThumbnailSize) {
+            return lockCoordinator.state == .unlocked && NSApp.keyWindow === windowController.window
+                && libraryViewController.canNavigateLibraryPresets
+        }
         if menuItem.action == #selector(createRootTag) {
-            return lockCoordinator.state == .unlocked
+            return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
                 && libraryViewController.canBeginCreatingRootTag
         }
         if menuItem.action == #selector(focusFilenameSearch) {
-            return lockCoordinator.state == .unlocked
+            return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
                 && libraryViewController.canFocusFilenameSearch
         }
         if menuItem.action == #selector(presentAddFilterMenu) {
-            return lockCoordinator.state == .unlocked
+            return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
                 && libraryViewController.canUseRuleCommands
         }
@@ -530,7 +621,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             || menuItem.action == #selector(showUntaggedVideos)
             || menuItem.action == #selector(showRecentVideos)
             || menuItem.action == #selector(showUnavailableVideos) {
-            return lockCoordinator.state == .unlocked
+            return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
                 && libraryViewController.canNavigateLibraryPresets
         }
@@ -608,6 +699,14 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         createTagItem.keyEquivalentModifierMask = [.command, .shift]
         createTagItem.target = self
         fileMenu.addItem(createTagItem)
+        fileMenu.addItem(.separator())
+        let closeWindowItem = NSMenuItem(
+            title: String(localized: .menuFileCloseWindow),
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        )
+        closeWindowItem.keyEquivalentModifierMask = [.command]
+        fileMenu.addItem(closeWindowItem)
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
@@ -661,6 +760,17 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             item.target = self
             viewMenu.addItem(item)
         }
+        viewMenu.addItem(.separator())
+        for (title, action) in [
+            (String(localized: .toolbarHideShowSidebar), #selector(toggleLibrarySidebar)),
+            (String(localized: .toolbarHideShowInspector), #selector(toggleLibraryInspector)),
+            (String(localized: .toolbarThumbnailIncrease), #selector(increaseThumbnailSize)),
+            (String(localized: .toolbarThumbnailDecrease), #selector(decreaseThumbnailSize))
+        ] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            viewMenu.addItem(item)
+        }
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -671,6 +781,14 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
+        windowMenu.addItem(.separator())
+        let libraryWindowItem = NSMenuItem(
+            title: String(localized: .menuWindowShowLibrary),
+            action: #selector(showLibraryWindow),
+            keyEquivalent: ""
+        )
+        libraryWindowItem.target = self
+        windowMenu.addItem(libraryWindowItem)
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
         NSApp.windowsMenu = windowMenu
@@ -706,6 +824,17 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     private func removePrivacyShield() {
         privacyShield?.removeFromSuperview()
         privacyShield = nil
+    }
+}
+
+@MainActor
+enum LibraryUndoRouting {
+    static func perform(editingText: Bool, textUndo: UndoManager?, isLibraryKey: Bool, catalogUndo: () -> Void) {
+        if editingText {
+            if textUndo?.canUndo == true { textUndo?.undo() }
+        } else if isLibraryKey {
+            catalogUndo()
+        }
     }
 }
 
