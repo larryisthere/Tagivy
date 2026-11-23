@@ -256,9 +256,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         isLibraryAvailable && isShowingScanResults == false
     }
 
-    var canFocusFilenameSearch: Bool {
-        isLibraryAvailable
-    }
+    // Toolbar controls stay usable when the library fails to load; the failure is reported in the title.
+    var canFocusFilenameSearch: Bool { true }
 
     func focusFilenameSearch() {
         guard canFocusFilenameSearch, let searchField = searchToolbarItem?.searchField else { return }
@@ -338,6 +337,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     }
 
     func setVideos(_ videos: [VideoRecord]) {
+        if isLibraryAvailable == false {
+            // A later successful load recovers from an earlier library error.
+            isLibraryAvailable = true
+            setContextStatus(nil)
+            updateGridEmptyContent()
+            updateToolbarState()
+        }
         visibleVideoCount = videos.count
         let resetBrowsingState = resetBrowsingStateForNextVideoUpdate
         resetBrowsingStateForNextVideoUpdate = false
@@ -371,8 +377,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     }
 
     var canScanForNewVideos: Bool {
-        isLibraryAvailable
-            && libraryVideoCount > 0
+        libraryVideoCount > 0
             && isImporting == false
             && isScanWorking == false
     }
@@ -1214,7 +1219,6 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             item.searchField.target = self
             item.searchField.action = #selector(searchChanged(_:))
             item.searchField.widthAnchor.constraint(equalToConstant: 180).isActive = true
-            item.isEnabled = isLibraryAvailable
             searchToolbarItem = item
             return item
         case Self.scanItemIdentifier:
@@ -1246,7 +1250,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
         case Self.searchItemIdentifier, Self.zoomItemIdentifier:
-            isLibraryAvailable
+            true
         case Self.scanItemIdentifier:
             canScanForNewVideos
         default:
@@ -1269,8 +1273,6 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             action: #selector(increaseZoom(_:)),
             buttonType: .momentaryPushIn
         )
-        smallButton.isEnabled = isLibraryAvailable
-        largeButton.isEnabled = isLibraryAvailable
         zoomOutButton = smallButton
         zoomInButton = largeButton
 
@@ -1285,7 +1287,6 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         slider.toolTip = String(localized: .toolbarThumbnailSizeAdjust)
         slider.setAccessibilityLabel(String(localized: .toolbarThumbnailSize))
         slider.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        slider.isEnabled = isLibraryAvailable
         zoomSlider = slider
 
         let zoomOutItem = NSToolbarItem(itemIdentifier: Self.zoomOutItemIdentifier)
@@ -1372,11 +1373,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     }
 
     private func updateToolbarState() {
-        searchToolbarItem?.isEnabled = isLibraryAvailable
         scanToolbarButton?.isEnabled = canScanForNewVideos
-        zoomSlider?.isEnabled = isLibraryAvailable
-        zoomOutButton?.isEnabled = isLibraryAvailable
-        zoomInButton?.isEnabled = isLibraryAvailable
         libraryToolbar.validateVisibleItems()
     }
 
