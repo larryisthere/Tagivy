@@ -593,8 +593,14 @@ actor DatabaseStore {
                             batchExistingVideoIDs.append(existingID)
                         } else {
                             videoID = UUID().uuidString
+                            let displacedVideoID = try locationOwner(sourceID: sourceID, relativePath: video.relativePath)
                             try insertVideo(videoID: videoID, video: video, indexedAt: importedAt)
                             try upsertLocation(videoID: videoID, sourceID: sourceID, video: video, verifiedAt: importedAt)
+                            if let displacedVideoID {
+                                // A different file now occupies this path. Keep the previous record and its tags
+                                // as unavailable so the user can relink or remove it.
+                                try markMissingIfUnlocated(videoID: displacedVideoID, at: importedAt)
+                            }
                             try importFinderTags(videoID: videoID, finderTags: video.finderTags, importedAt: importedAt)
                             batchAddedCount += 1
                             batchAddedVideoIDs.append(videoID)
@@ -1084,6 +1090,42 @@ actor DatabaseStore {
         bindData(video.fallbackPathKey, to: 4, in: statement)
         bindOptionalText(video.lastKnownPath, to: 5, in: statement)
         sqlite3_bind_double(statement, 6, verifiedAt.timeIntervalSince1970)
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw DatabaseError.statementFailed
+        }
+    }
+
+    private func locationOwner(sourceID: String, relativePath: String) throws -> String? {
+        let statement = try prepare(
+            "SELECT video_id FROM video_locations WHERE source_id = ? AND relative_path = ? LIMIT 1"
+        )
+        defer { sqlite3_finalize(statement) }
+        bindText(sourceID, to: 1, in: statement)
+        bindText(relativePath, to: 2, in: statement)
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return text(at: 0, in: statement)
+    }
+
+    private func markMissingIfUnlocated(videoID: String, at date: Date) throws {
+        let statement = try prepare(
+            """
+            UPDATE videos
+            SET availability_status = 'missing',
+                invalidated_at = COALESCE(invalidated_at, ?),
+                updated_at = ?
+            WHERE id = ?
+              AND availability_status = 'available'
+              AND NOT EXISTS (
+                  SELECT 1 FROM video_locations
+                  WHERE video_locations.video_id = videos.id
+                    AND (video_locations.is_available = 1 OR video_locations.requires_recovery_verification = 1)
+              )
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, date.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, date.timeIntervalSince1970)
+        bindText(videoID, to: 3, in: statement)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw DatabaseError.statementFailed
         }

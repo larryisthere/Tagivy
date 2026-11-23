@@ -153,6 +153,108 @@ def package_app!(app_path, output_directory)
   [zip_path, checksum_path]
 end
 
+DEFAULT_NOTARY_PROFILE = "FileFacet-Notary"
+DEFAULT_GITHUB_REPOSITORY = "larryisthere/Tagivy"
+UPLOAD_ATTEMPTS = 4
+
+# Developer ID identity for the configured Team, unless DEVELOPER_ID_APPLICATION overrides it.
+def developer_id_identity
+  override = ENV["DEVELOPER_ID_APPLICATION"].to_s.strip
+  return override unless override.empty?
+
+  team = release_build_settings["DEVELOPMENT_TEAM"]
+  identities = sh("security find-identity -p codesigning -v", log: false)
+  matches = identities.scan(/"(Developer ID Application: [^"]*\(#{Regexp.escape(team)}\))"/).flatten.uniq
+  UI.user_error!("找不到 Team #{team} 的 Developer ID Application 证书") if matches.empty?
+  UI.user_error!("找到多个 Developer ID 证书，请用 DEVELOPER_ID_APPLICATION 指定：#{matches.join(', ')}") if matches.length > 1
+  matches.first
+end
+
+def notary_profile
+  value = ENV["NOTARYTOOL_KEYCHAIN_PROFILE"].to_s.strip
+  value.empty? ? DEFAULT_NOTARY_PROFILE : value
+end
+
+def github_repository
+  value = ENV["GITHUB_REPOSITORY"].to_s.strip
+  value.empty? ? DEFAULT_GITHUB_REPOSITORY : value
+end
+
+def run_tests!
+  derived_data = File.join(REPO_ROOT, ".build", "fastlane", "test")
+  sh(
+    "xcodebuild -project #{shell_escape(PROJECT)} -scheme #{shell_escape(SCHEME)} " \
+    "-configuration Debug -derivedDataPath #{shell_escape(derived_data)} test"
+  )
+end
+
+def with_retries(description)
+  attempt = 1
+  begin
+    yield
+  rescue FastlaneCore::Interface::FastlaneShellError => error
+    raise error if attempt >= UPLOAD_ATTEMPTS
+    delay = 5 * (2**(attempt - 1))
+    UI.important("#{description}失败（第 #{attempt} 次），#{delay} 秒后重试")
+    sleep(delay)
+    attempt += 1
+    retry
+  end
+end
+
+def github_release_state(repository, tag)
+  output = sh(
+    "gh release view #{shell_escape(tag)} --repo #{shell_escape(repository)} --json isDraft -q .isDraft 2>/dev/null || true",
+    log: false
+  ).strip
+  return :missing if output.empty?
+
+  output == "true" ? :draft : :published
+end
+
+# Creates a draft release, uploads assets with retries, then publishes. Safe to rerun after a failed upload.
+def publish_github_release!(output_directory)
+  repository = github_repository
+  settings = release_build_settings
+  version = settings["MARKETING_VERSION"]
+  tag = ENV.fetch("RELEASE_TAG", "v#{version}")
+  base_name = "Tagivy-#{version}-#{settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
+  zip_path = File.join(output_directory, "#{base_name}.zip")
+  checksum_path = "#{zip_path}.sha256"
+  [zip_path, checksum_path].each do |path|
+    UI.user_error!("找不到发布产物：#{path}，请先运行 github_release") unless File.file?(path)
+  end
+  expected = File.read(checksum_path).split.first
+  UI.user_error!("发布包 SHA-256 与校验文件不一致") unless Digest::SHA256.file(zip_path).hexdigest == expected
+  notes_path = release_notes_file!(output_directory)
+
+  case github_release_state(repository, tag)
+  when :published
+    UI.user_error!("#{tag} 已经正式发布，如需覆盖请先在 GitHub 上处理")
+  when :missing
+    sh(
+      "gh release create #{shell_escape(tag)} --draft " \
+      "--repo #{shell_escape(repository)} " \
+      "--target #{shell_escape(release_commit)} " \
+      "--title #{shell_escape("Tagivy #{version}")} " \
+      "--notes-file #{shell_escape(notes_path)}"
+    )
+  else
+    UI.important("复用已有的 #{tag} 草稿")
+  end
+
+  [zip_path, checksum_path].each do |path|
+    with_retries("上传 #{File.basename(path)}") do
+      sh(
+        "gh release upload #{shell_escape(tag)} #{shell_escape(path)} --clobber " \
+        "--repo #{shell_escape(repository)}"
+      )
+    end
+  end
+  sh("gh release edit #{shell_escape(tag)} --draft=false --repo #{shell_escape(repository)}")
+  UI.success("已发布 #{tag}")
+end
+
 def require_environment!(*names)
   missing = names.select { |name| ENV[name].to_s.empty? }
   UI.user_error!("缺少环境变量：#{missing.join(', ')}") unless missing.empty?
@@ -190,16 +292,23 @@ platform :mac do
     package_app!(output_app, output_directory)
   end
 
-  desc "使用 Developer ID 签名、公证并发布到 GitHub Releases"
+  desc "运行全部测试"
+  lane :test do
+    run_tests!
+  end
+
+  desc "测试通过后，使用 Developer ID 签名、公证并发布到 GitHub Releases"
   lane :github_release do
-    require_environment!("DEVELOPER_ID_APPLICATION", "NOTARYTOOL_KEYCHAIN_PROFILE", "GITHUB_REPOSITORY")
     require_clean_release_source!
-    require_github_commit!(ENV.fetch("GITHUB_REPOSITORY"))
+    require_github_commit!(github_repository)
+    release_notes_file!(release_root("github-notes-check"))
+    FileUtils.rm_rf(release_root("github-notes-check"))
+    run_tests!
     output_directory = release_root("github")
     derived_data = File.join(REPO_ROOT, ".build", "fastlane", "github")
     built_app = File.join(derived_data, "Build", "Products", "Release", "#{PRODUCT_NAME}.app")
     output_app = File.join(output_directory, "#{DISPLAY_NAME}.app")
-    identity = ENV.fetch("DEVELOPER_ID_APPLICATION")
+    identity = developer_id_identity
 
     FileUtils.rm_rf(output_directory)
     FileUtils.mkdir_p(output_directory)
@@ -219,23 +328,20 @@ platform :mac do
     sh("ditto -c -k --sequesterRsrc --keepParent #{shell_escape(output_app)} #{shell_escape(submission_zip)}")
     sh(
       "xcrun notarytool submit #{shell_escape(submission_zip)} --wait " \
-      "--keychain-profile #{shell_escape(ENV.fetch('NOTARYTOOL_KEYCHAIN_PROFILE'))}"
+      "--keychain-profile #{shell_escape(notary_profile)}"
     )
     sh("xcrun stapler staple #{shell_escape(output_app)}")
     sh("xcrun stapler validate #{shell_escape(output_app)}")
     FileUtils.rm_f(submission_zip)
-    zip_path, checksum_path = package_app!(output_app, output_directory)
+    package_app!(output_app, output_directory)
+    publish_github_release!(output_directory)
+  end
 
-    settings = release_build_settings
-    tag = ENV.fetch("RELEASE_TAG", "v#{settings['MARKETING_VERSION']}")
-    notes_path = release_notes_file!(output_directory)
-    sh(
-      "gh release create #{shell_escape(tag)} #{shell_escape(zip_path)} #{shell_escape(checksum_path)} " \
-      "--repo #{shell_escape(ENV.fetch('GITHUB_REPOSITORY'))} " \
-      "--target #{shell_escape(release_commit)} " \
-      "--title #{shell_escape("Tagivy #{settings['MARKETING_VERSION']}")} " \
-      "--notes-file #{shell_escape(notes_path)}"
-    )
+  desc "上传失败后重试：复用已公证的产物，重新上传并发布到 GitHub Releases"
+  lane :github_publish do
+    require_clean_release_source!
+    require_github_commit!(github_repository)
+    publish_github_release!(release_root("github"))
   end
 
   desc "构建并上传 Mac App Store Connect 包"
