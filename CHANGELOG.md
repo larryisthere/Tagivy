@@ -4,6 +4,19 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-11-23
+
+### Changed
+
+- Settings opens in a separate window and keeps its sidebar visible. Use Command-W to close the active window.
+- The View menu includes controls for the library sidebar, Inspector, and thumbnail size.
+
+### Fixed
+
+- Undo while typing stays in the text field instead of undoing changes to the library.
+- Empty search and filter results no longer suggest importing videos.
+- Inspector help wraps in narrow panes, the library title aligns with the grid, and sidebar selection has more room around its icon.
+
 ## [1.0.14] - 2026-11-21
 
 ### Fixed
