@@ -14,6 +14,32 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(schemaVersion, DatabaseStore.currentSchemaVersion)
     }
 
+    // Real libraries contain sources stored with a zero-length bookmark blob. SQLite returns a NULL
+    // pointer for such blobs; reading them must not fail the whole source list (startup restore).
+    func testZeroLengthBookmarksDecodeAsEmptyData() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        try await store.saveSourceAuthorization(makeSource(id: "valid", name: "Valid"))
+        try executeSQL(
+            at: fixture.databaseURL,
+            sql: """
+            UPDATE libraries SET root_bookmark_data = X'';
+            INSERT INTO source_authorizations (id, library_id, display_name, root_bookmark_data, created_at)
+            VALUES ('empty', 'primary', 'Empty', X'', 50);
+            """
+        )
+
+        let sources = try await store.fetchSourceAuthorizations()
+        let library = try await store.fetchPrimaryLibrary()
+
+        XCTAssertEqual(sources.map(\.id), ["empty", "valid"])
+        XCTAssertEqual(sources.first?.rootBookmarkData, Data())
+        XCTAssertEqual(sources.last?.rootBookmarkData, Data([0x02]))
+        XCTAssertEqual(library?.rootBookmarkData, Data())
+    }
+
     func testVersionTwoMigrationPreservesVideosAndTagRelations() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }

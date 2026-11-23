@@ -352,6 +352,8 @@ final class LibraryAccessCoordinator {
     var onSmartCollectionsChanged: (([SmartCollectionRecord]) -> Void)?
     var onTagAssignmentsChanged: (() -> Void)?
     var onError: ((String) -> Void)?
+    /// Last startup-restore step reached; logged when restore fails so the failing statement can be identified.
+    private var restorePhase = "idle"
     var onOperationError: ((String) -> Void)?
     var onOperationStatusChanged: ((LibraryOperationStatus?) -> Void)?
     var onRelinkingVideoChanged: ((String?) -> Void)?
@@ -576,6 +578,7 @@ final class LibraryAccessCoordinator {
 
     func restoreLibrary() {
         isRestoringLibrary = true
+        restorePhase = "start"
         Task { [self] in
             defer {
                 isRestoringLibrary = false
@@ -601,6 +604,7 @@ final class LibraryAccessCoordinator {
                 }
                 artifactCleanupTask = cleanupTask
                 await cleanupTask.value
+                restorePhase = "sources"
                 let sources = try await database.fetchSourceAuthorizations()
                 for source in sources {
                     sourceBookmarks[source.id] = source.rootBookmarkData
@@ -640,8 +644,11 @@ final class LibraryAccessCoordinator {
                         AppLogger.library.error("Source restore failed with category: \(String(describing: type(of: error)), privacy: .public)")
                     }
                 }
+                restorePhase = "tags"
                 try await refreshTags(libraryID: LibraryRecord.primaryID)
+                restorePhase = "locations"
                 try await refreshResolvedVideoURLs()
+                restorePhase = "visible-videos"
                 try await publishVisibleVideosNow()
 
                 // These independent reads can fail after the video index is already usable.
@@ -664,7 +671,10 @@ final class LibraryAccessCoordinator {
                 }
                 if sourceURLs.isEmpty == false { scheduleMaintenance() }
             } catch {
-                AppLogger.library.error("Library restore failed with category: \(String(describing: type(of: error)), privacy: .public)")
+                let sqliteCode = await database.lastSQLiteResultCode()
+                AppLogger.library.error(
+                    "Library restore failed: phase=\(self.restorePhase, privacy: .public), error=\(String(describing: error), privacy: .public), sqlite=\(sqliteCode, privacy: .public)"
+                )
                 onError?(String(localized: .importVideoIndexRead))
             }
         }
@@ -2731,8 +2741,11 @@ final class LibraryAccessCoordinator {
             !$0.requiresRecoveryVerification && !activeSourceIDs.contains($0.sourceID)
                 && resolution.accessLostSourceNames[$0.videoID] != nil
         }
+        restorePhase = "locations.protect-lost"
         try await database.protectLostLocations(lostLocations)
+        restorePhase = "locations.backfill-fallback-keys"
         try await database.backfillVideoLocationFallbackKeys(resolution.fallbackUpdates)
+        restorePhase = "locations.confirm-missing"
         try await database.confirmMissingLocations(resolution.confirmedMissingLocations)
         try Task.checkCancellation()
         resolvedVideoURLs = resolution.resolvedURLs
@@ -2748,6 +2761,7 @@ final class LibraryAccessCoordinator {
             locations: allLocations,
             sourceURLs: knownURLs
         )
+        restorePhase = "locations.update-last-known-paths"
         try await database.updateVideoLocationLastKnownPaths(lastKnownResolution.updates)
         lastKnownVideoPaths = lastKnownResolution.paths
         offlineSourceNameByVideoID = resolution.offlineSourceNames

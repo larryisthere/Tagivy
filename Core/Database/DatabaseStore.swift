@@ -141,6 +141,11 @@ actor DatabaseStore {
         return try DatabaseStore(databaseURL: directory.appendingPathComponent("library.sqlite3"))
     }
 
+    /// Extended SQLite result code of the most recent call on this connection, for privacy-safe diagnostics.
+    func lastSQLiteResultCode() -> Int32 {
+        sqlite3_extended_errcode(connection.handle)
+    }
+
     func schemaVersion() throws -> Int {
         try prepareIfNeeded()
         return try scalarInt("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
@@ -188,13 +193,11 @@ actor DatabaseStore {
         guard
             let idText = sqlite3_column_text(statement, 0),
             let nameText = sqlite3_column_text(statement, 1),
-            let bookmarkBytes = sqlite3_column_blob(statement, 2)
+            let bookmarkData = nonNullData(at: 2, in: statement)
         else {
             throw DatabaseError.statementFailed
         }
 
-        let bookmarkSize = Int(sqlite3_column_bytes(statement, 2))
-        let bookmarkData = Data(bytes: bookmarkBytes, count: bookmarkSize)
         let lastScanAt = sqlite3_column_type(statement, 4) == SQLITE_NULL
             ? nil
             : Date(timeIntervalSince1970: sqlite3_column_double(statement, 4))
@@ -255,7 +258,7 @@ actor DatabaseStore {
             guard let id = text(at: 0, in: statement),
                   let storedLibraryID = text(at: 1, in: statement),
                   let displayName = text(at: 2, in: statement),
-                  let bookmark = data(at: 3, in: statement) else {
+                  let bookmark = nonNullData(at: 3, in: statement) else {
                 throw DatabaseError.statementFailed
             }
             records.append(SourceAuthorizationRecord(
@@ -3539,6 +3542,14 @@ actor DatabaseStore {
     private func data(at index: Int32, in statement: OpaquePointer) -> Data? {
         guard let bytes = sqlite3_column_blob(statement, index) else { return nil }
         return Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, index)))
+    }
+
+    /// Reads a column declared `BLOB NOT NULL`. SQLite returns a NULL pointer for a zero-length blob,
+    /// so an empty stored value (for example a source whose bookmark was never captured) must decode as
+    /// empty `Data` instead of failing the whole read.
+    private func nonNullData(at index: Int32, in statement: OpaquePointer) -> Data? {
+        guard sqlite3_column_type(statement, index) != SQLITE_NULL else { return nil }
+        return data(at: index, in: statement) ?? Data()
     }
 
     private func date(at index: Int32, in statement: OpaquePointer) -> Date? {

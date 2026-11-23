@@ -4,6 +4,11 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+### Fixed
+
+- Libraries that contain folders whose access record was never saved load again at startup instead of failing as a whole.
+- Search, thumbnail size, and scan in the toolbar stay usable when the library cannot be loaded, and the library recovers from the error once it loads.
+
 ## [1.0.16] - 2026-11-23
 
 ### Fixed
