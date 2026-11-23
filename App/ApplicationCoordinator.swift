@@ -160,9 +160,16 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.center()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(settingsWindowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: window
+        )
         return NSWindowController(window: window)
     }()
     private weak var presentedSettingsWindow: NSWindow?
+    private var settingsWasKeyBeforePrivacyHide: Bool?
 
     override init() {
         let preferencesStore = PreferencesStore()
@@ -275,6 +282,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         case .unlocked:
             windowController.setRootViewController(libraryViewController)
         case .locked, .authenticating, .failed:
+            settingsWasKeyBeforePrivacyHide = nil
             presentedSettingsWindow?.close()
             libraryViewController.setPresetShortcutHintsVisible(false)
             quickLookCoordinator.close()
@@ -346,7 +354,10 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     @objc private func applicationWillResignActive() {
         libraryViewController.setPresetShortcutHintsVisible(false)
         guard lockCoordinator.isAuthenticationEnabled else { return }
-        presentedSettingsWindow?.orderOut(nil)
+        if let settings = presentedSettingsWindow, settings.isVisible, !settings.isMiniaturized {
+            settingsWasKeyBeforePrivacyHide = settings.isKeyWindow
+            settings.orderOut(nil)
+        }
         installPrivacyShield()
         if preferencesStore.idleLockInterval == .immediately,
            lockCoordinator.state == .unlocked {
@@ -357,6 +368,19 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     @objc private func applicationDidBecomeActive() {
         render(lockState: lockCoordinator.state)
         removePrivacyShield()
+        guard let settingsWasKey = settingsWasKeyBeforePrivacyHide else { return }
+        settingsWasKeyBeforePrivacyHide = nil
+        guard lockCoordinator.state == .unlocked, let settings = presentedSettingsWindow else { return }
+        if !settingsWasKey, let library = windowController.window, library.isKeyWindow {
+            settings.order(.below, relativeTo: library.windowNumber)
+        } else {
+            settings.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    @objc private func settingsWindowWillClose(_ notification: Notification) {
+        settingsWasKeyBeforePrivacyHide = nil
+        presentedSettingsWindow = nil
     }
 
     @objc private func windowDidResignKey() {
@@ -419,12 +443,20 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
 
     private func presentSettings(section: SettingsSection) {
         guard lockCoordinator.state == .unlocked else { return }
+        settingsWasKeyBeforePrivacyHide = nil
         settingsNavigation.selection = section
         let controller = settingsWindowController
         presentedSettingsWindow = controller.window
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showLibraryWindow() {
+        windowController.showWindow(nil)
+        guard let window = windowController.window else { return }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
     }
 
     @objc private func importVideos() {
@@ -749,6 +781,14 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
+        windowMenu.addItem(.separator())
+        let libraryWindowItem = NSMenuItem(
+            title: String(localized: .menuWindowShowLibrary),
+            action: #selector(showLibraryWindow),
+            keyEquivalent: ""
+        )
+        libraryWindowItem.target = self
+        windowMenu.addItem(libraryWindowItem)
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
         NSApp.windowsMenu = windowMenu

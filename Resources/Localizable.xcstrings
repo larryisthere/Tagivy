@@ -3550,6 +3550,23 @@
         }
       }
     },
+    "menu.window.showLibrary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示资料库"
+          }
+        }
+      }
+    },
     "preferences.fifteenMinutes" : {
       "extractionState" : "manual",
       "localizations" : {
