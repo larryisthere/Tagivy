@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import Tagivy
 
@@ -224,6 +225,53 @@ final class RecoveryReadBudgetTests: XCTestCase {
         XCTAssertEqual(Empty.resolve(libraryAvailable: true, hasConstraints: true, libraryCount: 0), .noMatches)
         XCTAssertEqual(Empty.resolve(libraryAvailable: true, hasConstraints: true, libraryCount: 1), .noMatches)
         XCTAssertEqual(Empty.resolve(libraryAvailable: false, hasConstraints: false, libraryCount: 0), .hidden)
+    }
+
+    func testLeavingPinnedGroupingReplacesOnlyScrollHost() throws {
+        guard #available(macOS 26.0, *) else { return }
+        let grid = VideoGridViewController(
+            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
+            onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, onAssignTagID: { _, _ in },
+            onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
+            onUndoLastMutation: {}, onDismissNotification: {}
+        )
+        let viewport = grid.view
+        viewport.frame = CGRect(x: 0, y: 0, width: 680, height: 664)
+        func scrollHost() throws -> NSScrollView {
+            try XCTUnwrap((viewport.subviews + viewport.subviews.flatMap(\.subviews))
+                .compactMap { $0 as? NSScrollView }.first)
+        }
+        let first = try scrollHost()
+        let collection = try XCTUnwrap(first.documentView as? NSCollectionView)
+        let layout = try XCTUnwrap(collection.collectionViewLayout as? NSCollectionViewFlowLayout)
+        let fixture = VideoRecord(
+            id: "fixture", libraryID: "test", relativePath: "Fixture.mov", filename: "Fixture.mov",
+            fileExtension: "mov", fileSize: 1, creationDate: nil, modificationDate: nil,
+            duration: 1, width: 320, height: 180, thumbnailID: nil, metadataStatus: .completed,
+            thumbnailStatus: .completed, firstIndexedAt: .distantPast, availability: .available
+        )
+        grid.setVideos([fixture])
+        XCTAssertTrue(try scrollHost() === first)
+
+        for _ in 0..<2 {
+            let old = try scrollHost()
+            grid.setGrouping(.init(key: .addedDate, direction: .descending))
+            XCTAssertTrue(try scrollHost() === old)
+            XCTAssertTrue(layout.sectionHeadersPinToVisibleBounds)
+            XCTAssertGreaterThan(layout.headerReferenceSize.height, 0)
+
+            grid.setGrouping(.standard)
+            let replacement = try scrollHost()
+            XCTAssertFalse(replacement === old)
+            XCTAssertTrue(replacement.documentView === collection)
+            XCTAssertNil(old.documentView)
+            XCTAssertNil(old.superview)
+            XCTAssertFalse(layout.sectionHeadersPinToVisibleBounds)
+            XCTAssertEqual(layout.headerReferenceSize.height, 0)
+            grid.setVideos([fixture])
+            XCTAssertTrue(try scrollHost() === replacement)
+        }
     }
 
     private final class UndoFixture {
