@@ -4,6 +4,8 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-11-23
+
 ### Fixed
 
 - Libraries that contain folders whose access record was never saved load again at startup instead of failing as a whole.
