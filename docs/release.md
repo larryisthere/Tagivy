@@ -44,10 +44,10 @@ bundle exec fastlane mac local_release
 1. 在 Apple Developer 后台创建并安装 `Developer ID Application` 证书。
 2. 将 App ID 和所需能力配置完整，让 Xcode 可以取得 Developer ID provisioning profile。
 3. 创建 App Store Connect API Key，并保存到本机。
-4. 将公证凭证存入钥匙串：
+4. 将公证凭证存入钥匙串（本机已存在的配置名为 `FileFacet-Notary`）：
 
 ```bash
-xcrun notarytool store-credentials "Tagivy-Notary" \
+xcrun notarytool store-credentials "FileFacet-Notary" \
   --key-id "$APP_STORE_CONNECT_KEY_ID" \
   --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
   --key "$APP_STORE_CONNECT_KEY_PATH"
@@ -57,14 +57,43 @@ xcrun notarytool store-credentials "Tagivy-Notary" \
 
 ### 发布
 
+GitHub Release 只通过这个 lane 发布，不再使用手工签名或手工公证脚本。在 main 上、合并版本改动后执行：
+
 ```bash
-export DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (TEAMID)"
-export NOTARYTOOL_KEYCHAIN_PROFILE="Tagivy-Notary"
-export GITHUB_REPOSITORY="owner/repository"
 bundle exec fastlane mac github_release
 ```
 
-该 lane 只允许从无未提交改动且当前提交已存在于目标 GitHub 仓库的工作区发布。流程使用 Manual signing 指定 Developer ID Application 身份，关闭开发调试 entitlement 注入并加入可信时间戳，然后执行签名检查、Release 构建、公证、stapling、ZIP 与 SHA-256 生成，从 `CHANGELOG.md` 提取目标版本区块，并创建明确指向当前提交的 `v<版本>` GitHub Release。需要覆盖 tag 时可设置 `RELEASE_TAG`。
+默认值：
+
+- 签名身份：自动选取当前 Team 的 `Developer ID Application` 证书，可用 `DEVELOPER_ID_APPLICATION` 覆盖。
+- 公证凭证：`FileFacet-Notary`，可用 `NOTARYTOOL_KEYCHAIN_PROFILE` 覆盖。
+- 仓库：`larryisthere/Tagivy`，可用 `GITHUB_REPOSITORY` 覆盖。
+
+该 lane 只允许从无未提交改动且当前提交已存在于目标 GitHub 仓库的工作区发布。流程依次为：
+
+1. 检查 `CHANGELOG.md` 已包含目标版本区块。
+2. 运行全部测试，任何失败都会中止发布。
+3. 使用 Manual signing 指定 Developer ID Application 身份，关闭开发调试 entitlement 注入并加入可信时间戳，执行 Release 构建和签名检查。
+4. 公证、stapling、生成 ZIP 与 SHA-256。
+5. 创建指向当前提交的 `v<版本>` 草稿 Release，上传产物（失败自动重试），全部上传成功后再正式发布。
+
+需要覆盖 tag 时可设置 `RELEASE_TAG`。
+
+### 上传失败后重试
+
+公证后的产物保存在 `.build/releases/<版本>-<构建号>/github/`。若第 5 步因网络失败，无需重新构建和公证，直接执行：
+
+```bash
+bundle exec fastlane mac github_publish
+```
+
+该 lane 会校验产物 SHA-256，复用已有草稿或新建草稿，重新上传并发布；目标版本已正式发布时会拒绝执行。
+
+### 单独运行测试
+
+```bash
+bundle exec fastlane mac test
+```
 
 如果当前机器尚未配置 `Developer ID Application` 与公证凭证，可以先在 GitHub 创建仅包含发布说明和源码归档的 Release。开发签名的本地 App 不应作为公开安装包上传。
 
@@ -91,6 +120,7 @@ bundle exec fastlane mac app_store_release
 
 - `CHANGELOG.md` 已包含目标版本的用户可感知变化。
 - Xcode 中的版本与构建号已递增，App Store 构建号未被使用过。
+- 全部测试通过（`github_release` 会自动执行并在失败时中止）。
 - 本地 Release 已生成并保存 SHA-256。
 - GitHub 包通过 `codesign`、`notarytool` 和 `stapler` 校验。
 - App Store Connect 构建处理完成后，再在后台选择版本并提交审核。

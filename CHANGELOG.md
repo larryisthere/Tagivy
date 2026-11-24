@@ -4,6 +4,10 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+### Fixed
+
+- When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
+
 ## [1.0.17] - 2026-11-23
 
 ### Fixed

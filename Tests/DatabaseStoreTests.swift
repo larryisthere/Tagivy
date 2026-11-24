@@ -650,13 +650,17 @@ final class DatabaseStoreTests: XCTestCase {
             )]
         )
 
+        // The previous record keeps its tags and becomes unavailable so the user can relink or remove it.
         let replacementVideo = try XCTUnwrap(replacement.first)
         let allVideos = try await store.fetchVideos(libraryID: LibraryRecord.primaryID, includeMissing: true)
         let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
         let replacementStates = try await store.tagAssignmentStates(videoIDs: [replacementVideo.id], tags: tags)
+        let originalStates = try await store.tagAssignmentStates(videoIDs: [originalVideo.id], tags: tags)
+        XCTAssertEqual(replacement.map(\.id), [replacementVideo.id])
         XCTAssertNotEqual(replacementVideo.id, originalVideo.id)
-        XCTAssertNil(allVideos.first(where: { $0.id == originalVideo.id }))
+        XCTAssertEqual(allVideos.first(where: { $0.id == originalVideo.id })?.availability, .unavailable)
         XCTAssertEqual(replacementStates[tagID], .off)
+        XCTAssertEqual(originalStates[tagID], .on)
     }
 
     func testModifiedVideoResetsMediaInformationForRegeneration() async throws {
