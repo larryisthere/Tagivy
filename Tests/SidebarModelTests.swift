@@ -30,6 +30,61 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertNil(CountRoll(from: "4", to: "⌘1"))
     }
 
+    func testClickedRowInsideSelectionTargetsWholeSelectionWithoutNestedTags() {
+        let travel = makeTag(id: "travel", name: "旅行")
+        let coast = makeTag(id: "coast", name: "海边", parentID: "travel")
+        let people = makeTag(id: "people", name: "人物")
+        let favorites = makeSmartCollection(id: "favorites")
+        let allTags = [travel, coast, people]
+
+        let targets = SidebarTargets(
+            clicked: .tag(coast),
+            selection: [.tag(travel), .tag(coast), .tag(people), .smartCollection(favorites)],
+            allTags: allTags
+        )
+
+        XCTAssertEqual(targets.tags.map(\.id), ["travel", "people"], "海边 is inside 旅行, which already includes its videos")
+        XCTAssertEqual(targets.smartCollections.map(\.id), ["favorites"])
+        XCTAssertEqual(targets.items.count, 4)
+        XCTAssertEqual(targets.scopes, [.tags([travel, people]), .smartCollection(favorites)])
+    }
+
+    func testClickedRowOutsideSelectionTargetsOnlyThatRow() {
+        let travel = makeTag(id: "travel", name: "旅行")
+        let coast = makeTag(id: "coast", name: "海边", parentID: "travel")
+        let people = makeTag(id: "people", name: "人物")
+
+        let targets = SidebarTargets(clicked: .tag(coast), selection: [.tag(travel), .tag(people)], allTags: [travel, coast, people])
+
+        XCTAssertEqual(targets.tags.map(\.id), ["coast"])
+        XCTAssertEqual(targets.smartCollections, [])
+    }
+
+    func testDraggedRowsActOnPreparedVideosRegardlessOfNestedRowsAndOrder() {
+        let travel = makeTag(id: "travel", name: "旅行")
+        let coast = makeTag(id: "coast", name: "海边", parentID: "travel")
+        let favorites = makeSmartCollection(id: "favorites")
+        let allTags = [travel, coast]
+
+        let prepared = SidebarTargets(items: [.tag(travel), .smartCollection(favorites)], allTags: allTags)
+        let dragged = SidebarTargets(items: [.smartCollection(favorites), .tag(coast), .tag(travel)], allTags: allTags)
+
+        XCTAssertTrue(prepared.actsOnSameVideos(as: dragged))
+        XCTAssertFalse(prepared.actsOnSameVideos(as: SidebarTargets(items: [.tag(travel)], allTags: allTags)))
+    }
+
+    private func makeSmartCollection(id: String) -> SmartCollectionRecord {
+        SmartCollectionRecord(
+            id: id,
+            libraryID: LibraryRecord.primaryID,
+            name: id,
+            rule: .standard,
+            sortOrder: 0,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
     private func makeTag(id: String, name: String, parentID: String? = nil) -> TagRecord {
         TagRecord(
             id: id,

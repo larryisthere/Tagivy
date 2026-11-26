@@ -108,7 +108,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let onPreviewVideos: ([VideoRecord]) -> Void
     var onSelectionChanged: ([VideoRecord]) -> Void
     private let thumbnailURL: (VideoRecord) -> URL?
-    private let fileURL: (VideoRecord) -> URL?
+    private let resolveVideos: ([VideoRecord]) -> ResolvedVideos
     private let onAssignTagID: (String, [String]) -> Void
     private let onCancelImport: () -> Void
     private let onImportDroppedItems: ([URL]) -> Void
@@ -133,12 +133,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var selectionGestureMode: SelectionGestureMode = .replacing
     private var isSynchronizingSelection = false
     private var draggedItemViews: [VideoCollectionItemView] = []
-    private var draggedCloudVideoFiles: [URL] = []
     private var draggedExportIndexPaths = Set<IndexPath>()
-    private var draggedSkippedIndexPaths = Set<IndexPath>()
+    private var draggedOfflineIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
-    var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
-    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in }
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
@@ -152,7 +150,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         onSelectionChanged: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
-        fileURL: @escaping (VideoRecord) -> URL?,
+        resolveVideos: @escaping ([VideoRecord]) -> ResolvedVideos,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onCancelImport: @escaping () -> Void,
         onImportDroppedItems: @escaping ([URL]) -> Void,
@@ -168,7 +166,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         self.onPreviewVideos = onPreviewVideos
         self.onSelectionChanged = onSelectionChanged
         self.thumbnailURL = thumbnailURL
-        self.fileURL = fileURL
+        self.resolveVideos = resolveVideos
         self.onAssignTagID = onAssignTagID
         self.onCancelImport = onCancelImport
         self.onImportDroppedItems = onImportDroppedItems
@@ -1016,19 +1014,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
         let item = NSPasteboardItem()
         item.setString(selectedIDs.joined(separator: "\n"), forType: SidebarViewController.videoPasteboardType)
-        if let video = video(at: indexPath),
-           video.availability == .available,
-           let url = fileURL(video) {
-            let files = DraggableVideoFiles(urls: [url])
-            if files.ready.isEmpty == false {
-                item.setString(url.absoluteString, forType: .fileURL)
-                draggedExportIndexPaths.insert(indexPath)
-            } else {
-                draggedSkippedIndexPaths.insert(indexPath)
-                if draggedCloudVideoFiles.contains(url) == false { draggedCloudVideoFiles.append(url) }
-            }
+        if let video = video(at: indexPath), let resolved = resolveVideos([video]).ready.first {
+            item.setString(resolved.url.absoluteString, forType: .fileURL)
+            draggedExportIndexPaths.insert(indexPath)
         } else {
-            draggedSkippedIndexPaths.insert(indexPath)
+            draggedOfflineIndexPaths.insert(indexPath)
         }
         return item
     }
@@ -1044,10 +1034,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             itemView.staysVisibleWhileDragged = true
             draggedItemViews.append(itemView)
         }
-        if draggedExportIndexPaths.isEmpty == false || draggedSkippedIndexPaths.isEmpty == false {
+        if draggedExportIndexPaths.isEmpty == false || draggedOfflineIndexPaths.isEmpty == false {
             dragExportCaption = DragExportCaption(
                 exportCount: draggedExportIndexPaths.count,
-                skippedCount: draggedSkippedIndexPaths.count,
+                offlineCount: draggedOfflineIndexPaths.count,
                 session: session,
                 view: collectionView
             )
@@ -1060,15 +1050,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         endedAt screenPoint: NSPoint,
         dragOperation operation: NSDragOperation
     ) {
-        let cloudFiles = draggedCloudVideoFiles
-        draggedCloudVideoFiles = []
         draggedExportIndexPaths = []
-        draggedSkippedIndexPaths = []
+        draggedOfflineIndexPaths = []
         dragExportCaption?.stop()
         dragExportCaption = nil
-        if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
-            onDragLeftOutCloudVideoFiles(cloudFiles)
-        }
         let views = draggedItemViews
         draggedItemViews = []
         // The collection view restores the source items right after this call, so release them on the next turn.
@@ -1714,7 +1699,7 @@ private final class ImportStatusView: NSView {
 }
 
 /// Tells the user, on the image that follows the pointer, how many videos the drag exports and, if any,
-/// how many it leaves out because they are not downloaded from iCloud or are offline.
+/// how many it leaves out because they are offline.
 @MainActor
 final class DragExportCaption: NSObject {
     private let text: String
@@ -1726,22 +1711,22 @@ final class DragExportCaption: NSObject {
 
     /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
     /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
-    init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
-        if skippedCount == 0 {
+    init(exportCount: Int, offlineCount: Int, session: NSDraggingSession, view: NSView) {
+        if offlineCount == 0 {
             text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption.all", comment: "Caption on a drag out of Tagivy"),
                 exportCount
             )
         } else if exportCount == 0 {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all left out"),
-                skippedCount
+                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all offline"),
+                offlineCount
             )
         } else {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
+                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out offline videos"),
                 exportCount,
-                skippedCount
+                offlineCount
             )
         }
         self.session = session
@@ -1759,7 +1744,7 @@ final class DragExportCaption: NSObject {
     }
 
     @objc private func update() {
-        let shouldShow = Self.endedOutsideApp(at: NSEvent.mouseLocation)
+        let shouldShow = Self.isOutsideApp(NSEvent.mouseLocation)
         guard shouldShow != isShown, let session, let view else { return }
         isShown = shouldShow
         let caption = shouldShow ? Self.captionImage(text) : nil
@@ -1811,9 +1796,7 @@ final class DragExportCaption: NSObject {
         }
     }
 
-    /// Videos left out of a drag are downloaded only when the drag was taken to another app,
-    /// not when it was cancelled or dropped back onto Tagivy.
-    static func endedOutsideApp(at screenPoint: NSPoint) -> Bool {
+    private static func isOutsideApp(_ screenPoint: NSPoint) -> Bool {
         NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) } == false
     }
 

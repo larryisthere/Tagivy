@@ -145,3 +145,66 @@ enum CountRoll: Equatable {
         self = new > old ? .up : .down
     }
 }
+
+/// A tag or smart collection row in the sidebar that a drag or the context menu can act on.
+enum SidebarTargetItem: Equatable {
+    case tag(TagRecord)
+    case smartCollection(SmartCollectionRecord)
+}
+
+/// The tags and smart collections a drag or context menu acts on.
+struct SidebarTargets: Equatable {
+    /// The rows acted on, including nested tags that `tags` leaves out.
+    let items: [SidebarTargetItem]
+    /// Tags whose ancestor is also a target are left out; the ancestor already includes their videos.
+    let tags: [TagRecord]
+    let smartCollections: [SmartCollectionRecord]
+
+    /// A clicked row inside the selection acts on the whole selection; otherwise only on the clicked row.
+    init(clicked: SidebarTargetItem, selection: [SidebarTargetItem], allTags: [TagRecord]) {
+        self.init(items: selection.contains(clicked) ? selection : [clicked], allTags: allTags)
+    }
+
+    init(items: [SidebarTargetItem], allTags: [TagRecord]) {
+        var tags: [TagRecord] = []
+        var smartCollections: [SmartCollectionRecord] = []
+        for item in items {
+            switch item {
+            case let .tag(tag) where tags.contains(where: { $0.id == tag.id }) == false:
+                tags.append(tag)
+            case let .smartCollection(collection)
+                where smartCollections.contains(where: { $0.id == collection.id }) == false:
+                smartCollections.append(collection)
+            default:
+                break
+            }
+        }
+        self.items = items
+        self.tags = Self.topLevelTags(from: tags, allTags: allTags)
+        self.smartCollections = smartCollections
+    }
+
+    var isEmpty: Bool { tags.isEmpty && smartCollections.isEmpty }
+
+    func actsOnSameVideos(as other: SidebarTargets) -> Bool {
+        Set(tags.map(\.id)) == Set(other.tags.map(\.id))
+            && Set(smartCollections.map(\.id)) == Set(other.smartCollections.map(\.id))
+    }
+
+    var scopes: [VideoScope] {
+        (tags.isEmpty ? [] : [.tags(tags)]) + smartCollections.map { .smartCollection($0) }
+    }
+
+    static func topLevelTags(from candidates: [TagRecord], allTags: [TagRecord]) -> [TagRecord] {
+        let candidateIDs = Set(candidates.map(\.id))
+        let parentIDByID = Dictionary(allTags.map { ($0.id, $0.parentID) }, uniquingKeysWith: { first, _ in first })
+        return candidates.filter { tag in
+            var ancestorID = tag.parentID
+            while let currentID = ancestorID {
+                if candidateIDs.contains(currentID) { return false }
+                ancestorID = parentIDByID[currentID] ?? nil
+            }
+            return true
+        }
+    }
+}

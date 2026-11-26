@@ -5,7 +5,7 @@ import AppKit
 final class EditorExportPresenter {
     private var isPresenting = false
 
-    static func defaultName(for scope: NLEExportScope) -> String {
+    static func defaultName(for scope: VideoScope) -> String {
         switch scope {
         case let .tags(tags):
             tags.count == 1 ? tags[0].name : String(localized: .exportEditorSelectedTagsName(tags.count))

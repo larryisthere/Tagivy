@@ -172,7 +172,7 @@ final class NLEExportTests: XCTestCase {
             if ids.contains(id) == false { ids.append(id) }
         }
         let videos = (videoIDs.isEmpty ? ["sunset", "waves"] : videoIDs).map { id in
-            NLEExportPlanBuilder.Video(
+            ResolvedVideo(
                 record: video(id),
                 url: URL(fileURLWithPath: "/Volumes/Footage/A 海/\(id).mov")
             )
@@ -220,5 +220,122 @@ private func tag(_ id: String, _ name: String, parent: String? = nil, order: Int
         sortOrder: order,
         source: "user",
         videoCount: 0
+    )
+}
+
+/// Drags out of Tagivy and exports to editing apps hand over the same videos for the same scope.
+@MainActor
+final class VideoResolutionTests: XCTestCase {
+    private let trip = tag("trip", "旅行", order: 0)
+    private let beach = tag("beach", "海边", order: 1)
+    private let local = libraryVideo("local", availability: .available)
+    // A file not downloaded from iCloud yet; the library may have last seen it as missing.
+    private let cloud = libraryVideo("cloud", availability: .unavailable, isCloudPlaceholder: true)
+    private let drive = libraryVideo("drive", availability: .offline)
+    private let urls = [
+        "local": URL(fileURLWithPath: "/Users/me/Movies/local.mov"),
+        "cloud": URL(fileURLWithPath: "/Users/me/Library/Mobile Documents/com~apple~CloudDocs/cloud.mov"),
+        "drive": URL(fileURLWithPath: "/Volumes/Footage/drive.mov"),
+    ]
+
+    func testHandsOutLocalAndICloudFilesButNotOfflineOrMissingOnes() {
+        let url = URL(fileURLWithPath: "/Users/me/Movies/a.mov")
+
+        XCTAssertEqual(ResolvedVideos.handoutURL(for: local, knownURL: url), url)
+        XCTAssertEqual(ResolvedVideos.handoutURL(for: cloud, knownURL: url), url)
+        XCTAssertEqual(
+            ResolvedVideos.handoutURL(for: libraryVideo("c", availability: .available, isCloudPlaceholder: true), knownURL: url),
+            url
+        )
+        XCTAssertNil(ResolvedVideos.handoutURL(for: drive, knownURL: url))
+        XCTAssertNil(ResolvedVideos.handoutURL(for: libraryVideo("gone", availability: .unavailable), knownURL: url))
+        XCTAssertNil(ResolvedVideos.handoutURL(for: local, knownURL: nil))
+    }
+
+    func testIncludesICloudVideosWithTheirFilesAndCountsOfflineOnes() async throws {
+        let resolved = try await resolve([.tags([trip])])
+
+        XCTAssertEqual(resolved.ready.map(\.record.id), ["local", "cloud"])
+        XCTAssertEqual(resolved.ready.map(\.url), [urls["local"], urls["cloud"]])
+        XCTAssertEqual(resolved.offlineCount, 1)
+    }
+
+    func testTagSmartCollectionAndExplicitVideosResolveAlike() async throws {
+        let collection = SmartCollectionRecord(
+            id: "trips",
+            libraryID: LibraryRecord.primaryID,
+            name: "旅行",
+            rule: LibraryQueryRule(requiredTagIDs: ["trip"]),
+            sortOrder: 0,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+
+        let byTag = try await resolve([.tags([trip])])
+        let bySmartCollection = try await resolve([.smartCollection(collection)])
+        let byVideos = try await resolve([.videos([local, cloud, drive])])
+
+        XCTAssertEqual(bySmartCollection, byTag)
+        XCTAssertEqual(byVideos, byTag)
+    }
+
+    func testVideoInSeveralScopesIsHandedOutOnce() async throws {
+        let resolved = try await resolve([.tags([trip, beach]), .videos([local])])
+
+        XCTAssertEqual(resolved.ready.map(\.record.id), ["local", "cloud"])
+        XCTAssertEqual(resolved.offlineCount, 1)
+    }
+
+    func testSidebarDragAndContextMenuExportUseTheSameScope() {
+        let targets = SidebarTargets(clicked: .tag(trip), selection: [.tag(trip)], allTags: [trip, beach])
+
+        XCTAssertEqual(targets.scopes, [.tags([trip])])
+    }
+
+    private func resolve(_ scopes: [VideoScope]) async throws -> ResolvedVideos {
+        let library = [local, cloud, drive]
+        let members = ["trip": ["local", "cloud", "drive"], "beach": ["local"]]
+        return try await ResolvedVideos.resolve(
+            scopes,
+            fetch: { request in
+                let tagIDs: [String]
+                switch request.baseFilter {
+                case let .tag(tagID): tagIDs = [tagID]
+                case .all: tagIDs = request.rule.requiredTagIDs
+                default:
+                    XCTFail("unexpected request \(request)")
+                    return []
+                }
+                XCTAssertEqual(request.temporaryFilenameSearch, "")
+                return library.filter { video in tagIDs.allSatisfy { members[$0, default: []].contains(video.id) } }
+            },
+            url: { [urls] video in ResolvedVideos.handoutURL(for: video, knownURL: urls[video.id]) }
+        )
+    }
+}
+
+private func libraryVideo(
+    _ id: String,
+    availability: VideoRecord.Availability,
+    isCloudPlaceholder: Bool = false
+) -> VideoRecord {
+    VideoRecord(
+        id: id,
+        libraryID: LibraryRecord.primaryID,
+        relativePath: "\(id).mov",
+        filename: "\(id).mov",
+        fileExtension: "mov",
+        fileSize: 1,
+        creationDate: nil,
+        modificationDate: nil,
+        duration: 10,
+        width: 1920,
+        height: 1080,
+        thumbnailID: nil,
+        metadataStatus: .completed,
+        thumbnailStatus: .completed,
+        firstIndexedAt: Date(timeIntervalSince1970: 0),
+        availability: availability,
+        isCloudPlaceholder: isCloudPlaceholder
     )
 }

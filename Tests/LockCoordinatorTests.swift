@@ -232,7 +232,7 @@ final class RecoveryReadBudgetTests: XCTestCase {
         let grid = VideoGridViewController(
             onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
             onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
-            onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, fileURL: { _ in nil },
+            onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, resolveVideos: { _ in .empty },
             onAssignTagID: { _, _ in },
             onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
             onUndoLastMutation: {}, onDismissNotification: {}
