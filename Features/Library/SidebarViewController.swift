@@ -51,6 +51,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var draggedFileURLKeys: [SidebarSelectionKey] = []
     /// The file already written with a row, so other apps accept the drag from its start.
     private var leadingDragFileURL: URL?
+    /// Videos still in iCloud that the current drag left out; downloaded if the drag ends in another app.
+    private var draggedCloudVideoFiles: [URL] = []
 
     init(
         onFilterChanged: @escaping (LibraryFilter) -> Void,
@@ -580,7 +582,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         if dragFileURLs.files.inCloud.isEmpty == false {
             CloudDragCaption.attach(count: dragFileURLs.files.inCloud.count, to: session, in: outlineView)
-            onDragLeftOutCloudVideoFiles(dragFileURLs.files.inCloud)
+            draggedCloudVideoFiles = dragFileURLs.files.inCloud
         }
     }
 
@@ -591,6 +593,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         operation: NSDragOperation
     ) {
         dragFileURLs = nil
+        let cloudFiles = draggedCloudVideoFiles
+        draggedCloudVideoFiles = []
+        if cloudFiles.isEmpty == false, CloudDragCaption.endedOutsideApp(at: screenPoint) {
+            onDragLeftOutCloudVideoFiles(cloudFiles)
+        }
     }
 
     /// Starts loading the files a drag from the pressed row would carry, so they are ready when the drag begins.

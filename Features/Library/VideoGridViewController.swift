@@ -1004,6 +1004,12 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             ? selectedVideos().map(\.id)
             : video(at: indexPath).map { [$0.id] } ?? []
         guard selectedIDs.isEmpty == false else { return nil }
+        // Writers are requested just before the collection view hides the dragged items, so pin them now.
+        if let itemView = collectionView.item(at: indexPath)?.view as? VideoCollectionItemView,
+           draggedItemViews.contains(where: { $0 === itemView }) == false {
+            itemView.staysVisibleWhileDragged = true
+            draggedItemViews.append(itemView)
+        }
         let item = NSPasteboardItem()
         item.setString(selectedIDs.joined(separator: "\n"), forType: SidebarViewController.videoPasteboardType)
         if let video = video(at: indexPath),
@@ -1025,13 +1031,13 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         willBeginAt screenPoint: NSPoint,
         forItemsAt indexPaths: Set<IndexPath>
     ) {
-        draggedItemViews = indexPaths.compactMap { collectionView.item(at: $0)?.view as? VideoCollectionItemView }
-        draggedItemViews.forEach { $0.staysVisibleWhileDragged = true }
-        let cloudFiles = draggedCloudVideoFiles
-        draggedCloudVideoFiles = []
-        if cloudFiles.isEmpty == false {
-            CloudDragCaption.attach(count: cloudFiles.count, to: session, in: collectionView)
-            onDragLeftOutCloudVideoFiles(cloudFiles)
+        for itemView in indexPaths.compactMap({ collectionView.item(at: $0)?.view as? VideoCollectionItemView })
+        where draggedItemViews.contains(where: { $0 === itemView }) == false {
+            itemView.staysVisibleWhileDragged = true
+            draggedItemViews.append(itemView)
+        }
+        if draggedCloudVideoFiles.isEmpty == false {
+            CloudDragCaption.attach(count: draggedCloudVideoFiles.count, to: session, in: collectionView)
         }
     }
 
@@ -1041,6 +1047,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         endedAt screenPoint: NSPoint,
         dragOperation operation: NSDragOperation
     ) {
+        let cloudFiles = draggedCloudVideoFiles
+        draggedCloudVideoFiles = []
+        if cloudFiles.isEmpty == false, CloudDragCaption.endedOutsideApp(at: screenPoint) {
+            onDragLeftOutCloudVideoFiles(cloudFiles)
+        }
         let views = draggedItemViews
         draggedItemViews = []
         // The collection view restores the source items right after this call, so release them on the next turn.
@@ -1713,6 +1724,12 @@ enum CloudDragCaption {
                 contents: image
             )
         }
+    }
+
+    /// Videos left out of a drag are downloaded only when the drag was taken to another app,
+    /// not when it was cancelled or dropped back onto Tagivy.
+    static func endedOutsideApp(at screenPoint: NSPoint) -> Bool {
+        NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) } == false
     }
 
     private static func captionImage(_ text: String) -> NSImage {
