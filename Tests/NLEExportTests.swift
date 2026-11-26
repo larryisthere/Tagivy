@@ -252,6 +252,18 @@ final class VideoResolutionTests: XCTestCase {
         XCTAssertNil(ResolvedVideos.handoutURL(for: local, knownURL: nil))
     }
 
+    /// The grid offers Export to Editing App for exactly the videos a drag hands out.
+    func testICloudVideosCanBeHandedOutEvenWhenLastSeenMissing() {
+        XCTAssertTrue(ResolvedVideos.canHandOut(local))
+        XCTAssertTrue(ResolvedVideos.canHandOut(cloud))
+        XCTAssertFalse(ResolvedVideos.canHandOut(drive))
+        XCTAssertFalse(ResolvedVideos.canHandOut(libraryVideo("gone", availability: .unavailable)))
+        XCTAssertFalse(ResolvedVideos.canHandOut(
+            libraryVideo("lost", availability: .unavailable, isCloudPlaceholder: true)
+                .withAvailability(.unavailable, unavailableReason: .accessLost, isCloudPlaceholder: true)
+        ))
+    }
+
     func testIncludesICloudVideosWithTheirFilesAndCountsOfflineOnes() async throws {
         let resolved = try await resolve([.tags([trip])])
 

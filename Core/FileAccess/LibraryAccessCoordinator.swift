@@ -97,11 +97,15 @@ struct ResolvedVideos: Equatable, Sendable {
     }
 
     /// A video's file can be handed out when it is on this Mac or in iCloud; offline and missing videos are not.
-    static func handoutURL(for presented: VideoRecord, knownURL: URL?) -> URL? {
+    static func canHandOut(_ presented: VideoRecord) -> Bool {
         switch presented.accessPresentation {
-        case .none, .cloud: knownURL
-        case .offline, .accessNeedsVerification, .unavailable: nil
+        case .none, .cloud: true
+        case .offline, .accessNeedsVerification, .unavailable: false
         }
+    }
+
+    static func handoutURL(for presented: VideoRecord, knownURL: URL?) -> URL? {
+        canHandOut(presented) ? knownURL : nil
     }
 }
 

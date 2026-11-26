@@ -1121,7 +1121,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
         let selected = selectedVideos()
         if selected.isEmpty == false,
-           selected.allSatisfy({ $0.availability != .available }) {
+           selected.contains(where: ResolvedVideos.canHandOut) == false {
             return unavailableContextMenu(for: selected)
         }
         let menu = NSMenu()
