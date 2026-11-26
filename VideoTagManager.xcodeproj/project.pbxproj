@@ -59,6 +59,7 @@
 		A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */; };
 		A0E2000000000000000000B4 /* TagCapsules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F4 /* TagCapsules.swift */; };
 		A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F5 /* TagCapsulesTests.swift */; };
+		A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */; };
 		A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F1 /* EditorExportPresenter.swift */; };
 		F28A0932B7510114E8910211 /* SyntheticThumbnailFixture.m4v in Resources */ = {isa = PBXBuildFile; fileRef = F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */; };
 /* End PBXBuildFile section */
@@ -117,6 +118,7 @@
 		A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThumbnailRevealTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F4 /* TagCapsules.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagCapsules.swift; path = Library/TagCapsules.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F5 /* TagCapsulesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TagCapsulesTests.swift; sourceTree = "<group>"; };
+		A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagStateCacheTests.swift; sourceTree = "<group>"; };
 		C6074EECBDF10CF9B772C1A5 /* MediaProcessingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaProcessingServiceTests.swift; sourceTree = "<group>"; };
 		CB2E252D426AB761A06F5F9F /* InspectorViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InspectorViewController.swift; path = Library/InspectorViewController.swift; sourceTree = "<group>"; };
 		DF4B385CF17799F7594B30A2 /* AuthenticationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuthenticationService.swift; path = Security/AuthenticationService.swift; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 				A0E2000000000000000000F2 /* InspectorTagListTests.swift */,
 				A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */,
 				A0E2000000000000000000F5 /* TagCapsulesTests.swift */,
+				A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */,
 				4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */,
 			);
 			path = Tests;
@@ -436,6 +439,7 @@
 				A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */,
 				A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */,
 				A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */,
+				A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */,
 				2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
