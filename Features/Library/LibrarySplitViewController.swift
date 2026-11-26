@@ -26,6 +26,12 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private let libraryContentViewController: LibraryContentViewController
     private let inspectorViewController: InspectorViewController
     private let sidebarViewController: SidebarViewController
+    var onExportToEditor: (NLEExportScope) -> Void = { _ in } {
+        didSet {
+            sidebarViewController.onExportToEditor = onExportToEditor
+            videoGridViewController.onExportToEditor = onExportToEditor
+        }
+    }
     private let onQueryChanged: (LibraryQueryRequest, Bool) -> Void
     private let onCreateSmartCollection: (
         String,

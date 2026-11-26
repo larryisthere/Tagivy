@@ -1623,6 +1623,54 @@ final class LibraryAccessCoordinator {
         }
     }
 
+    /// What an editing app will receive when the scope is exported, read from the library at this moment.
+    func nleExportPlan(for scope: NLEExportScope, name: String, completion: @escaping (NLEExportPlan?) -> Void) {
+        Task {
+            do {
+                let libraryID = LibraryRecord.primaryID
+                let candidates: [VideoRecord]
+                let rootTagID: String?
+                switch scope {
+                case let .tag(tag):
+                    rootTagID = tag.id
+                    candidates = try await database.fetchVideos(
+                        libraryID: libraryID,
+                        query: LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
+                    )
+                case let .smartCollection(collection):
+                    rootTagID = nil
+                    candidates = try await database.fetchVideos(
+                        libraryID: libraryID,
+                        query: LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
+                    )
+                case let .videos(videos):
+                    rootTagID = nil
+                    candidates = videos
+                }
+                let tagState = try await database.captureTagState(libraryID: libraryID)
+                var exportable: [NLEExportPlanBuilder.Video] = []
+                for video in candidates {
+                    if presentedVideo(video).availability == .available, let url = fileURL(for: video) {
+                        exportable.append(.init(record: video, url: url))
+                    }
+                }
+                completion(NLEExportPlanBuilder.plan(
+                    name: name,
+                    rootTagID: rootTagID,
+                    tags: tagState.tags,
+                    relations: tagState.relations,
+                    videos: exportable,
+                    skippedCount: candidates.count - exportable.count
+                ))
+            } catch {
+                AppLogger.library.error(
+                    "Export plan failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                completion(nil)
+            }
+        }
+    }
+
     /// Asks iCloud to download videos that were left out of a drag because they are not on this Mac yet.
     func downloadCloudVideoFiles(_ urls: [URL]) {
         Task.detached(priority: .utility) {

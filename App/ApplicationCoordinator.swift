@@ -25,6 +25,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     private let windowController = MainWindowController()
     private let quickLookCoordinator = QuickLookPreviewCoordinator()
     private let folderImportMethodPresenter = FolderImportMethodPresenter()
+    private let editorExportPresenter = EditorExportPresenter()
     private var privacyShield: NSView?
     private var idleTimer: Timer?
     private var modifierFlagsMonitor: Any?
@@ -210,6 +211,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     func start() {
         lockCoordinator.onStateChange = { [weak self] state in
             self?.render(lockState: state)
+        }
+        libraryViewController.onExportToEditor = { [weak self] scope in
+            self?.exportToEditor(scope)
         }
 
         libraryAccessCoordinator?.onVideosChanged = { [weak self] videos in
@@ -575,6 +579,20 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     private func revealVideo(_ video: VideoRecord) {
         guard let url = libraryAccessCoordinator?.fileURL(for: video) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func exportToEditor(_ scope: NLEExportScope) {
+        guard lockCoordinator.state == .unlocked,
+              let coordinator = libraryAccessCoordinator,
+              let window = windowController.window else { return }
+        let name = EditorExportPresenter.defaultName(for: scope)
+        coordinator.nleExportPlan(for: scope, name: name) { [weak self] plan in
+            guard let self, let plan, plan.clips.isEmpty == false else {
+                NSSound.beep()
+                return
+            }
+            self.editorExportPresenter.present(plan, on: window)
+        }
     }
 
     private func copyPath(_ video: VideoRecord) {

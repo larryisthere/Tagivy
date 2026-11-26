@@ -7,6 +7,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 ### Added
 
 - Drag selected videos, a tag, or a smart filter from the library to Finder, video editors such as Premiere Pro, or other apps to copy or import the original files. A tag includes the videos of its subtags. Unavailable and offline videos are left out, and dragging into Finder copies the files instead of moving them. Videos that are still in iCloud are left out and start downloading once you drop outside Tagivy. While a drag is outside Tagivy, the dragged image shows how many videos it exports and, if any, how many it leaves out.
+- Export a tag, a smart filter, or selected videos to Premiere Pro, DaVinci Resolve, or Final Cut Pro with Export to Editing App… in their shortcut menus. Premiere Pro and DaVinci Resolve import the saved XML file as bins that follow the tag tree; Final Cut Pro imports the FCPXML file as an event with keyword collections. Each clip's tags appear in its Log Note or notes, and the original videos are not changed. Unavailable videos are left out.
 
 ### Fixed
 

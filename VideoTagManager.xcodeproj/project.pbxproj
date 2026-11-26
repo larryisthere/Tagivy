@@ -19,6 +19,7 @@
 		1CD2C0755FE991270B80D231 /* TagRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851696AF2C5AB56678B796BC /* TagRecord.swift */; };
 		1E40E58D5FC7F491D7B2D1D9 /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999DD897E04F33DB96FBAF98 /* SidebarViewController.swift */; };
 		1E908D672F65231A67801238 /* SidebarModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */; };
+		A0E1000000000000000000B4 /* NLEExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F4 /* NLEExportTests.swift */; };
 		2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */; };
 		26EDD4D529BFD1ECF201FC6A /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7F93F07756F716819CAB2 /* AppLogger.swift */; };
 		3CAA3D40356EDCAAA5BBC500 /* LockCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935F50B9F553D34C8563B4C9 /* LockCoordinatorTests.swift */; };
@@ -31,6 +32,8 @@
 		6F03F16230753D48AB463C19 /* FSEventsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480AAB545D565E60839B7D93 /* FSEventsWatcher.swift */; };
 		737692E030B3191401142FC6 /* LibraryContentViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E709C15BF45FC844524450 /* LibraryContentViewController.swift */; };
 		7915FBC0FADC8DB295940D05 /* LibraryPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85675FA81681865A060D3602 /* LibraryPicker.swift */; };
+		A0E1000000000000000000B3 /* NLEExportWriters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F3 /* NLEExportWriters.swift */; };
+		A0E1000000000000000000B2 /* NLEExportPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F2 /* NLEExportPlan.swift */; };
 		7DB2D23AF1009554B9C3BA4D /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932A36E631207B2E8F36909B /* MainWindowController.swift */; };
 		87E3EE336E625670C65CB595 /* VideoRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE8224925FB1BE4387013B4D /* VideoRecord.swift */; };
 		9379E9915463B27A14C6F77C /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 500321485A35B89955B04774 /* Cocoa.framework */; };
@@ -49,6 +52,7 @@
 		E4719172FCE5D080D5A751BA /* LibraryQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79399E5183176F7612B12A1 /* LibraryQuery.swift */; };
 		E8BCC961F2C8724F76B141E4 /* SecurityScopedResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB6000E03913CDFF89032FF /* SecurityScopedResource.swift */; };
 		F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11D00000000000000000002 /* FolderImportMethodPresenter.swift */; };
+		A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F1 /* EditorExportPresenter.swift */; };
 		F28A0932B7510114E8910211 /* SyntheticThumbnailFixture.m4v in Resources */ = {isa = PBXBuildFile; fileRef = F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */; };
 /* End PBXBuildFile section */
 
@@ -81,6 +85,8 @@
 		69323B27400CD3637B980311 /* AppConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		851696AF2C5AB56678B796BC /* TagRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagRecord.swift; path = Database/TagRecord.swift; sourceTree = "<group>"; };
 		85675FA81681865A060D3602 /* LibraryPicker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LibraryPicker.swift; path = FileAccess/LibraryPicker.swift; sourceTree = "<group>"; };
+		A0E1000000000000000000F3 /* NLEExportWriters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NLEExportWriters.swift; path = Export/NLEExportWriters.swift; sourceTree = "<group>"; };
+		A0E1000000000000000000F2 /* NLEExportPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NLEExportPlan.swift; path = Export/NLEExportPlan.swift; sourceTree = "<group>"; };
 		85E709C15BF45FC844524450 /* LibraryContentViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LibraryContentViewController.swift; path = Library/LibraryContentViewController.swift; sourceTree = "<group>"; };
 		883FE7170807F701A3AEF3EB /* LockCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LockCoordinator.swift; path = Security/LockCoordinator.swift; sourceTree = "<group>"; };
 		8CB7F93F07756F716819CAB2 /* AppLogger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppLogger.swift; path = Logging/AppLogger.swift; sourceTree = "<group>"; };
@@ -95,6 +101,7 @@
 		A11C0A000000000000000007 /* AppLocalization.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppLocalization.swift; path = Localization/AppLocalization.swift; sourceTree = "<group>"; };
 		A1FF02AA6C391F4A09600494 /* VideoGridViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoGridViewController.swift; path = Library/VideoGridViewController.swift; sourceTree = "<group>"; };
 		AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarModelTests.swift; sourceTree = "<group>"; };
+		A0E1000000000000000000F4 /* NLEExportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NLEExportTests.swift; sourceTree = "<group>"; };
 		C2129BA05EEE64F81130DCAB /* LockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LockView.swift; path = Lock/LockView.swift; sourceTree = "<group>"; };
 		C520765DD1E9E7CB1BA8D58C /* SidebarModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SidebarModel.swift; path = Library/SidebarModel.swift; sourceTree = "<group>"; };
 		C6074EECBDF10CF9B772C1A5 /* MediaProcessingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaProcessingServiceTests.swift; sourceTree = "<group>"; };
@@ -107,6 +114,7 @@
 		EC01ADC3215507585598FE5D /* MediaProcessingService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaProcessingService.swift; path = Media/MediaProcessingService.swift; sourceTree = "<group>"; };
 		EE8224925FB1BE4387013B4D /* VideoRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoRecord.swift; path = Database/VideoRecord.swift; sourceTree = "<group>"; };
 		F11D00000000000000000002 /* FolderImportMethodPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolderImportMethodPresenter.swift; sourceTree = "<group>"; };
+		A0E1000000000000000000F1 /* EditorExportPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditorExportPresenter.swift; sourceTree = "<group>"; };
 		F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */ = {isa = PBXFileReference; lastKnownFileType = file; path = SyntheticThumbnailFixture.m4v; sourceTree = "<group>"; };
 		FEFBAF600C86686F674B5B51 /* DatabaseError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DatabaseError.swift; path = Database/DatabaseError.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -161,6 +169,7 @@
 				E90739611A6585A639F67C8B /* AppDelegate.swift */,
 				65BC78F7B6A61CB148B1483D /* ApplicationCoordinator.swift */,
 				F11D00000000000000000002 /* FolderImportMethodPresenter.swift */,
+				A0E1000000000000000000F1 /* EditorExportPresenter.swift */,
 				932A36E631207B2E8F36909B /* MainWindowController.swift */,
 			);
 			path = App;
@@ -183,6 +192,7 @@
 				F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */,
 				97EB9F42F6AE50FE1F8671DE /* PreferencesStoreTests.swift */,
 				AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */,
+				A0E1000000000000000000F4 /* NLEExportTests.swift */,
 				4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */,
 			);
 			path = Tests;
@@ -216,6 +226,8 @@
 				EE8224925FB1BE4387013B4D /* VideoRecord.swift */,
 				E4029ADF262271DF7E08646D /* LibraryAccessCoordinator.swift */,
 				85675FA81681865A060D3602 /* LibraryPicker.swift */,
+				A0E1000000000000000000F3 /* NLEExportWriters.swift */,
+				A0E1000000000000000000F2 /* NLEExportPlan.swift */,
 				9DB6000E03913CDFF89032FF /* SecurityScopedResource.swift */,
 				8CB7F93F07756F716819CAB2 /* AppLogger.swift */,
 				EC01ADC3215507585598FE5D /* MediaProcessingService.swift */,
@@ -352,6 +364,7 @@
 				3D9BF8338051025B82BFCA63 /* AppDelegate.swift in Sources */,
 				1C1B65FF73D4A4735CE177E8 /* ApplicationCoordinator.swift in Sources */,
 				F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */,
+				A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */,
 				7DB2D23AF1009554B9C3BA4D /* MainWindowController.swift in Sources */,
 				D0109FDB87583764B7BF9312 /* DatabaseError.swift in Sources */,
 				B8D55C07D945D4C28EE0A8BD /* DatabaseStore.swift in Sources */,
@@ -360,6 +373,8 @@
 				87E3EE336E625670C65CB595 /* VideoRecord.swift in Sources */,
 				61351CBC0635DFCC9E031CC6 /* LibraryAccessCoordinator.swift in Sources */,
 				7915FBC0FADC8DB295940D05 /* LibraryPicker.swift in Sources */,
+				A0E1000000000000000000B3 /* NLEExportWriters.swift in Sources */,
+				A0E1000000000000000000B2 /* NLEExportPlan.swift in Sources */,
 				E8BCC961F2C8724F76B141E4 /* SecurityScopedResource.swift in Sources */,
 				26EDD4D529BFD1ECF201FC6A /* AppLogger.swift in Sources */,
 				AC4206539E27EB777B8523C7 /* MediaProcessingService.swift in Sources */,
@@ -392,6 +407,7 @@
 				0FF78C6B4BF2B5E23A6B00C1 /* MediaProcessingServiceTests.swift in Sources */,
 				DF49AD9A88819521E8985E78 /* PreferencesStoreTests.swift in Sources */,
 				1E908D672F65231A67801238 /* SidebarModelTests.swift in Sources */,
+				A0E1000000000000000000B4 /* NLEExportTests.swift in Sources */,
 				2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -45,6 +45,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         _, completion in completion(DraggableVideoFiles(urls: []))
     }
     var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
+    var onExportToEditor: (NLEExportScope) -> Void = { _ in }
     private var dragFileURLRequestGeneration = 0
     private var dragFileURLs: (keys: [SidebarSelectionKey], files: DraggableVideoFiles)?
     /// Rows the outline view asked pasteboard writers for in the drag that is starting.
@@ -781,6 +782,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             menu.addItem(renameItem)
             menu.addItem(.separator())
             menu.addItem(deleteItem)
+            menu.addItem(.separator())
+            menu.addItem(exportToEditorItem(
+                .smartCollection(smartCollection),
+                hasVideos: smartCollection.videoCount != 0
+            ))
             return
         }
         guard let tag = clickedTag() else {
@@ -849,6 +855,24 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         mergeItem.submenu = mergeMenu
         mergeItem.isEnabled = mergeMenu.items.isEmpty == false
         menu.addItem(mergeItem)
+        menu.addItem(.separator())
+        menu.addItem(exportToEditorItem(.tag(tag), hasVideos: tag.videoCount > 0))
+    }
+
+    private func exportToEditorItem(_ scope: NLEExportScope, hasVideos: Bool) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: String(localized: .exportEditorMenu),
+            action: hasVideos ? #selector(exportToEditor(_:)) : nil,
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = NLEExportScopeBox(scope)
+        return item
+    }
+
+    @objc private func exportToEditor(_ sender: NSMenuItem) {
+        guard let box = sender.representedObject as? NLEExportScopeBox else { return }
+        onExportToEditor(box.scope)
     }
 
     private func rebuildNodes() {
@@ -1406,6 +1430,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         delete.target = self
         delete.representedObject = collection
         menu.addItem(delete)
+        menu.addItem(.separator())
+        menu.addItem(exportToEditorItem(.smartCollection(collection), hasVideos: collection.videoCount != 0))
         menu.popUp(
             positioning: nil,
             at: NSPoint(x: 0, y: sender.bounds.height + 4),
