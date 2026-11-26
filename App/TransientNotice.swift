@@ -17,6 +17,8 @@ final class TransientNotice {
 
     private var view: TransientNoticeView?
     private var dismissTask: Task<Void, Never>?
+    private var remaining: Duration = .zero
+    private var countingSince: ContinuousClock.Instant?
 
     private init() {}
 
@@ -32,11 +34,13 @@ final class TransientNotice {
             self?.dismiss(animated: true)
         }
         notice.onHoverChanged = { [weak self, weak notice] isHovering in
+            guard let self, let notice, self.view === notice else { return }
             if isHovering {
-                self?.dismissTask?.cancel()
-                notice?.countdown.reset()
+                pauseCountdown()
+                notice.countdown.pause()
             } else {
-                self?.scheduleDismiss()
+                notice.countdown.resume()
+                resumeCountdown()
             }
         }
         notice.translatesAutoresizingMaskIntoConstraints = false
@@ -57,14 +61,28 @@ final class TransientNotice {
             notification: .announcementRequested,
             userInfo: [.announcement: [title, detail].compactMap { $0 }.joined(separator: " ")]
         )
-        scheduleDismiss()
+        remaining = Self.visibleDuration
+        notice.countdown.start(duration: Self.visibleDuration)
+        resumeCountdown()
     }
 
-    private func scheduleDismiss() {
+    /// Hovering stops the clock where it is; leaving runs only the time that was left.
+    private func pauseCountdown() {
         dismissTask?.cancel()
-        view?.countdown.start(duration: Self.visibleDuration)
+        dismissTask = nil
+        if let countingSince {
+            remaining = max(remaining - countingSince.duration(to: .now), .zero)
+        }
+        countingSince = nil
+    }
+
+    private func resumeCountdown() {
+        guard countingSince == nil else { return }
+        dismissTask?.cancel()
+        countingSince = .now
+        let delay = remaining
         dismissTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.visibleDuration)
+            try? await Task.sleep(for: delay)
             guard Task.isCancelled == false else { return }
             self?.dismiss(animated: true)
         }
@@ -73,6 +91,7 @@ final class TransientNotice {
     private func dismiss(animated: Bool) {
         dismissTask?.cancel()
         dismissTask = nil
+        countingSince = nil
         guard let notice = view else { return }
         view = nil
         guard animated else {
@@ -230,8 +249,26 @@ private final class CountdownBar: NSView {
         fill.add(animation, forKey: "countdown")
     }
 
-    /// Back to full while the pointer rests on the notice.
     func reset() {
         fill.removeAnimation(forKey: "countdown")
+        fill.speed = 1
+        fill.timeOffset = 0
+        fill.beginTime = 0
+    }
+
+    func pause() {
+        guard fill.speed != 0 else { return }
+        let now = fill.convertTime(CACurrentMediaTime(), from: nil)
+        fill.speed = 0
+        fill.timeOffset = now
+    }
+
+    func resume() {
+        guard fill.speed == 0 else { return }
+        let pausedAt = fill.timeOffset
+        fill.speed = 1
+        fill.timeOffset = 0
+        fill.beginTime = 0
+        fill.beginTime = fill.convertTime(CACurrentMediaTime(), from: nil) - pausedAt
     }
 }
