@@ -141,7 +141,7 @@ enum FCPXMLWriter {
             if clip.tagNames.isEmpty == false {
                 xml.element("note", clip.tagNames.joined(separator: ", "))
             }
-            if plan.mirrorsTags, clip.keywords.isEmpty == false {
+            if clip.keywords.isEmpty == false {
                 xml.empty("keyword", attributes: [
                     ("start", "0s"),
                     ("duration", duration),

@@ -1,23 +1,40 @@
 import AppKit
 
-/// A notice at the bottom of a window that fades out on its own; hovering keeps it open.
+/// The one way Tagivy tells people something that needs no decision: a notice at the bottom of the window
+/// that counts down and fades out on its own. Hovering pauses it, and it offers at most one optional action.
+/// Anything that needs an answer (confirm, choose, name) uses an `NSAlert` sheet instead.
 @MainActor
 final class TransientNotice {
+    struct Action {
+        let title: String
+        let perform: () -> Void
+    }
+
     static let visibleDuration: Duration = .seconds(5)
+
+    /// A newer notice replaces the one on screen, so there is never more than one.
+    private static let current = TransientNotice()
 
     private var view: TransientNoticeView?
     private var dismissTask: Task<Void, Never>?
 
-    func show(in window: NSWindow, title: String, detail: String?, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+    private init() {}
+
+    static func show(in window: NSWindow, title: String, detail: String? = nil, action: Action? = nil) {
+        current.show(in: window, title: title, detail: detail, action: action)
+    }
+
+    private func show(in window: NSWindow, title: String, detail: String?, action: Action?) {
         dismiss(animated: false)
         guard let contentView = window.contentView else { return }
-        let notice = TransientNoticeView(title: title, detail: detail, actionTitle: actionTitle) { [weak self] in
-            action?()
+        let notice = TransientNoticeView(title: title, detail: detail, actionTitle: action?.title) { [weak self] in
+            action?.perform()
             self?.dismiss(animated: true)
         }
-        notice.onHoverChanged = { [weak self] isHovering in
+        notice.onHoverChanged = { [weak self, weak notice] isHovering in
             if isHovering {
                 self?.dismissTask?.cancel()
+                notice?.countdown.reset()
             } else {
                 self?.scheduleDismiss()
             }
@@ -28,7 +45,7 @@ final class TransientNotice {
         NSLayoutConstraint.activate([
             notice.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             notice.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24),
-                        notice.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
+            notice.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
         ])
         view = notice
         NSAnimationContext.runAnimationGroup { context in
@@ -45,6 +62,7 @@ final class TransientNotice {
 
     private func scheduleDismiss() {
         dismissTask?.cancel()
+        view?.countdown.start(duration: Self.visibleDuration)
         dismissTask = Task { [weak self] in
             try? await Task.sleep(for: Self.visibleDuration)
             guard Task.isCancelled == false else { return }
@@ -78,6 +96,7 @@ private final class TransientNoticeView: NSVisualEffectView {
     static let verticalPadding: CGFloat = 14
 
     var onHoverChanged: (Bool) -> Void = { _ in }
+    let countdown = CountdownBar()
     private let onAction: () -> Void
 
     init(title: String, detail: String?, actionTitle: String?, onAction: @escaping () -> Void) {
@@ -108,10 +127,17 @@ private final class TransientNoticeView: NSVisualEffectView {
         textStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(textStack)
 
+        countdown.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(countdown)
+
         var constraints = [
             textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
             textStack.topAnchor.constraint(equalTo: topAnchor, constant: Self.verticalPadding),
             textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.verticalPadding),
+            countdown.leadingAnchor.constraint(equalTo: leadingAnchor),
+            countdown.trailingAnchor.constraint(equalTo: trailingAnchor),
+            countdown.bottomAnchor.constraint(equalTo: bottomAnchor),
+            countdown.heightAnchor.constraint(equalToConstant: CountdownBar.height),
         ]
         if let actionTitle {
             let button = NSButton(title: actionTitle, target: self, action: #selector(performAction))
@@ -146,4 +172,66 @@ private final class TransientNoticeView: NSVisualEffectView {
     override func mouseExited(with event: NSEvent) { onHoverChanged(false) }
 
     @objc private func performAction() { onAction() }
+}
+
+/// A line along the bottom edge that empties as the notice's time runs out.
+/// With Reduce Motion it steps down once a second instead of sliding.
+private final class CountdownBar: NSView {
+    static let height: CGFloat = 3
+
+    private let fill = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
+        layer?.addSublayer(fill)
+        setAccessibilityElement(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fill.bounds = CGRect(origin: .zero, size: bounds.size)
+        fill.position = CGPoint(x: 0, y: bounds.midY)
+        CATransaction.commit()
+    }
+
+    override func updateLayer() {
+        fill.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.7).cgColor
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    func start(duration: Duration) {
+        reset()
+        let seconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        let animation: CAAnimation
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let steps = max(Int(seconds.rounded()), 1)
+            let stepped = CAKeyframeAnimation(keyPath: "transform.scale.x")
+            stepped.values = (0...steps).map { 1 - Double($0) / Double(steps) }
+            stepped.calculationMode = .discrete
+            animation = stepped
+        } else {
+            let smooth = CABasicAnimation(keyPath: "transform.scale.x")
+            smooth.fromValue = 1
+            smooth.toValue = 0
+            smooth.timingFunction = CAMediaTimingFunction(name: .linear)
+            animation = smooth
+        }
+        animation.duration = seconds
+        animation.fillMode = .forwards
+        animation.isRemovedOnCompletion = false
+        fill.add(animation, forKey: "countdown")
+    }
+
+    /// Back to full while the pointer rests on the notice.
+    func reset() {
+        fill.removeAnimation(forKey: "countdown")
+    }
 }

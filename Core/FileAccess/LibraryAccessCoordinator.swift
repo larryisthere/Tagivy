@@ -1629,10 +1629,10 @@ final class LibraryAccessCoordinator {
             do {
                 let libraryID = LibraryRecord.primaryID
                 let candidates: [VideoRecord]
-                let rootTagIDs: [String]
+                let grouping: NLEExportGrouping
                 switch scope {
                 case let .tags(tags):
-                    rootTagIDs = tags.map(\.id)
+                    grouping = .chosenTags(tags.map(\.id))
                     var seen = Set<String>()
                     var matches: [VideoRecord] = []
                     for tag in tags {
@@ -1644,13 +1644,13 @@ final class LibraryAccessCoordinator {
                     }
                     candidates = matches
                 case let .smartCollection(collection):
-                    rootTagIDs = []
+                    grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
                     candidates = try await database.fetchVideos(
                         libraryID: libraryID,
                         query: LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
                     )
                 case let .videos(videos):
-                    rootTagIDs = []
+                    grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
                     candidates = videos
                 }
                 let tagState = try await database.captureTagState(libraryID: libraryID)
@@ -1662,7 +1662,7 @@ final class LibraryAccessCoordinator {
                 }
                 completion(NLEExportPlanBuilder.plan(
                     name: name,
-                    rootTagIDs: rootTagIDs,
+                    grouping: grouping,
                     tags: tagState.tags,
                     relations: tagState.relations,
                     videos: exportable,

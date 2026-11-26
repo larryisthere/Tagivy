@@ -18,7 +18,7 @@ final class NLEExportTests: XCTestCase {
             ("waves", "coast"),
         ])
 
-        XCTAssertTrue(plan.mirrorsTags)
+        XCTAssertTrue(plan.rootIsTag)
         XCTAssertEqual(plan.root.name, "旅行")
         XCTAssertEqual(plan.root.clipIDs, ["sunset"])
         XCTAssertEqual(plan.root.bins.map(\.name), ["海边"], "城市 has no videos, so it has no bin")
@@ -43,13 +43,19 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(clip.keywords, ["旅行", "城市"])
     }
 
-    func testSmartCollectionOrSelectionIsOneBin() {
-        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("waves", "people")])
+    func testSmartCollectionOrSelectionFollowsTheTagsItsVideosCarry() throws {
+        let plan = makePlan(rootTagID: nil, relations: [
+            ("sunset", "coast"), ("waves", "people"), ("plain", nil),
+        ])
 
-        XCTAssertFalse(plan.mirrorsTags)
+        XCTAssertFalse(plan.rootIsTag)
         XCTAssertEqual(plan.root.name, "导出")
-        XCTAssertTrue(plan.root.bins.isEmpty)
-        XCTAssertEqual(plan.root.clipIDs, ["sunset", "waves"])
+        XCTAssertTrue(plan.root.clipIDs.isEmpty)
+        XCTAssertEqual(plan.root.bins.map(\.name), ["旅行", "人物", "未打标签"], "城市 has no videos here, so it has no bin")
+        XCTAssertEqual(plan.root.bins[0].bins.map(\.name), ["海边"])
+        XCTAssertEqual(plan.root.bins[2].clipIDs, ["plain"])
+        XCTAssertEqual(plan.tagBins.map(\.name), ["旅行", "人物"], "Untagged videos get a bin, not a keyword collection")
+        XCTAssertEqual(try XCTUnwrap(plan.clip(id: "sunset")).keywords, ["海边"])
     }
 
     func testSeveralTagsBecomeSiblingBinsAndNestedChoicesAreNotRepeated() throws {
@@ -119,12 +125,13 @@ final class NLEExportTests: XCTestCase {
         )
     }
 
-    func testFCPXMLWithoutTagsHasNoKeywords() throws {
-        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast")])
+    func testFCPXMLForSelectedVideosKeywordsEveryTagAndSkipsUntagged() throws {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("plain", nil)])
         let document = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
 
-        XCTAssertEqual(try document.nodes(forXPath: "//keyword").count, 0)
-        XCTAssertEqual(try document.nodes(forXPath: "//keyword-collection").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "//asset-clip[@name='sunset.mov']/keyword/@value").first?.stringValue, "海边")
+        XCTAssertEqual(try document.nodes(forXPath: "//asset-clip[@name='plain.mov']/*").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "//keyword-collection/@name").map(\.stringValue), ["海边"])
         XCTAssertEqual(try document.nodes(forXPath: "//note").first?.stringValue, "海边")
     }
 
@@ -136,11 +143,20 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/bin/name").first?.stringValue, "A & B <\"cut\">")
     }
 
-    private func makePlan(rootTagID: String?, relations: [(String, String)]) -> NLEExportPlan {
-        makePlan(rootTagIDs: rootTagID.map { [$0] } ?? [], relations: relations)
+    /// No root tag exports the way a smart filter or a video selection does.
+    private func makePlan(rootTagID: String?, relations: [(String, String?)]) -> NLEExportPlan {
+        makePlan(
+            name: rootTagID.flatMap { id in tags.first { $0.id == id }?.name } ?? "导出",
+            grouping: rootTagID.map { .chosenTags([$0]) } ?? .videoTags(untaggedName: "未打标签"),
+            relations: relations
+        )
     }
 
-    private func makePlan(rootTagIDs: [String], relations: [(String, String)]) -> NLEExportPlan {
+    private func makePlan(rootTagIDs: [String], relations: [(String, String?)]) -> NLEExportPlan {
+        makePlan(name: "导出", grouping: .chosenTags(rootTagIDs), relations: relations)
+    }
+
+    private func makePlan(name: String, grouping: NLEExportGrouping, relations: [(String, String?)]) -> NLEExportPlan {
         let videoIDs = relations.map(\.0).reduce(into: [String]()) { ids, id in
             if ids.contains(id) == false { ids.append(id) }
         }
@@ -151,10 +167,10 @@ final class NLEExportTests: XCTestCase {
             )
         }
         return NLEExportPlanBuilder.plan(
-            name: rootTagIDs.count == 1 ? tags.first { $0.id == rootTagIDs[0] }?.name ?? "" : "导出",
-            rootTagIDs: rootTagIDs,
+            name: name,
+            grouping: grouping,
             tags: tags,
-            relations: relations.map { VideoTagRelation(videoID: $0.0, tagID: $0.1) },
+            relations: relations.compactMap { videoID, tagID in tagID.map { VideoTagRelation(videoID: videoID, tagID: $0) } },
             videos: videos,
             skippedCount: 0
         )

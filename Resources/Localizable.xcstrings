@@ -5509,13 +5509,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Smart Filter"
+            "value" : "Export Tags"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出智能分类"
+            "value" : "导出标签"
           }
         }
       }
@@ -5526,13 +5526,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Videos"
+            "value" : "Export Tags"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出视频"
+            "value" : "导出标签"
           }
         }
       }
@@ -5602,23 +5602,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这些视频目前不可用。重新连接后再试。"
-          }
-        }
-      }
-    },
-    "export.editor.ok" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "好"
           }
         }
       }

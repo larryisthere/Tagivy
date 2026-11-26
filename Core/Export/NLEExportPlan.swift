@@ -79,8 +79,9 @@ struct NLEExportPlan: Equatable, Sendable {
     let clips: [NLEExportClip]
     /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive.
     let skippedCount: Int
-    /// Whether the bins mirror a tag tree, or one bin holds every clip.
-    let mirrorsTags: Bool
+    /// Whether the outermost bin is the one exported tag, so it keeps that tag's name
+    /// instead of taking the name of the saved file.
+    let rootIsTag: Bool
     /// The bin of each exported tag; Final Cut Pro keyword collections are built from these.
     let tagBins: [NLEExportBin]
 
@@ -122,18 +123,24 @@ struct NLEFrameRate: Equatable, Sendable {
     }
 }
 
+/// How exported clips are sorted into bins. Every export follows the tag tree; only the starting tags differ.
+enum NLEExportGrouping: Equatable, Sendable {
+    /// Bins for the tags a person chose, holding the videos in those tags.
+    case chosenTags([String])
+    /// Bins for every top-level tag the videos carry, plus one bin for videos without tags.
+    case videoTags(untaggedName: String)
+}
+
 enum NLEExportPlanBuilder {
     struct Video: Sendable {
         let record: VideoRecord
         let url: URL
     }
 
-    /// - Parameters:
-    ///   - name: Name of the outermost bin.
-    ///   - rootTagIDs: The exported tags; none puts every clip in one bin.
+    /// - Parameter name: Name of the outermost bin.
     static func plan(
         name: String,
-        rootTagIDs: [String],
+        grouping: NLEExportGrouping,
         tags: [TagRecord],
         relations: [VideoTagRelation],
         videos: [Video],
@@ -168,7 +175,20 @@ enum NLEExportPlanBuilder {
             }
             return ids
         }
-        let requestedRoots = rootTagIDs.filter { tagsByID[$0] != nil }
+        func topLevel(_ id: String) -> String {
+            var current = id
+            var visited: Set<String> = []
+            while let parent = tagsByID[current]?.parentID, tagsByID[parent] != nil, visited.insert(current).inserted {
+                current = parent
+            }
+            return current
+        }
+        let requestedRoots: [String] = switch grouping {
+        case let .chosenTags(ids):
+            ids.filter { tagsByID[$0] != nil }
+        case .videoTags:
+            Array(Set(videos.flatMap { tagIDsByVideo[$0.record.id] ?? [] }.map(topLevel)))
+        }
         // A chosen tag inside another chosen tag already appears in that tag's bin.
         let rootIDs = requestedRoots
             .filter { id in requestedRoots.contains { $0 != id && subtree($0).contains(id) } == false }
@@ -192,16 +212,6 @@ enum NLEExportPlanBuilder {
             )
         }
 
-        guard rootIDs.isEmpty == false else {
-            return NLEExportPlan(
-                root: NLEExportBin(name: name, bins: [], clipIDs: clips.map(\.id)),
-                clips: clips,
-                skippedCount: skippedCount,
-                mirrorsTags: false,
-                tagBins: []
-            )
-        }
-
         func bin(for tag: TagRecord) -> NLEExportBin? {
             let direct = clips.filter { tagIDsByVideo[$0.id]?.contains(tag.id) == true }.map(\.id)
             let children = (childrenByParent[tag.id] ?? []).compactMap(bin(for:))
@@ -209,18 +219,28 @@ enum NLEExportPlanBuilder {
             return NLEExportBin(name: tag.name, bins: children, clipIDs: direct)
         }
         let tagBins = rootIDs.compactMap { tagsByID[$0] }.compactMap(bin(for:))
-        var root: NLEExportBin
-        if tagBins.count == 1 {
-            root = tagBins[0]
-            root.name = name
-        } else {
+        let root: NLEExportBin
+        let rootIsTag: Bool
+        switch grouping {
+        case .chosenTags where tagBins.count == 1:
+            var tagBin = tagBins[0]
+            tagBin.name = name
+            root = tagBin
+            rootIsTag = true
+        case .chosenTags:
             root = NLEExportBin(name: name, bins: tagBins, clipIDs: [])
+            rootIsTag = false
+        case let .videoTags(untaggedName):
+            let untagged = clips.filter { tagIDsByVideo[$0.id, default: []].isEmpty }.map(\.id)
+            let untaggedBins = untagged.isEmpty ? [] : [NLEExportBin(name: untaggedName, bins: [], clipIDs: untagged)]
+            root = NLEExportBin(name: name, bins: tagBins + untaggedBins, clipIDs: [])
+            rootIsTag = false
         }
         return NLEExportPlan(
             root: root,
             clips: clips,
             skippedCount: skippedCount,
-            mirrorsTags: true,
+            rootIsTag: rootIsTag,
             tagBins: tagBins
         )
     }

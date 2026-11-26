@@ -587,8 +587,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
               let window = windowController.window else { return }
         let name = EditorExportPresenter.defaultName(for: scope)
         coordinator.nleExportPlan(for: scope, name: name) { [weak self] plan in
-            guard let self, let plan else {
-                NSSound.beep()
+            guard let self else { return }
+            guard let plan else {
+                TransientNotice.show(in: window, title: String(localized: .exportEditorFailedTitle))
                 return
             }
             self.editorExportPresenter.present(plan, format: format, on: window)

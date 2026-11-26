@@ -4,7 +4,6 @@ import AppKit
 @MainActor
 final class EditorExportPresenter {
     private var isPresenting = false
-    private let notice = TransientNotice()
 
     static func defaultName(for scope: NLEExportScope) -> String {
         switch scope {
@@ -22,7 +21,7 @@ final class EditorExportPresenter {
     func present(_ plan: NLEExportPlan, format: NLEExportFormat, on window: NSWindow) {
         guard isPresenting == false else { return }
         guard plan.clips.isEmpty == false else {
-            notice.show(
+            TransientNotice.show(
                 in: window,
                 title: String(localized: .exportEditorNothingTitle),
                 detail: String(localized: .exportEditorNothingDetail)
@@ -40,7 +39,7 @@ final class EditorExportPresenter {
             self.isPresenting = false
             guard response == .OK, let url = panel.url else { return }
             var plan = plan
-            if plan.mirrorsTags == false {
+            if plan.rootIsTag == false {
                 plan.root.name = url.deletingPathExtension().lastPathComponent
             }
             self.write(plan, format: format, to: url, window: window)
@@ -65,12 +64,11 @@ final class EditorExportPresenter {
             if succeeded {
                 showDone(plan: plan, format: format, url: url, window: window)
             } else {
-                showAlert(
-                    on: window,
+                TransientNotice.show(
+                    in: window,
                     title: String(localized: .exportEditorFailedTitle),
-                    message: String(localized: .exportEditorFailedDetail),
-                    buttons: [String(localized: .exportEditorOk)]
-                ) { _ in }
+                    detail: String(localized: .exportEditorFailedDetail)
+                )
             }
         }
     }
@@ -83,27 +81,13 @@ final class EditorExportPresenter {
         if plan.skippedCount > 0 {
             detail += " " + String(localized: .exportEditorSkipped(plan.skippedCount))
         }
-        notice.show(
+        TransientNotice.show(
             in: window,
             title: String(localized: .exportEditorDoneTitle(plan.clips.count)),
             detail: detail,
-            actionTitle: String(localized: .exportEditorDoneReveal)
-        ) {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        }
-    }
-
-    private func showAlert(
-        on window: NSWindow,
-        title: String,
-        message: String,
-        buttons: [String],
-        completion: @escaping (NSApplication.ModalResponse) -> Void
-    ) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        buttons.forEach { alert.addButton(withTitle: $0) }
-        alert.beginSheetModal(for: window, completionHandler: completion)
+            action: TransientNotice.Action(title: String(localized: .exportEditorDoneReveal)) {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        )
     }
 }
