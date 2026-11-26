@@ -67,7 +67,8 @@ final class PreferencesStore: ObservableObject {
         didSet { defaults.set(receivesBetaUpdates, forKey: Key.receivesBetaUpdates) }
     }
 
-    /// Betas are received by default only in a beta build, so testers keep getting betas until they opt out.
+    /// Running a beta build turns on receiving betas once and remembers it, so testers keep getting betas
+    /// (and releases) until they turn it off, even after an update moves them to a release build.
     init(defaults: UserDefaults = .standard, isBetaBuild: Bool = AppConfiguration.isBetaBuild) {
         self.defaults = defaults
         authenticationEnabled = defaults.object(forKey: Key.authenticationEnabled) as? Bool ?? false
@@ -80,7 +81,10 @@ final class PreferencesStore: ObservableObject {
         includeSelectedFolderAsRootTag = defaults.object(
             forKey: Key.includeSelectedFolderAsRootTag
         ) as? Bool ?? false
-        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? isBetaBuild
+        if defaults.object(forKey: Key.receivesBetaUpdates) == nil, isBetaBuild {
+            defaults.set(true, forKey: Key.receivesBetaUpdates)
+        }
+        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? false
     }
 
     func setAuthenticationEnabled(_ enabled: Bool) {

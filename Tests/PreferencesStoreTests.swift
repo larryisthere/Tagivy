@@ -73,6 +73,13 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertFalse(PreferencesStore(defaults: defaults, isBetaBuild: true).receivesBetaUpdates)
     }
 
+    func testTesterKeepsReceivingBetasAfterUpdatingToARelease() {
+        let defaults = makeDefaults()
+        _ = PreferencesStore(defaults: defaults, isBetaBuild: true)
+
+        XCTAssertTrue(PreferencesStore(defaults: defaults, isBetaBuild: false).receivesBetaUpdates)
+    }
+
     func testDevelopmentBuildIsNotABetaBuild() {
         XCTAssertFalse(AppConfiguration.isBetaBuild)
     }
