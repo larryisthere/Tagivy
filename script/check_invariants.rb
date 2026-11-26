@@ -158,6 +158,11 @@ check("Updates come from the appcast the release lane publishes, signed with the
   %w[SUEnableInstallerLauncherService SUEnableDownloaderService SUVerifyUpdateBeforeExtraction SUEnableAutomaticChecks SUAutomaticallyUpdate].each do |key|
     problems << "#{key} is not true" unless info.match?(%r{<key>#{key}</key>\s*<true/>})
   end
+  build_channel_key = read("App/AppConfiguration.swift")[/static let buildChannelInfoKey = "([^"]+)"/, 1]
+  problems << "Info.plist #{build_channel_key} is not $(TAGIVY_BUILD_CHANNEL)" unless value.call(build_channel_key) == "$(TAGIVY_BUILD_CHANNEL)"
+  problems << "release lane does not set TAGIVY_BUILD_CHANNEL for betas" unless fastfile.include?("TAGIVY_BUILD_CHANNEL=\#{beta ? BETA_BUILD_CHANNEL : ''}")
+  beta_build = read("App/AppConfiguration.swift")[/static let betaBuildChannel = "([^"]+)"/, 1]
+  problems << "beta build channel: app #{beta_build}, lane #{constant.call('BETA_BUILD_CHANNEL')}" unless beta_build && beta_build == constant.call("BETA_BUILD_CHANNEL")
   beta_in_app = read("App/AppUpdateController.swift")[/static let betaChannel = "([^"]+)"/, 1]
   beta_in_appcast = read("tool/appcast.rb")[/BETA_CHANNEL = "([^"]+)"/, 1]
   problems << "beta channel: app #{beta_in_app}, appcast #{beta_in_appcast}" unless beta_in_app && beta_in_app == beta_in_appcast

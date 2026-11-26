@@ -4,6 +4,13 @@ enum AppConfiguration {
     static let internalName = "Tagivy"
     static let bundleIdentifier = "com.larryisthere.tagivy"
     static let minimumSystemVersion = "14.0"
+    /// Info.plist key the release lane fills with "beta" when it builds a beta.
+    static let buildChannelInfoKey = "TagivyBuildChannel"
+    static let betaBuildChannel = "beta"
+
+    static var isBetaBuild: Bool {
+        Bundle.main.object(forInfoDictionaryKey: buildChannelInfoKey) as? String == betaBuildChannel
+    }
 
     static var displayName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? internalName
