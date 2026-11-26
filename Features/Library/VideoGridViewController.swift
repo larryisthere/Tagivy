@@ -132,6 +132,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var selectionAnchorVideoID: String?
     private var selectionGestureMode: SelectionGestureMode = .replacing
     private var isSynchronizingSelection = false
+    private var draggedItemViews: [VideoCollectionItemView] = []
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
@@ -1009,6 +1010,30 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             item.setString(url.absoluteString, forType: .fileURL)
         }
         return item
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt screenPoint: NSPoint,
+        forItemsAt indexPaths: Set<IndexPath>
+    ) {
+        draggedItemViews = indexPaths.compactMap { collectionView.item(at: $0)?.view as? VideoCollectionItemView }
+        draggedItemViews.forEach { $0.staysVisibleWhileDragged = true }
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        dragOperation operation: NSDragOperation
+    ) {
+        let views = draggedItemViews
+        draggedItemViews = []
+        // The collection view restores the source items right after this call, so release them on the next turn.
+        DispatchQueue.main.async {
+            views.forEach { $0.staysVisibleWhileDragged = false }
+        }
     }
 
     func collectionView(
@@ -1974,6 +1999,25 @@ private final class VideoThumbnailView: NSView {
 @MainActor
 private final class VideoCollectionItemView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
+    /// Keeps a dragged item in place. NSCollectionView otherwise fades the source items out while
+    /// they are dragged and back in on drop, which reads as reordering, and the grid does not reorder.
+    var staysVisibleWhileDragged = false {
+        didSet {
+            guard staysVisibleWhileDragged else { return }
+            super.isHidden = false
+            super.alphaValue = 1
+        }
+    }
+
+    override var isHidden: Bool {
+        get { super.isHidden }
+        set { super.isHidden = staysVisibleWhileDragged ? false : newValue }
+    }
+
+    override var alphaValue: CGFloat {
+        get { super.alphaValue }
+        set { super.alphaValue = staysVisibleWhileDragged ? 1 : newValue }
+    }
     private var hoverTrackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
