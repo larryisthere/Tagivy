@@ -464,22 +464,19 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         case let .createdWithinDays(days):
             return String(localized: "filter.createdDays", defaultValue: "Created in last \(days) days")
         case let .durationAtLeast(seconds):
-            return String(localized: "filter.duration", defaultValue: "Duration ≥ \(Int(seconds / 60)) min")
+            let duration = NumericConditionKind.durationAtLeast.formatted(seconds)
+            return String(localized: "filter.durationAtLeast", defaultValue: "Duration ≥ \(duration)")
         case let .fileSizeAtLeast(bytes):
-            return String(localized: "filter.fileSize", defaultValue: "Size ≥ \(formatBytes(bytes))")
+            let size = NumericConditionKind.fileSizeAtLeast.formatted(Double(bytes))
+            return String(localized: "filter.fileSize", defaultValue: "Size ≥ \(size)")
         case let .resolutionWidthAtLeast(width):
-            return width >= 3840
-                ? String(localized: "filter.resolution4K", defaultValue: "Resolution ≥ 4K")
-                : String(localized: "filter.resolution1080", defaultValue: "Resolution ≥ 1080p")
+            let resolution = NumericConditionKind.resolutionWidthAtLeast.formatted(Double(width))
+            return String(localized: "filter.resolutionAtLeast", defaultValue: "Resolution ≥ \(resolution)")
         }
     }
 
     private func joinedTagNames(_ tagIDs: [String]) -> String {
         ListFormatter.localizedString(byJoining: tagIDs.map(tagName))
-    }
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func sortLabel() -> String {
@@ -729,15 +726,15 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         case "untagged":
             condition = .untagged
         case "added":
-            condition = .addedWithinDays(30)
+            condition = NumericConditionKind.addedWithinDays.defaultCondition
         case "created":
-            condition = .createdWithinDays(30)
+            condition = NumericConditionKind.createdWithinDays.defaultCondition
         case "duration":
-            condition = .durationAtLeast(60)
+            condition = NumericConditionKind.durationAtLeast.defaultCondition
         case "fileSize":
-            condition = .fileSizeAtLeast(1_000_000_000)
+            condition = NumericConditionKind.fileSizeAtLeast.defaultCondition
         case "resolution":
-            condition = .resolutionWidthAtLeast(3840)
+            condition = NumericConditionKind.resolutionWidthAtLeast.defaultCondition
         default:
             return
         }
@@ -1242,6 +1239,18 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
     }
 
     override func loadView() {
+        view = NSView()
+        rebuildContent()
+    }
+
+    /// Replaces the editor's content inside the same root view, so the popover keeps its
+    /// window and resizes to the new content instead of collapsing around a swapped view.
+    private func rebuildContent() {
+        if let responder = view.window?.firstResponder as? NSView, responder.isDescendant(of: view) {
+            view.window?.makeFirstResponder(nil)
+        }
+        view.subviews.forEach { $0.removeFromSuperview() }
+
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1335,7 +1344,16 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         validation.isHidden = validationMessage == nil && reservesValidationSpace == false
         let fittedHeight = ceil(stack.fittingSize.height)
 
-        view = stack
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: view.topAnchor),
+        ])
+        let bottom = stack.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        bottom.priority = .defaultHigh
+        bottom.isActive = true
         preferredContentSize = NSSize(
             width: Self.popoverWidth,
             height: min(Self.maximumPopoverHeight, fittedHeight)
@@ -1521,61 +1539,27 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
             )
         case .untagged:
             break
-        case let .addedWithinDays(days):
-            addLabeledControl(
-                valuePopup(
-                    values: [7, 30, 90].map { ($0, dayOptionTitle($0)) },
-                    selected: days,
-                    action: #selector(changeIntegerValue(_:))
-                ),
-                title: String(localized: "filter.field.range", defaultValue: "Range"),
-                to: stack
-            )
-        case let .createdWithinDays(days):
-            addLabeledControl(
-                valuePopup(
-                    values: [7, 30, 90].map { ($0, dayOptionTitle($0)) },
-                    selected: days,
-                    action: #selector(changeIntegerValue(_:))
-                ),
-                title: String(localized: "filter.field.range", defaultValue: "Range"),
-                to: stack
-            )
-        case let .durationAtLeast(seconds):
-            addLabeledControl(
-                valuePopup(
-                    values: [1, 2, 5].map { minutes in
-                        (minutes * 60, minuteOptionTitle(minutes))
-                    },
-                    selected: Int(seconds),
-                    action: #selector(changeIntegerValue(_:))
-                ),
-                title: String(localized: "filter.field.range", defaultValue: "Range"),
-                to: stack
-            )
-        case let .fileSizeAtLeast(bytes):
-            addLabeledControl(
-                valuePopup(
-                    values: [500_000_000, 1_000_000_000, 2_000_000_000].map {
-                        ($0, ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))
-                    },
-                    selected: Int(bytes),
-                    action: #selector(changeIntegerValue(_:))
-                ),
-                title: String(localized: "filter.field.range", defaultValue: "Range"),
-                to: stack
-            )
-        case let .resolutionWidthAtLeast(width):
-            addLabeledControl(
-                valuePopup(
-                    values: [(1920, "1080p"), (3840, "4K")],
-                    selected: width,
-                    action: #selector(changeIntegerValue(_:))
-                ),
-                title: String(localized: "filter.field.range", defaultValue: "Range"),
-                to: stack
-            )
+        case .addedWithinDays, .createdWithinDays, .durationAtLeast, .fileSizeAtLeast,
+             .resolutionWidthAtLeast:
+            addNumericEditor(for: condition, to: stack)
         }
+    }
+
+    private func addNumericEditor(for condition: LibraryFilterCondition, to stack: NSStackView) {
+        guard let kind = NumericConditionKind(condition),
+              let value = NumericConditionKind.value(of: condition) else { return }
+        let slider = NumericConditionSlider(kind: kind, value: value)
+        slider.onChange = { [weak self] newValue in
+            // A field still being edited commits when the content is rebuilt for another type.
+            guard let self, let current = editedCondition, NumericConditionKind(current) == kind else { return }
+            setEditedCondition(kind.condition(with: newValue))
+            draftDidChange()
+        }
+        addLabeledControl(
+            slider,
+            title: String(localized: "filter.field.range", defaultValue: "Range"),
+            to: stack
+        )
     }
 
     private func addSortEditor(to stack: NSStackView) {
@@ -1640,30 +1624,6 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         field.addArrangedSubview(control)
         field.widthAnchor.constraint(equalToConstant: Self.fieldWidth).isActive = true
         stack.addArrangedSubview(field)
-    }
-
-    private func valuePopup(
-        values: [(Int, String)],
-        selected: Int,
-        action: Selector
-    ) -> NSPopUpButton {
-        let popup = NSPopUpButton()
-        values.forEach { value, title in
-            popup.addItem(withTitle: title)
-            popup.lastItem?.representedObject = value
-        }
-        popup.selectItem(at: values.firstIndex { $0.0 == selected } ?? 0)
-        popup.target = self
-        popup.action = action
-        return popup
-    }
-
-    private func dayOptionTitle(_ days: Int) -> String {
-        String(localized: "filter.days", defaultValue: "\(days) days")
-    }
-
-    private func minuteOptionTitle(_ minutes: Int) -> String {
-        String(localized: "filter.minutes", defaultValue: "\(minutes) min")
     }
 
     private func conditionKind(_ condition: LibraryFilterCondition) -> String {
@@ -1740,7 +1700,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
 
     private func draftDidChange(rebuild: Bool = false) {
         if rebuild {
-            loadView()
+            rebuildContent()
         } else {
             updateDoneAvailability()
         }
@@ -1835,11 +1795,11 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case "tags":
             condition = .tags(operator: .all, tagIDs: [])
         case "untagged": condition = .untagged
-        case "added": condition = .addedWithinDays(30)
-        case "created": condition = .createdWithinDays(30)
-        case "duration": condition = .durationAtLeast(60)
-        case "fileSize": condition = .fileSizeAtLeast(1_000_000_000)
-        case "resolution": condition = .resolutionWidthAtLeast(3840)
+        case "added": condition = NumericConditionKind.addedWithinDays.defaultCondition
+        case "created": condition = NumericConditionKind.createdWithinDays.defaultCondition
+        case "duration": condition = NumericConditionKind.durationAtLeast.defaultCondition
+        case "fileSize": condition = NumericConditionKind.fileSizeAtLeast.defaultCondition
+        case "resolution": condition = NumericConditionKind.resolutionWidthAtLeast.defaultCondition
         default: return
         }
         setEditedCondition(condition)
@@ -1867,20 +1827,6 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
             operator: tagOperator,
             tagIDs: tags.map(\.id).filter { selected.contains($0) }
         ))
-        draftDidChange()
-    }
-
-    @objc private func changeIntegerValue(_ sender: NSPopUpButton) {
-        guard let condition = editedCondition,
-              let value = sender.selectedItem?.representedObject as? Int else { return }
-        switch condition {
-        case .addedWithinDays: setEditedCondition(.addedWithinDays(value))
-        case .createdWithinDays: setEditedCondition(.createdWithinDays(value))
-        case .durationAtLeast: setEditedCondition(.durationAtLeast(Double(value)))
-        case .fileSizeAtLeast: setEditedCondition(.fileSizeAtLeast(Int64(value)))
-        case .resolutionWidthAtLeast: setEditedCondition(.resolutionWidthAtLeast(value))
-        case .tags, .untagged: return
-        }
         draftDidChange()
     }
 
