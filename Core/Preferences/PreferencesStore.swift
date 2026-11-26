@@ -67,7 +67,8 @@ final class PreferencesStore: ObservableObject {
         didSet { defaults.set(receivesBetaUpdates, forKey: Key.receivesBetaUpdates) }
     }
 
-    init(defaults: UserDefaults = .standard) {
+    /// Betas are received by default only in a beta build, so testers keep getting betas until they opt out.
+    init(defaults: UserDefaults = .standard, isBetaBuild: Bool = AppConfiguration.isBetaBuild) {
         self.defaults = defaults
         authenticationEnabled = defaults.object(forKey: Key.authenticationEnabled) as? Bool ?? false
         idleLockInterval = IdleLockInterval(
@@ -79,7 +80,7 @@ final class PreferencesStore: ObservableObject {
         includeSelectedFolderAsRootTag = defaults.object(
             forKey: Key.includeSelectedFolderAsRootTag
         ) as? Bool ?? false
-        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? false
+        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? isBetaBuild
     }
 
     func setAuthenticationEnabled(_ enabled: Bool) {

@@ -53,14 +53,28 @@ final class PreferencesStoreTests: XCTestCase {
         )
     }
 
-    func testBetaUpdatesDefaultOffAndPersist() {
+    func testBetaUpdatesDefaultOffInReleaseBuildsAndPersist() {
         let defaults = makeDefaults()
-        let store = PreferencesStore(defaults: defaults)
+        let store = PreferencesStore(defaults: defaults, isBetaBuild: false)
         XCTAssertFalse(store.receivesBetaUpdates)
 
         store.receivesBetaUpdates = true
 
-        XCTAssertTrue(PreferencesStore(defaults: defaults).receivesBetaUpdates)
+        XCTAssertTrue(PreferencesStore(defaults: defaults, isBetaBuild: false).receivesBetaUpdates)
+    }
+
+    func testBetaBuildsReceiveBetasUntilTheUserOptsOut() {
+        let defaults = makeDefaults()
+        let store = PreferencesStore(defaults: defaults, isBetaBuild: true)
+        XCTAssertTrue(store.receivesBetaUpdates)
+
+        store.receivesBetaUpdates = false
+
+        XCTAssertFalse(PreferencesStore(defaults: defaults, isBetaBuild: true).receivesBetaUpdates)
+    }
+
+    func testDevelopmentBuildIsNotABetaBuild() {
+        XCTAssertFalse(AppConfiguration.isBetaBuild)
     }
 
     private func makeDefaults() -> UserDefaults {

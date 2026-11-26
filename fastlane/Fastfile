@@ -294,6 +294,16 @@ def publish_github_release!(output_directory, beta: nil)
   publish_appcast!(zip_path, tag, title, beta)
 end
 
+# Beta builds carry TagivyBuildChannel = beta so they receive betas by default; releases carry nothing.
+BETA_BUILD_CHANNEL = "beta"
+
+def validate_build_channel!(app_path, beta)
+  info_plist = File.join(app_path, "Contents", "Info.plist")
+  channel = sh("/usr/libexec/PlistBuddy -c 'Print :TagivyBuildChannel' #{shell_escape(info_plist)} 2>/dev/null || true", log: false).strip
+  expected = beta ? BETA_BUILD_CHANNEL : ""
+  UI.user_error!("App 构建频道为 #{channel.inspect}，应为 #{expected.inspect}") unless channel == expected
+end
+
 # Sparkle's helpers, innermost first, as they need re-signing with the app's Developer ID.
 def sparkle_code_paths(app_path)
   framework = File.join(app_path, "Contents", "Frameworks", "Sparkle.framework")
@@ -464,11 +474,13 @@ platform :mac do
       "-derivedDataPath #{shell_escape(derived_data)} -allowProvisioningUpdates clean build " \
       "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=#{shell_escape(identity)} " \
       "DEVELOPMENT_TEAM=#{shell_escape(release_build_settings['DEVELOPMENT_TEAM'])} " \
-      "CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp"
+      "CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp " \
+      "TAGIVY_BUILD_CHANNEL=#{beta ? BETA_BUILD_CHANNEL : ''}"
     )
     sh("ditto #{shell_escape(built_app)} #{shell_escape(output_app)}")
     resign_sparkle!(output_app, identity)
     validate_app!(output_app, allow_development_signing: false)
+    validate_build_channel!(output_app, beta)
 
     submission_zip = File.join(output_directory, "notarization-submission.zip")
     sh("ditto -c -k --sequesterRsrc --keepParent #{shell_escape(output_app)} #{shell_escape(submission_zip)}")
