@@ -249,6 +249,20 @@ check("Every localized string is translated in en and zh-Hans with matching plac
   problems
 end
 
+require_relative "../tool/release_notes"
+
+check("Beta release notes list only the changelog entries added since the previous beta") do
+  previous = "### Added\n\n- Old feature.\n\n### Fixed\n\n- Old fix.\n"
+  current = "### Added\n\n- Old feature.\n- New feature.\n\n### Fixed\n\n- Old fix.\n"
+  changelog = "## [Unreleased]\n\n## [9.9.9] - 2026-01-01\n\n#{current}\n## [9.9.8]\n\n- Older.\n"
+  problems = []
+  problems << "section #{ReleaseNotes.section(changelog, '9.9.9').inspect}" unless ReleaseNotes.section(changelog, "9.9.9") == current.strip
+  added = ReleaseNotes.added_since(previous, current)
+  problems << "added_since #{added.inspect}" unless added == "### Added\n\n- New feature."
+  problems << "unchanged section is not empty" unless ReleaseNotes.added_since(current, current).empty?
+  problems
+end
+
 if $failures.empty?
   puts "\nAll project invariants hold."
 else

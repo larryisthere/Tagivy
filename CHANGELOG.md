@@ -13,6 +13,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Select one or more tags, or a smart filter, in the sidebar and press Delete or Command-Delete to delete them. Tags are deleted right away, and the notice that follows has an Undo button; deleting several tags at once is a single undo step. A smart filter still asks first.
 - Notices that need no answer, such as a finished export, appear at the bottom of the window and show how long until they close. Pointing at a notice keeps it open.
 - Tagivy checks for updates at launch and every hour. By default it downloads a new version in the background, then shows Relaunch to Install in the bottom-left corner of the window; if you don't relaunch, the update installs when you quit. Check for Updates in the Tagivy menu shows its progress in the same place. In Settings > Updates you can turn off automatic checks or background downloads, or choose to receive beta versions. Checking for updates is the only network access, and it goes through the updater rather than the app itself.
+- If you run a beta, Receive beta versions in Settings > Updates is turned on for you, and stays on after an update to a release until you turn it off.
 
 ### Changed
 
