@@ -79,6 +79,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private static let thumbnailHeightRatio = 0.55
     private static let gridItemChromeHeight = 64.0
     private var reflowGlideEndsAt: TimeInterval = 0
+    private let defaults: UserDefaults
 
     private struct GroupSection {
         let id: String
@@ -157,8 +158,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onImportDroppedItems: @escaping ([URL]) -> Void,
         onRemoveVideos: @escaping ([String], @escaping (Bool) -> Void) -> Void,
         onUndoLastMutation: @escaping () -> Void,
-        onDismissNotification: @escaping () -> Void
+        onDismissNotification: @escaping () -> Void,
+        defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
         self.onOpenVideo = onOpenVideo
         self.onRevealVideo = onRevealVideo
         self.onCopyPath = onCopyPath
@@ -189,7 +192,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
 
         let layout = NSCollectionViewFlowLayout()
-        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth())
+        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth(defaults: defaults))
         layout.minimumInteritemSpacing = 16
         layout.minimumLineSpacing = 20
         layout.sectionInset = NSEdgeInsets(top: 20, left: Self.contentLeadingInset, bottom: 20, right: 20)
@@ -1379,7 +1382,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         } else {
             layout.invalidateLayout()
         }
-        UserDefaults.standard.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+        defaults.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
     }
 
     private func columnCount(in layout: NSCollectionViewFlowLayout, itemWidth: Double) -> Int {

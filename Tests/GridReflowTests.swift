@@ -37,23 +37,18 @@ final class GridReflowTests: XCTestCase {
     @MainActor
     func testGridGlidesOnlyWhenTheColumnCountChanges() throws {
         guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else { return }
-        let widthKey = "VideoGridItemWidth"
-        let savedWidth = UserDefaults.standard.object(forKey: widthKey)
-        defer {
-            if let savedWidth {
-                UserDefaults.standard.set(savedWidth, forKey: widthKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: widthKey)
-            }
-        }
-        UserDefaults.standard.set(180.0, forKey: widthKey)
+        let suiteName = "GridReflowTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(180.0, forKey: "VideoGridItemWidth")
         let grid = VideoGridViewController(
             onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
             onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
             onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, resolveVideos: { _ in .empty },
             onAssignTagID: { _, _ in },
             onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
-            onUndoLastMutation: {}, onDismissNotification: {}
+            onUndoLastMutation: {}, onDismissNotification: {},
+            defaults: defaults
         )
         let window = NSWindow(
             contentRect: CGRect(x: 0, y: 0, width: 1000, height: 800),
