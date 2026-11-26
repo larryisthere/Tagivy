@@ -36,6 +36,8 @@ enum LibraryFilter: Equatable, Sendable {
     case unavailable
     case tag(String)
     case tags([String])
+
+    static let recentlyAddedInterval: TimeInterval = 30 * 24 * 60 * 60
 }
 
 struct SidebarFilterCounts: Equatable, Sendable {

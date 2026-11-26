@@ -202,6 +202,7 @@ def github_repository
 end
 
 def run_tests!
+  sh("ruby", File.join(REPO_ROOT, "script", "check_invariants.rb"))
   derived_data = File.join(REPO_ROOT, ".build", "fastlane", "test")
   sh(
     "xcodebuild -project #{shell_escape(PROJECT)} -scheme #{shell_escape(SCHEME)} " \

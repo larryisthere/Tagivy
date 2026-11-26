@@ -3330,7 +3330,7 @@
       }
     },
     "macOS %@" : {
-
+      "shouldTranslate" : false
     },
     "menu.about" : {
       "extractionState" : "manual",

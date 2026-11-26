@@ -13,6 +13,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 ### Fixed
 
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
+- When the library cannot be loaded, the system log records only the error type and code, without file paths.
 
 ## [1.0.17] - 2026-11-23
 
