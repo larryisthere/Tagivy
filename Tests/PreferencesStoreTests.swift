@@ -60,3 +60,23 @@ final class PreferencesStoreTests: XCTestCase {
         return defaults
     }
 }
+
+final class ProductDefaultsTests: XCTestCase {
+    func testRecentlyAddedCoversThirtyDays() {
+        XCTAssertEqual(LibraryFilter.recentlyAddedInterval, 30 * 24 * 60 * 60)
+    }
+
+    func testThumbnailCacheDefaultsToTwoGigabytes() {
+        XCTAssertEqual(MediaProcessingService.defaultMaximumCacheBytes, 2 * 1_024 * 1_024 * 1_024)
+    }
+
+    @MainActor
+    func testVideoGridDefaultsToOneHundredEightyPointThumbnails() throws {
+        let suiteName = "ProductDefaultsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(VideoGridViewController.defaultGridItemWidth, 180)
+        XCTAssertEqual(VideoGridViewController.persistedGridItemWidth(defaults: defaults), 180)
+    }
+}
