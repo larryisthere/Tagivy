@@ -102,6 +102,7 @@ final class NLEExportTests: XCTestCase {
         )
         XCTAssertEqual(try document.nodes(forXPath: "(//lognote)[1]").first?.stringValue, "海边, 城市")
         XCTAssertEqual(try document.nodes(forXPath: "(//clip/duration)[1]").first?.stringValue, "300")
+        XCTAssertEqual(try document.nodes(forXPath: "//audio/channelcount").first?.stringValue, "1")
     }
 
     func testFCPXMLBuildsKeywordFoldersForTagGroups() throws {
@@ -146,6 +147,13 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try XMLDocument(xmlString: FCPXMLWriter.document(for: plan)).nodes(forXPath: "//project").count, 0)
     }
 
+    func testVideosWithoutAKnownLengthAreLeftOutAndCounted() {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("pending", "coast")], unknownDuration: ["pending"])
+
+        XCTAssertEqual(plan.clips.map(\.id), ["sunset"])
+        XCTAssertEqual(plan.skippedCount, 1)
+    }
+
     func testNamesAreEscaped() throws {
         var plan = makePlan(rootTagID: nil, relations: [])
         plan.root.name = "A & B <\"cut\">"
@@ -155,11 +163,16 @@ final class NLEExportTests: XCTestCase {
     }
 
     /// No root tag exports the way a smart filter or a video selection does.
-    private func makePlan(rootTagID: String?, relations: [(String, String?)]) -> NLEExportPlan {
+    private func makePlan(
+        rootTagID: String?,
+        relations: [(String, String?)],
+        unknownDuration: Set<String> = []
+    ) -> NLEExportPlan {
         makePlan(
             name: rootTagID.flatMap { id in tags.first { $0.id == id }?.name } ?? "导出",
             grouping: rootTagID.map { .chosenTags([$0]) } ?? .videoTags(untaggedName: "未打标签"),
-            relations: relations
+            relations: relations,
+            unknownDuration: unknownDuration
         )
     }
 
@@ -167,13 +180,18 @@ final class NLEExportTests: XCTestCase {
         makePlan(name: "导出", grouping: .chosenTags(rootTagIDs), relations: relations)
     }
 
-    private func makePlan(name: String, grouping: NLEExportGrouping, relations: [(String, String?)]) -> NLEExportPlan {
+    private func makePlan(
+        name: String,
+        grouping: NLEExportGrouping,
+        relations: [(String, String?)],
+        unknownDuration: Set<String> = []
+    ) -> NLEExportPlan {
         let videoIDs = relations.map(\.0).reduce(into: [String]()) { ids, id in
             if ids.contains(id) == false { ids.append(id) }
         }
         let videos = (videoIDs.isEmpty ? ["sunset", "waves"] : videoIDs).map { id in
             ResolvedVideo(
-                record: video(id),
+                record: video(id, duration: unknownDuration.contains(id) ? nil : 10.01),
                 url: URL(fileURLWithPath: "/Volumes/Footage/A 海/\(id).mov")
             )
         }
@@ -187,7 +205,7 @@ final class NLEExportTests: XCTestCase {
         )
     }
 
-    private func video(_ id: String) -> VideoRecord {
+    private func video(_ id: String, duration: Double?) -> VideoRecord {
         VideoRecord(
             id: id,
             libraryID: LibraryRecord.primaryID,
@@ -197,7 +215,7 @@ final class NLEExportTests: XCTestCase {
             fileSize: 1,
             creationDate: nil,
             modificationDate: nil,
-            duration: 10.01,
+            duration: duration,
             width: 3840,
             height: 2160,
             thumbnailID: nil,
@@ -205,7 +223,7 @@ final class NLEExportTests: XCTestCase {
             thumbnailStatus: .completed,
             firstIndexedAt: Date(timeIntervalSince1970: 0),
             availability: .available,
-            mediaSourceInfo: MediaSourceInfo(frameRate: 29.97, audioCodec: "aac")
+            mediaSourceInfo: MediaSourceInfo(frameRate: 29.97, audioCodec: "aac", audioChannels: 1)
         )
     }
 }
@@ -232,6 +250,8 @@ final class VideoResolutionTests: XCTestCase {
     // A file not downloaded from iCloud yet; the library may have last seen it as missing.
     private let cloud = libraryVideo("cloud", availability: .unavailable, isCloudPlaceholder: true)
     private let drive = libraryVideo("drive", availability: .offline)
+    // Listed only under Unavailable, yet still part of its tag.
+    private let gone = libraryVideo("gone", availability: .unavailable)
     private let urls = [
         "local": URL(fileURLWithPath: "/Users/me/Movies/local.mov"),
         "cloud": URL(fileURLWithPath: "/Users/me/Library/Mobile Documents/com~apple~CloudDocs/cloud.mov"),
@@ -264,12 +284,12 @@ final class VideoResolutionTests: XCTestCase {
         ))
     }
 
-    func testIncludesICloudVideosWithTheirFilesAndCountsOfflineOnes() async throws {
+    func testIncludesICloudVideosWithTheirFilesAndCountsOfflineAndMissingOnes() async throws {
         let resolved = try await resolve([.tags([trip])])
 
         XCTAssertEqual(resolved.ready.map(\.record.id), ["local", "cloud"])
         XCTAssertEqual(resolved.ready.map(\.url), [urls["local"], urls["cloud"]])
-        XCTAssertEqual(resolved.offlineCount, 1)
+        XCTAssertEqual(resolved.skippedCount, 2, "drive is offline and gone is no longer found")
     }
 
     func testTagSmartCollectionAndExplicitVideosResolveAlike() async throws {
@@ -285,7 +305,7 @@ final class VideoResolutionTests: XCTestCase {
 
         let byTag = try await resolve([.tags([trip])])
         let bySmartCollection = try await resolve([.smartCollection(collection)])
-        let byVideos = try await resolve([.videos([local, cloud, drive])])
+        let byVideos = try await resolve([.videos([local, cloud, drive, gone])])
 
         XCTAssertEqual(bySmartCollection, byTag)
         XCTAssertEqual(byVideos, byTag)
@@ -295,7 +315,7 @@ final class VideoResolutionTests: XCTestCase {
         let resolved = try await resolve([.tags([trip, beach]), .videos([local])])
 
         XCTAssertEqual(resolved.ready.map(\.record.id), ["local", "cloud"])
-        XCTAssertEqual(resolved.offlineCount, 1)
+        XCTAssertEqual(resolved.skippedCount, 2)
     }
 
     func testSidebarDragAndContextMenuExportUseTheSameScope() {
@@ -305,20 +325,15 @@ final class VideoResolutionTests: XCTestCase {
     }
 
     private func resolve(_ scopes: [VideoScope]) async throws -> ResolvedVideos {
-        let library = [local, cloud, drive]
-        let members = ["trip": ["local", "cloud", "drive"], "beach": ["local"]]
+        let library = [local, cloud, drive, gone]
+        let members = ["trip": ["local", "cloud", "drive", "gone"], "beach": ["local"]]
         return try await ResolvedVideos.resolve(
             scopes,
             fetch: { request in
-                let tagIDs: [String]
-                switch request.baseFilter {
-                case let .tag(tagID): tagIDs = [tagID]
-                case .all: tagIDs = request.rule.requiredTagIDs
-                default:
-                    XCTFail("unexpected request \(request)")
-                    return []
-                }
+                // Scopes read the query that also returns videos the library no longer finds.
+                XCTAssertEqual(request.baseFilter, .unavailable)
                 XCTAssertEqual(request.temporaryFilenameSearch, "")
+                let tagIDs = request.rule.requiredTagIDs
                 return library.filter { video in tagIDs.allSatisfy { members[$0, default: []].contains(video.id) } }
             },
             url: { [urls] video in ResolvedVideos.handoutURL(for: video, knownURL: urls[video.id]) }

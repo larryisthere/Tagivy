@@ -25,7 +25,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var onCloseScanResults: () -> Void
     private let onCreateTag: (String, String?) -> Void
     private let onRenameTag: (TagRecord, String) -> Void
-    private let onDeleteTag: (TagRecord) -> Void
+    private let onDeleteTags: ([TagRecord]) -> Void
     private let onMoveTags: ([TagRecord], String?, Int) -> Void
     private let onSetColor: (TagRecord, String?) -> Void
     private let onMergeTag: (TagRecord, TagRecord) -> Void
@@ -58,7 +58,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         onCloseScanResults: @escaping () -> Void,
         onCreateTag: @escaping (String, String?) -> Void,
         onRenameTag: @escaping (TagRecord, String) -> Void,
-        onDeleteTag: @escaping (TagRecord) -> Void,
+        onDeleteTags: @escaping ([TagRecord]) -> Void,
         onMoveTags: @escaping ([TagRecord], String?, Int) -> Void,
         onSetColor: @escaping (TagRecord, String?) -> Void,
         onMergeTag: @escaping (TagRecord, TagRecord) -> Void,
@@ -72,7 +72,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         self.onCloseScanResults = onCloseScanResults
         self.onCreateTag = onCreateTag
         self.onRenameTag = onRenameTag
-        self.onDeleteTag = onDeleteTag
+        self.onDeleteTags = onDeleteTags
         self.onMoveTags = onMoveTags
         self.onSetColor = onSetColor
         self.onMergeTag = onMergeTag
@@ -113,6 +113,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
         outlineView.onMouseDown = { [weak self] event in
             self?.prepareDragFileURLs(for: event)
+        }
+        outlineView.onDeleteKey = { [weak self] in
+            self?.deleteSelectedItems() ?? false
         }
         let menu = NSMenu()
         menu.delegate = self
@@ -567,10 +570,10 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             let remainingURLs = videos.ready.map(\.url).filter { $0 != leadingDragFileURL }
             session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
         }
-        if videos.ready.isEmpty == false || videos.offlineCount > 0 {
+        if videos.ready.isEmpty == false || videos.skippedCount > 0 {
             dragExportCaption = DragExportCaption(
                 exportCount: videos.ready.count,
-                offlineCount: videos.offlineCount,
+                skippedCount: videos.skippedCount,
                 session: session,
                 view: outlineView
             )
@@ -1433,13 +1436,28 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
     }
     @objc private func deleteTag() {
-        guard let tag = clickedTag() ?? selectedTag() else { return }
-        let alert = NSAlert()
-        alert.messageText = String(localized: .tagDeleteTitle(tag.name))
-        alert.informativeText = String(localized: .tagDeleteDetail)
-        alert.addButton(withTitle: String(localized: .tagActionDelete))
-        alert.addButton(withTitle: String(localized: .actionCancel))
-        if alert.runModal() == .alertFirstButtonReturn { onDeleteTag(tag) }
+        if outlineView.clickedRow >= 0, outlineView.selectedRowIndexes.contains(outlineView.clickedRow) == false {
+            guard let tag = clickedTag() else { return }
+            onDeleteTags([tag])
+            return
+        }
+        if case .tags(let tags) = SidebarDeletion(selectedItems: selectedOutlineItems(), allTags: self.tags) {
+            onDeleteTags(tags)
+        } else if let tag = clickedTag() ?? selectedTag() {
+            onDeleteTags([tag])
+        }
+    }
+    private func deleteSelectedItems() -> Bool {
+        guard inlineRenameTarget == nil, pendingRootTagDraft == nil,
+              let deletion = SidebarDeletion(selectedItems: selectedOutlineItems(), allTags: tags) else { return false }
+        switch deletion {
+        case .tags(let tags): onDeleteTags(tags)
+        case .smartCollection(let collection): onDeleteSmartCollection(collection)
+        }
+        return true
+    }
+    private func selectedOutlineItems() -> [Any] {
+        outlineView.selectedRowIndexes.compactMap { outlineView.item(atRow: $0) }
     }
     @objc private func setColor(_ sender: NSMenuItem) {
         guard let context = sender.representedObject as? TagActionContext else { return }
@@ -1561,6 +1579,15 @@ private enum SidebarInlineRenameTarget: Equatable {
 @MainActor
 private final class SidebarOutlineView: NSOutlineView {
     var onMouseDown: ((NSEvent) -> Void)?
+    var onDeleteKey: (() -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        guard SidebarDeleteKey.matches(event) else {
+            super.keyDown(with: event)
+            return
+        }
+        if onDeleteKey?() != true { NSSound.beep() }
+    }
 
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)

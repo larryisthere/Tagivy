@@ -134,7 +134,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var isSynchronizingSelection = false
     private var draggedItemViews: [VideoCollectionItemView] = []
     private var draggedExportIndexPaths = Set<IndexPath>()
-    private var draggedOfflineIndexPaths = Set<IndexPath>()
+    private var draggedSkippedIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
@@ -1018,7 +1018,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             item.setString(resolved.url.absoluteString, forType: .fileURL)
             draggedExportIndexPaths.insert(indexPath)
         } else {
-            draggedOfflineIndexPaths.insert(indexPath)
+            draggedSkippedIndexPaths.insert(indexPath)
         }
         return item
     }
@@ -1034,10 +1034,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             itemView.staysVisibleWhileDragged = true
             draggedItemViews.append(itemView)
         }
-        if draggedExportIndexPaths.isEmpty == false || draggedOfflineIndexPaths.isEmpty == false {
+        if draggedExportIndexPaths.isEmpty == false || draggedSkippedIndexPaths.isEmpty == false {
             dragExportCaption = DragExportCaption(
                 exportCount: draggedExportIndexPaths.count,
-                offlineCount: draggedOfflineIndexPaths.count,
+                skippedCount: draggedSkippedIndexPaths.count,
                 session: session,
                 view: collectionView
             )
@@ -1051,7 +1051,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         dragOperation operation: NSDragOperation
     ) {
         draggedExportIndexPaths = []
-        draggedOfflineIndexPaths = []
+        draggedSkippedIndexPaths = []
         dragExportCaption?.stop()
         dragExportCaption = nil
         let views = draggedItemViews
@@ -1699,7 +1699,7 @@ private final class ImportStatusView: NSView {
 }
 
 /// Tells the user, on the image that follows the pointer, how many videos the drag exports and, if any,
-/// how many it leaves out because they are offline.
+/// how many it leaves out because their files cannot be reached.
 @MainActor
 final class DragExportCaption: NSObject {
     private let text: String
@@ -1711,8 +1711,8 @@ final class DragExportCaption: NSObject {
 
     /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
     /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
-    init(exportCount: Int, offlineCount: Int, session: NSDraggingSession, view: NSView) {
-        if offlineCount == 0 {
+    init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
+        if skippedCount == 0 {
             text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption.all", comment: "Caption on a drag out of Tagivy"),
                 exportCount
@@ -1720,13 +1720,13 @@ final class DragExportCaption: NSObject {
         } else if exportCount == 0 {
             text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all offline"),
-                offlineCount
+                skippedCount
             )
         } else {
             text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out offline videos"),
                 exportCount,
-                offlineCount
+                skippedCount
             )
         }
         self.session = session

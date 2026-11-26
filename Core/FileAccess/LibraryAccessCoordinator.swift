@@ -50,10 +50,11 @@ struct ResolvedVideo: Equatable, Sendable {
 /// Videos not yet downloaded from iCloud are included: downloading them is up to the app that receives them.
 struct ResolvedVideos: Equatable, Sendable {
     let ready: [ResolvedVideo]
-    /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive.
-    let offlineCount: Int
+    /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive
+    /// or videos the library no longer finds.
+    let skippedCount: Int
 
-    static let empty = ResolvedVideos(ready: [], offlineCount: 0)
+    static let empty = ResolvedVideos(ready: [], skippedCount: 0)
 
     /// Each video once, in scope order. `url` gives the file of a reachable video, nil otherwise.
     @MainActor
@@ -67,14 +68,10 @@ struct ResolvedVideos: Equatable, Sendable {
             switch scope {
             case let .tags(tags):
                 for tag in tags {
-                    candidates += try await fetch(
-                        LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
-                    )
+                    candidates += try await fetch(request(LibraryQueryRule(requiredTagIDs: [tag.id])))
                 }
             case let .smartCollection(collection):
-                candidates += try await fetch(
-                    LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
-                )
+                candidates += try await fetch(request(collection.rule))
             case let .videos(videos):
                 candidates += videos
             }
@@ -82,18 +79,24 @@ struct ResolvedVideos: Equatable, Sendable {
         return resolve(candidates, url: url)
     }
 
+    /// Videos the library no longer finds are listed only under Unavailable, and that query is the one that
+    /// also returns them; they belong to the scope, so they are counted as skipped instead of vanishing.
+    private static func request(_ rule: LibraryQueryRule) -> LibraryQueryRequest {
+        LibraryQueryRequest(baseFilter: .unavailable, temporaryFilenameSearch: "", rule: rule)
+    }
+
     static func resolve(_ candidates: [VideoRecord], url: (VideoRecord) -> URL?) -> ResolvedVideos {
         var seen = Set<String>()
         var ready: [ResolvedVideo] = []
-        var offlineCount = 0
+        var skippedCount = 0
         for video in candidates where seen.insert(video.id).inserted {
             if let url = url(video) {
                 ready.append(ResolvedVideo(record: video, url: url))
             } else {
-                offlineCount += 1
+                skippedCount += 1
             }
         }
-        return ResolvedVideos(ready: ready, offlineCount: offlineCount)
+        return ResolvedVideos(ready: ready, skippedCount: skippedCount)
     }
 
     /// A video's file can be handed out when it is on this Mac or in iCloud; offline and missing videos are not.
@@ -203,8 +206,12 @@ private struct VideoAccessResolution: Sendable {
     let confirmedMissingLocations: [VideoLocationRecord]
 }
 
+struct TagMutationUndoID: Equatable {
+    private let value = UUID()
+}
+
 private enum LastUndoMutation {
-    case tag
+    case tag(TagMutationUndoID)
     case videoRemoval(VideoRemovalSnapshot)
 }
 
@@ -435,7 +442,10 @@ final class LibraryAccessCoordinator {
     var onRelinkingVideoChanged: ((String?) -> Void)?
     var onVideoRemovalUndoDiscarded: (() -> Void)?
     private let undoManager = UndoManager()
-    private var lastUndoMutation: LastUndoMutation?
+    private var lastUndoMutation: LastUndoMutation? {
+        didSet { onUndoHistoryChanged?() }
+    }
+    var onUndoHistoryChanged: (() -> Void)?
 
     var canUndoLastMutation: Bool {
         pendingTagMutationCount == 0 && undoManager.canUndo
@@ -1690,7 +1700,7 @@ final class LibraryAccessCoordinator {
                     tags: tagState.tags,
                     relations: tagState.relations,
                     videos: videos.ready,
-                    skippedCount: videos.offlineCount
+                    skippedCount: videos.skippedCount
                 ))
             } catch {
                 AppLogger.library.error(
@@ -1726,10 +1736,15 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func deleteTag(_ tag: TagRecord) {
-        mutateTags(actionName: String(localized: .tagActionDelete)) { database in
-            try await database.deleteTag(id: tag.id)
-        }
+    /// `onUndoable` runs once the deletion is done and can be undone with the given ID.
+    func deleteTags(_ tags: [TagRecord], onUndoable: ((TagMutationUndoID) -> Void)? = nil) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
+        mutateTags(
+            actionName: String(localized: .tagActionDelete),
+            operation: { database in try await database.deleteTags(ids: tagIDs) },
+            onUndoable: onUndoable
+        )
     }
 
     func moveTags(_ tags: [TagRecord], parentID: String?, sortOrder: Int) {
@@ -2273,7 +2288,31 @@ final class LibraryAccessCoordinator {
 
     func undoLastMutation() {
         guard canUndoLastMutation else { return }
+        let undoneTagMutation: Bool
+        if case .tag = lastUndoMutation { undoneTagMutation = true } else { undoneTagMutation = false }
         undoManager.undo()
+        if undoneTagMutation { lastUndoMutation = nil }
+    }
+
+    /// Whether this tag change is still the one the next undo would revert, possibly once queued work finishes.
+    func isLatestUndoableTagMutation(_ id: TagMutationUndoID) -> Bool {
+        guard case .tag(let lastID) = lastUndoMutation else { return false }
+        return lastID == id && undoManager.canUndo
+    }
+
+    /// Undoes this tag change, after any tag work queued behind it, unless that work replaced it.
+    func undoTagMutation(_ id: TagMutationUndoID) {
+        guard isLatestUndoableTagMutation(id) else { return }
+        guard pendingTagMutationCount == 0 else {
+            Task { [weak self] in
+                while let self, self.pendingTagMutationCount > 0, let task = self.tagMutationTask {
+                    await task.value
+                }
+                self?.undoTagMutation(id)
+            }
+            return
+        }
+        undoLastMutation()
     }
 
     func discardVideoRemovalUndo() {
@@ -3383,7 +3422,8 @@ final class LibraryAccessCoordinator {
     private func mutateTags(
         actionName: String,
         operation: @escaping @Sendable (DatabaseStore) async throws -> Void,
-        completion: ((Bool) -> Void)? = nil
+        completion: ((Bool) -> Void)? = nil,
+        onUndoable: ((TagMutationUndoID) -> Void)? = nil
     ) {
         let database = self.database
         let previousTask = tagMutationTask
@@ -3408,7 +3448,9 @@ final class LibraryAccessCoordinator {
                         target.restoreTagState(snapshot)
                     }
                     undoManager.setActionName(actionName)
-                    lastUndoMutation = .tag
+                    let undoID = TagMutationUndoID()
+                    lastUndoMutation = .tag(undoID)
+                    onUndoable?(undoID)
                 }
             } catch {
                 completion?(false)

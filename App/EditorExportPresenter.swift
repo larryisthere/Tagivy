@@ -50,15 +50,11 @@ final class EditorExportPresenter {
         Task {
             let succeeded = await Task.detached(priority: .userInitiated) { () -> Bool in
                 let data = format.data(for: plan)
-                let replacesExistingFile = FileManager.default.fileExists(atPath: url.path)
                 do {
-                    try data.write(to: url)
+                    // Atomic, so a failed write leaves any file the user chose to replace untouched.
+                    try data.write(to: url, options: .atomic)
                     return true
                 } catch {
-                    // A half-written file is ours to clean up; a file the user chose to replace is not.
-                    if replacesExistingFile == false {
-                        try? FileManager.default.removeItem(at: url)
-                    }
                     AppLogger.library.error(
                         "Editor export write failed with category: \(String(describing: type(of: error)), privacy: .public)"
                     )
