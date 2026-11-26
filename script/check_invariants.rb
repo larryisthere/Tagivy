@@ -45,27 +45,36 @@ def offenders(pattern, allowed: [])
   end.flatten
 end
 
-# Sandbox: originals are read-only, no network, nothing beyond what the app needs.
-check("App entitlements are exactly sandbox + user-selected read-only + app-scoped bookmarks") do
+# Sandbox: nothing beyond user-selected files and app-scoped bookmarks; no network.
+check("App entitlements are only sandbox, user-selected files and app-scoped bookmarks") do
   entitlements = read("Config/VideoTagManager.entitlements")
-  keys = entitlements.scan(%r{<key>([^<]+)</key>\s*<true/>}).flatten.sort
-  all_keys = entitlements.scan(%r{<key>([^<]+)</key>}).flatten.sort
-  expected = %w[
-    com.apple.security.app-sandbox
-    com.apple.security.files.bookmarks.app-scope
-    com.apple.security.files.user-selected.read-only
-  ]
-  ["expected #{expected}, found #{all_keys}"] unless keys == expected && all_keys == expected
+  enabled = entitlements.scan(%r{<key>([^<]+)</key>\s*<true/>}).flatten.sort
+  declared = entitlements.scan(%r{<key>([^<]+)</key>}).flatten.sort
+  base = %w[com.apple.security.app-sandbox com.apple.security.files.bookmarks.app-scope]
+  user_selected = %w[com.apple.security.files.user-selected.read-only com.apple.security.files.user-selected.read-write]
+  extra = declared - base - user_selected
+  problems = []
+  problems << "missing #{base - enabled}" unless (base - enabled).empty?
+  problems << "needs exactly one of #{user_selected}, found #{enabled & user_selected}" unless (enabled & user_selected).size == 1
+  problems << "unexpected entitlements #{extra}" unless extra.empty?
+  problems << "declared but not enabled #{declared - enabled}" unless (declared - enabled).empty?
+  problems
 end
 
 check("App code makes no network requests") do
   offenders(/\b(URLSession|NWConnection|NWListener|NWBrowser|WKWebView|CFSocket|CFStream|URLConnection)\b|^\s*import\s+(Network|WebKit)\b/)
 end
 
-check("Only the thumbnail cache deletes or moves files; nothing writes to original videos or Finder metadata") do
+# Original videos are never modified. Code that writes, moves or deletes files must be listed here,
+# and only for files the app itself owns or the user explicitly chose as a save destination.
+FILE_WRITERS = [
+  "Core/Media/MediaProcessingService.swift" # thumbnail cache
+].freeze
+
+check("Only listed writers touch the file system; nothing writes to original videos or Finder metadata") do
   offenders(
     /\.(removeItem|moveItem|trashItem|replaceItemAt|copyItem|linkItem|createSymbolicLink)\(|setResourceValues?\(|setExtendedAttribute|setxattr|removexattr|FileHandle\(forWriting|FileHandle\(forUpdating|\.write\(to:|NSWorkspace\.shared\.recycle/,
-    allowed: ["Core/Media/MediaProcessingService.swift"]
+    allowed: FILE_WRITERS
   )
 end
 
@@ -146,23 +155,36 @@ check("Every localized string is translated in en and zh-Hans with matching plac
   catalog = JSON.parse(read("Resources/Localizable.xcstrings"))
   problems = []
   problems << "sourceLanguage is #{catalog["sourceLanguage"]}" unless catalog["sourceLanguage"] == "en"
-  placeholder = /%(?:\d+\$)?(?:ll|l)?[@dfuixX]/
-  leaves = lambda do |node|
+  conversion = /%(?:(\d+)\$)?(?:#@(\w+)@|(?:ll|l)?[@dfuixX])/
+  units_in = lambda do |node|
     units = node["stringUnit"] ? [node["stringUnit"]] : []
-    (node["variations"] || {}).each_value { |cases| cases.each_value { |child| units.concat(leaves.call(child)) } }
+    (node["variations"] || {}).each_value { |cases| cases.each_value { |child| units.concat(units_in.call(child)) } }
+    (node["substitutions"] || {}).each_value { |substitution| units.concat(units_in.call(substitution)) }
     units
+  end
+  arguments_in = lambda do |node|
+    top = node["stringUnit"] ? [node["stringUnit"]] : []
+    (node["variations"] || {}).each_value { |cases| cases.each_value { |child| top.concat(units_in.call(child)) } }
+    top.map do |unit|
+      position = 0
+      unit["value"].to_s.scan(conversion).map do |explicit, substitution|
+        position += 1
+        explicit&.to_i || node.dig("substitutions", substitution.to_s, "argNum") || position
+      end.sort.uniq
+    end.uniq
   end
   catalog["strings"].each do |key, entry|
     localizations = entry["localizations"] || {}
     next if localizations.empty? || entry["shouldTranslate"] == false
     signatures = %w[en zh-Hans].map do |language|
-      units = leaves.call(localizations[language] || {})
+      node = localizations[language] || {}
+      units = units_in.call(node)
       if units.empty? || units.any? { |unit| unit["state"] != "translated" || unit["value"].to_s.empty? }
         problems << "#{key}: #{language} missing or untranslated"
       end
-      units.map { |unit| unit["value"].to_s.scan(placeholder).sort }.uniq.sort
+      arguments_in.call(node).flatten.sort.uniq
     end
-    problems << "#{key}: placeholders differ between en and zh-Hans" unless signatures.uniq.size == 1
+    problems << "#{key}: en uses arguments #{signatures[0]}, zh-Hans uses #{signatures[1]}" unless signatures.uniq.size == 1
     extra = localizations.keys - %w[en zh-Hans]
     problems << "#{key}: unexpected languages #{extra}" unless extra.empty?
   end
