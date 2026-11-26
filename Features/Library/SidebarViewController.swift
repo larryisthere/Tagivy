@@ -148,9 +148,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         rebuildNodes()
         loadViewIfNeeded()
+        let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
+        restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
     }
 
@@ -163,9 +165,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         rebuildNodes()
         loadViewIfNeeded()
+        let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
+        restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
     }
 
@@ -177,9 +181,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         loadViewIfNeeded()
         isRestoringSelection = true
         defer { isRestoringSelection = false }
+        let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
+        restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
     }
 
@@ -189,9 +195,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         scanResultCount = count
         rebuildNodes()
         loadViewIfNeeded()
+        let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
+        restoreScrollOrigin(scrollOrigin)
     }
 
     func selectScanResults() {
@@ -904,6 +912,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private func sortTagNodes(_ nodes: inout [TagNode]) {
         nodes.sort { tagSortMode.orders($0.tag, before: $1.tag) }
         for node in nodes { sortTagNodes(&node.children) }
+    }
+
+    /// Library refreshes rebuild every sidebar node; keep the list where the user left it.
+    private func restoreScrollOrigin(_ origin: NSPoint?) {
+        guard let origin, let scrollView = outlineView.enclosingScrollView else { return }
+        let maxY = max(0, outlineView.frame.height - scrollView.contentView.bounds.height)
+        scrollView.contentView.scroll(to: NSPoint(x: origin.x, y: min(origin.y, maxY)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     private func restoreExpansionState() {
