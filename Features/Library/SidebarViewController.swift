@@ -6,7 +6,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     static let videoPasteboardType = NSPasteboard.PasteboardType("com.larryisthere.tagivy.video-ids")
     private static let tagSortModeDefaultsKey = "sidebar.tagSortMode"
 
-    private let outlineView = NSOutlineView()
+    private static let smartCollectionPasteboardType = NSPasteboard.PasteboardType(
+        "com.larryisthere.tagivy.smart-collection-id"
+    )
+
+    private let outlineView = SidebarOutlineView()
     private var tags: [TagRecord] = []
     private var smartCollections: [SmartCollectionRecord] = []
     private var filterCounts = SidebarFilterCounts.zero
@@ -36,6 +40,12 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var isResolvingInlineRename = false
     private var tagSortMode: TagSortMode
     private var showsPresetShortcutHints = false
+    /// Loads the file URLs of the available videos matching the given queries.
+    var loadAvailableFileURLs: ([LibraryQueryRequest], @escaping ([URL]) -> Void) -> Void = { _, completion in
+        completion([])
+    }
+    private var dragFileURLRequestGeneration = 0
+    private var dragFileURLs: (keys: [SidebarSelectionKey], urls: [URL])?
 
     init(
         onFilterChanged: @escaping (LibraryFilter) -> Void,
@@ -97,6 +107,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.allowsMultipleSelection = true
         outlineView.registerForDraggedTypes([Self.tagPasteboardType, Self.videoPasteboardType])
         outlineView.setDraggingSourceOperationMask(.move, forLocal: true)
+        // Other apps receive copies; dragging out never moves or deletes the original videos.
+        outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        outlineView.onMouseDown = { [weak self] event in
+            self?.prepareDragFileURLs(for: event)
+        }
         let menu = NSMenu()
         menu.delegate = self
         outlineView.menu = menu
@@ -499,6 +514,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
+        if let smartCollection = item as? SmartCollectionNode {
+            let pasteboardItem = NSPasteboardItem()
+            pasteboardItem.setString(smartCollection.collection.id, forType: Self.smartCollectionPasteboardType)
+            return pasteboardItem
+        }
         guard let tag = item as? TagNode else { return nil }
         let draggedTags: [TagRecord]
         if let row = row(for: .tag(tag.tag.id)), outlineView.selectedRowIndexes.contains(row) {
@@ -513,6 +533,78 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let pasteboardItem = NSPasteboardItem()
         pasteboardItem.setString(draggedTags.map(\.id).joined(separator: "\n"), forType: Self.tagPasteboardType)
         return pasteboardItem
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt screenPoint: NSPoint,
+        forItems draggedItems: [Any]
+    ) {
+        let keys = dragFileURLKeys(for: draggedItems)
+        guard let dragFileURLs, Set(dragFileURLs.keys) == Set(keys), dragFileURLs.urls.isEmpty == false else {
+            return
+        }
+        session.draggingPasteboard.writeObjects(dragFileURLs.urls as [NSURL])
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView,
+        draggingSession session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        operation: NSDragOperation
+    ) {
+        dragFileURLs = nil
+    }
+
+    /// Starts loading the files a drag from the pressed row would carry, so they are ready when the drag begins.
+    private func prepareDragFileURLs(for event: NSEvent) {
+        dragFileURLRequestGeneration += 1
+        dragFileURLs = nil
+        let point = outlineView.convert(event.locationInWindow, from: nil)
+        let row = outlineView.row(at: point)
+        guard row >= 0, let pressedItem = outlineView.item(atRow: row) else { return }
+        let selectedItems = outlineView.selectedRowIndexes.compactMap { outlineView.item(atRow: $0) }
+        let extendsSelection = event.modifierFlags.intersection([.command, .shift]).isEmpty == false
+        let items: [Any]
+        if outlineView.selectedRowIndexes.contains(row) {
+            items = selectedItems
+        } else if extendsSelection {
+            items = selectedItems + [pressedItem]
+        } else {
+            items = [pressedItem]
+        }
+        let keys = dragFileURLKeys(for: items)
+        let queries = keys.compactMap(dragFileURLQuery(for:))
+        guard queries.isEmpty == false else { return }
+        let generation = dragFileURLRequestGeneration
+        loadAvailableFileURLs(queries) { [weak self] urls in
+            guard let self, generation == dragFileURLRequestGeneration else { return }
+            dragFileURLs = (keys, urls)
+        }
+    }
+
+    private func dragFileURLKeys(for items: [Any]) -> [SidebarSelectionKey] {
+        var keys: [SidebarSelectionKey] = []
+        for item in items {
+            guard item is TagNode || item is SmartCollectionNode,
+                  let key = selectionKey(for: item),
+                  keys.contains(key) == false else { continue }
+            keys.append(key)
+        }
+        return keys
+    }
+
+    private func dragFileURLQuery(for key: SidebarSelectionKey) -> LibraryQueryRequest? {
+        switch key {
+        case let .tag(tagID):
+            return LibraryQueryRequest(baseFilter: .tag(tagID), temporaryFilenameSearch: "", rule: .standard)
+        case let .smartCollection(collectionID):
+            guard let collection = smartCollections.first(where: { $0.id == collectionID }) else { return nil }
+            return LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
+        default:
+            return nil
+        }
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
@@ -1395,6 +1487,16 @@ private enum SidebarSelectionKey: Hashable {
 private enum SidebarInlineRenameTarget: Equatable {
     case smartCollection(String)
     case tag(String)
+}
+
+@MainActor
+private final class SidebarOutlineView: NSOutlineView {
+    var onMouseDown: ((NSEvent) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        onMouseDown?(event)
+        super.mouseDown(with: event)
+    }
 }
 
 private final class SidebarItemCellView: NSTableCellView {

@@ -1675,8 +1675,8 @@ private final class VideoImportDropView: NSView {
     }
 
     private func importPlan(from sender: NSDraggingInfo) -> VideoImportPlan {
-        // Videos dragged out of the grid are already in the library.
-        if sender.draggingSource is VideoCollectionView {
+        // Drags that start inside Tagivy carry videos that are already in the library.
+        if sender.draggingSource != nil {
             return VideoImportPlan(acceptedRoots: [], roots: [])
         }
         let sequenceNumber = sender.draggingSequenceNumber

@@ -1573,6 +1573,21 @@ final class LibraryAccessCoordinator {
         resolvedVideoURLs[video.id]
     }
 
+    /// File URLs of the available videos matching any of the queries, without duplicates.
+    func availableFileURLs(matching queries: [LibraryQueryRequest], completion: @escaping ([URL]) -> Void) {
+        Task {
+            var videoIDs = Set<String>()
+            var urls: [URL] = []
+            for query in queries {
+                let videos = (try? await database.fetchVideos(libraryID: LibraryRecord.primaryID, query: query)) ?? []
+                for video in videos where video.availability == .available && videoIDs.insert(video.id).inserted {
+                    if let url = fileURL(for: video) { urls.append(url) }
+                }
+            }
+            completion(urls)
+        }
+    }
+
     func displayPath(for video: VideoRecord) -> String? {
         resolvedVideoURLs[video.id]?.path ?? lastKnownVideoPaths[video.id]
     }
