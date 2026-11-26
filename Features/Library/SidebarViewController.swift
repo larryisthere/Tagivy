@@ -115,8 +115,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.allowsMultipleSelection = true
         outlineView.registerForDraggedTypes([Self.tagPasteboardType, Self.videoPasteboardType])
         outlineView.setDraggingSourceOperationMask(.move, forLocal: true)
-        // Other apps receive copies; dragging out never moves or deletes the original videos.
-        outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        // Other apps may copy or reference the originals, never move or delete them. Some editors
+        // accept a drop only as a reference.
+        outlineView.setDraggingSourceOperationMask([.copy, .link], forLocal: false)
         outlineView.onMouseDown = { [weak self] event in
             self?.prepareDragFileURLs(for: event)
         }

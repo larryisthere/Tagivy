@@ -206,8 +206,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             withIdentifier: Self.groupHeaderIdentifier
         )
         collectionView.registerForDraggedTypes([SidebarViewController.tagPasteboardType])
-        // Other apps receive copies; dragging out never moves or deletes the original video.
-        collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        // Other apps may copy or reference the originals, never move or delete them. Some editors
+        // accept a drop only as a reference.
+        collectionView.setDraggingSourceOperationMask([.copy, .link], forLocal: false)
         collectionView.onDoubleClickItem = { [weak self] indexPath in
             self?.openVideo(at: indexPath)
         }
