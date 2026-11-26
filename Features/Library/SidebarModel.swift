@@ -131,3 +131,17 @@ final class TagNode {
         self.tag = tag
     }
 }
+
+/// Which way a sidebar count rolls when it changes: a larger number comes up from below,
+/// a smaller one drops in from above, like a counter wheel.
+enum CountRoll: Equatable {
+    case up
+    case down
+
+    init?(from oldText: String?, to newText: String?) {
+        guard let old = oldText.flatMap({ Int($0) }),
+              let new = newText.flatMap({ Int($0) }),
+              old != new else { return nil }
+        self = new > old ? .up : .down
+    }
+}

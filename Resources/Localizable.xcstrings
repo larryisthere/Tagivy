@@ -614,40 +614,6 @@
         }
       }
     },
-    "accessibility.removePendingTag" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove pending tag"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除待新建标签"
-          }
-        }
-      }
-    },
-    "accessibility.removePendingTagNamed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove pending tag “%@”"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除待新建标签“%@”"
-          }
-        }
-      }
-    },
     "accessibility.tagCollapse" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -712,23 +678,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "视频"
-          }
-        }
-      }
-    },
-    "action.apply" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apply"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用"
           }
         }
       }
@@ -831,23 +780,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
-          }
-        }
-      }
-    },
-    "action.stageDraft" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add to Draft"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加入草稿"
           }
         }
       }
@@ -4323,13 +4255,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The new tag will be added to the current draft. Apply the draft to create the tag and add it to the selected videos."
+            "value" : "The new tag is added to the selected videos right away."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新标签将加入当前草稿。点击“应用”后创建标签并添加到当前视频。"
+            "value" : "新标签会立即添加到当前选中的视频。"
           }
         }
       }
@@ -4364,23 +4296,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建标签"
-          }
-        }
-      }
-    },
-    "tag.create.topLevel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Top Level"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "顶级"
           }
         }
       }
@@ -4432,162 +4347,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除“%@”及其全部子标签？"
-          }
-        }
-      }
-    },
-    "tag.draft.add" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "添加 %lld 个标签"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "tag.draft.applying" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Applying tags…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在应用标签…"
-          }
-        }
-      }
-    },
-    "tag.draft.create" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Create %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Create %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "新建 %lld 个标签"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "tag.draft.instruction" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select tags, then click Apply to save your changes."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勾选标签后，点击“应用”保存更改。"
-          }
-        }
-      }
-    },
-    "tag.draft.pending" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@. Changes have not been applied."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@，尚未应用。"
-          }
-        }
-      }
-    },
-    "tag.draft.remove" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Remove %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Remove %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "移除 %lld 个标签"
-                }
-              }
-            }
           }
         }
       }
@@ -4656,23 +4415,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的标签。"
-          }
-        }
-      }
-    },
-    "tag.pending" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pending"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "待新建"
           }
         }
       }
@@ -5047,57 +4789,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "调整缩略图大小"
-          }
-        }
-      }
-    },
-    "unsavedTags.detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The selected videos have tag changes that have not been applied."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前视频的标签还有未应用的修改。"
-          }
-        }
-      }
-    },
-    "unsavedTags.discard" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Discard Changes"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "放弃更改"
-          }
-        }
-      }
-    },
-    "unsavedTags.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apply Tag Changes?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用标签更改？"
           }
         }
       }

@@ -19,6 +19,17 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertEqual(parent.children.map(\.tag.id), ["child"])
     }
 
+    func testCountRollsUpWhenItGrowsAndDownWhenItShrinks() {
+        XCTAssertEqual(CountRoll(from: "3", to: "4"), .up)
+        XCTAssertEqual(CountRoll(from: "10", to: "9"), .down)
+    }
+
+    func testUnchangedOrNonNumericTextDoesNotRoll() {
+        XCTAssertNil(CountRoll(from: "4", to: "4"))
+        XCTAssertNil(CountRoll(from: nil, to: "4"))
+        XCTAssertNil(CountRoll(from: "4", to: "⌘1"))
+    }
+
     private func makeTag(id: String, name: String, parentID: String? = nil) -> TagRecord {
         TagRecord(
             id: id,

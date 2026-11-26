@@ -1779,7 +1779,17 @@ final class LibraryAccessCoordinator {
         videoIDs: [String],
         completion: ((Bool) -> Void)? = nil
     ) {
-        mutateTags(actionName: String(localized: .tagActionApply)) { database in
+        let actionName: String
+        if creations.isEmpty == false {
+            actionName = String(localized: .tagActionCreate)
+        } else if assignments.values.allSatisfy({ $0 }) {
+            actionName = String(localized: .tagActionAdd)
+        } else if assignments.values.allSatisfy({ $0 == false }) {
+            actionName = String(localized: .tagActionRemove)
+        } else {
+            actionName = String(localized: .tagActionApply)
+        }
+        mutateTags(actionName: actionName) { database in
             try await database.applyTagDraft(
                 libraryID: LibraryRecord.primaryID,
                 creations: creations,

@@ -72,10 +72,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var selectedSmartCollection: SmartCollectionRecord?
     private var pendingNavigationTarget: NavigationTarget?
     private var isPresentingSmartCollectionAlert = false
-    private var pendingVideoSelectionIDs: [String]?
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
-    private var isPresentingSelectionAlert = false
     private var didApplyInitialLayout = false
     private var shouldApplyInitialLayout = false
     private var isLibraryAvailable = true
@@ -188,15 +186,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             onAssignTagID: onAssignTagID,
             onCancelImport: onCancelImport,
             onImportDroppedItems: onImportDroppedItems,
-            onRemoveVideos: { [weak inspector] videoIDs, completion in
-                let pendingDraft = inspector?.takePendingTagChanges()
-                onRemoveVideos(videoIDs) { succeeded in
-                    if succeeded == false, let pendingDraft {
-                        inspector?.restorePendingTagChanges(pendingDraft)
-                    }
-                    completion(succeeded)
-                }
-            },
+            onRemoveVideos: onRemoveVideos,
             onUndoLastMutation: onUndoLastMutation,
             onDismissNotification: onEndVideoRemovalUndo
         )
@@ -215,14 +205,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }
         videoGridViewController.onSelectionChanged = { [weak self] videos in
-            self?.handleVideoSelectionChange(videos)
+            self?.inspectorViewController.setSelection(videos)
         }
         videoGridViewController.onViewVideos = { [weak self] request in
             self?.viewVideos(request)
-        }
-        inspectorViewController.onTagApplicationFinished = { [weak self] succeeded in
-            guard succeeded else { return }
-            self?.syncInspectorSelectionFromGrid()
         }
         sidebarViewController.setNavigationHandlers(
             filter: { [weak self] filter in self?.requestNavigation(to: .filter(filter)) },
@@ -1075,60 +1061,6 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func beginCreatingRootTag() {
         sidebarViewController.beginCreatingRootTag()
-    }
-
-    private func handleVideoSelectionChange(_ videos: [VideoRecord]) {
-        if inspectorViewController.isApplyingTagChanges { return }
-        let videoIDs = videos.map(\.id)
-        guard inspectorViewController.hasPendingTagChanges,
-              videoIDs != inspectorViewController.selectedVideoIDs else {
-            inspectorViewController.setSelection(videos)
-            return
-        }
-        pendingVideoSelectionIDs = videoIDs
-        videoGridViewController.setSelectedVideoIDs(inspectorViewController.selectedVideoIDs, notify: false)
-        presentSelectionChangeConfirmationIfNeeded()
-    }
-
-    private func presentSelectionChangeConfirmationIfNeeded() {
-        guard isPresentingSelectionAlert == false,
-              pendingVideoSelectionIDs != nil,
-              let window = view.window else { return }
-        isPresentingSelectionAlert = true
-        let alert = NSAlert()
-        alert.messageText = String(localized: .unsavedTagsTitle)
-        alert.informativeText = String(localized: .unsavedTagsDetail)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: String(localized: .actionApply))
-        alert.addButton(withTitle: String(localized: .unsavedTagsDiscard))
-        alert.addButton(withTitle: String(localized: .actionCancel))
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self else { return }
-            self.isPresentingSelectionAlert = false
-            switch response {
-            case .alertFirstButtonReturn:
-                self.inspectorViewController.applyPendingTagChanges { [weak self] succeeded in
-                    guard let self else { return }
-                    if succeeded { self.commitPendingVideoSelection() }
-                    else { self.pendingVideoSelectionIDs = nil }
-                }
-            case .alertSecondButtonReturn:
-                self.inspectorViewController.discardPendingTagChanges()
-                self.commitPendingVideoSelection()
-            default:
-                self.pendingVideoSelectionIDs = nil
-            }
-        }
-    }
-
-    private func commitPendingVideoSelection() {
-        guard let videoIDs = pendingVideoSelectionIDs else { return }
-        pendingVideoSelectionIDs = nil
-        videoGridViewController.setSelectedVideoIDs(videoIDs)
-    }
-
-    private func syncInspectorSelectionFromGrid() {
-        inspectorViewController.setSelection(videoGridViewController.selectedVideos())
     }
 
     func setImportState(_ state: LibraryImportState) {
