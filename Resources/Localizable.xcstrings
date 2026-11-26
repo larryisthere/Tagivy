@@ -5492,13 +5492,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Tag…"
+            "value" : "Export Tag"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出标签…"
+            "value" : "导出标签"
           }
         }
       }
@@ -5509,13 +5509,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Smart Filter…"
+            "value" : "Export Smart Filter"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出智能分类…"
+            "value" : "导出智能分类"
           }
         }
       }
@@ -5526,13 +5526,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Videos…"
+            "value" : "Export Videos"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出视频…"
+            "value" : "导出视频"
           }
         }
       }
