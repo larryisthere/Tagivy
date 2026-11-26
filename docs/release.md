@@ -72,7 +72,7 @@ bundle exec fastlane mac github_release
 该 lane 只允许从无未提交改动且当前提交已存在于目标 GitHub 仓库的工作区发布。流程依次为：
 
 1. 检查 `CHANGELOG.md` 已包含目标版本区块。
-2. 运行全部测试，任何失败都会中止发布。
+2. 运行项目不变量检查和全部测试，任何失败都会中止发布。
 3. 使用 Manual signing 指定 Developer ID Application 身份，关闭开发调试 entitlement 注入并加入可信时间戳，执行 Release 构建和签名检查。
 4. 公证、stapling、生成 ZIP 与 SHA-256。
 5. 创建指向当前提交的 `v<版本>` 草稿 Release，上传产物（失败自动重试），全部上传成功后再正式发布。
@@ -124,4 +124,4 @@ bundle exec fastlane mac app_store_release
 - 本地 Release 已生成并保存 SHA-256。
 - GitHub 包通过 `codesign`、`notarytool` 和 `stapler` 校验。
 - App Store Connect 构建处理完成后，再在后台选择版本并提交审核。
-- 正式发布前按 `docs/product/mvp-acceptance.md` 完成目标 Mac 上的设备与交互验收。
+- 正式发布前在目标 Mac 上完成设备与交互验收。

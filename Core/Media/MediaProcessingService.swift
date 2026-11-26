@@ -47,6 +47,8 @@ struct VideoMediaInspection: Sendable {
 }
 
 actor MediaProcessingService {
+    static let defaultMaximumCacheBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
+
     private let thumbnailDirectory: URL
     private let maximumCacheBytes: Int64
     private var lastPrunedAt = Date()
@@ -54,7 +56,7 @@ actor MediaProcessingService {
     init(
         fileManager: FileManager = .default,
         cacheDirectory: URL? = nil,
-        maximumCacheBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
+        maximumCacheBytes: Int64 = MediaProcessingService.defaultMaximumCacheBytes
     ) throws {
         let cacheDirectory = try cacheDirectory ?? fileManager.url(
             for: .cachesDirectory,

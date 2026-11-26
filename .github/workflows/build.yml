@@ -12,7 +12,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: Build Tagivy
+      - name: Check project invariants
+        run: ruby script/check_invariants.rb
+      - name: Build and test Tagivy
         run: >-
           xcodebuild
           -project VideoTagManager.xcodeproj
@@ -20,4 +22,4 @@ jobs:
           -configuration Debug
           -derivedDataPath .build/DerivedData
           CODE_SIGNING_ALLOWED=NO
-          build
+          test
