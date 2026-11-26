@@ -27,6 +27,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
+- Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.
 
 ## [1.0.17] - 2026-11-23
 
