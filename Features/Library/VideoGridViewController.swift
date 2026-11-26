@@ -78,6 +78,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     static let maximumGridItemWidth = 280.0
     private static let thumbnailHeightRatio = 0.55
     private static let gridItemChromeHeight = 64.0
+    private let defaults: UserDefaults
 
     private struct GroupSection {
         let id: String
@@ -156,8 +157,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onImportDroppedItems: @escaping ([URL]) -> Void,
         onRemoveVideos: @escaping ([String], @escaping (Bool) -> Void) -> Void,
         onUndoLastMutation: @escaping () -> Void,
-        onDismissNotification: @escaping () -> Void
+        onDismissNotification: @escaping () -> Void,
+        defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
         self.onOpenVideo = onOpenVideo
         self.onRevealVideo = onRevealVideo
         self.onCopyPath = onCopyPath
@@ -188,7 +191,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
 
         let layout = NSCollectionViewFlowLayout()
-        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth())
+        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth(defaults: defaults))
         layout.minimumInteritemSpacing = 16
         layout.minimumLineSpacing = 20
         layout.sectionInset = NSEdgeInsets(top: 20, left: Self.contentLeadingInset, bottom: 20, right: 20)
@@ -1358,17 +1361,84 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
     func setGridItemWidth(_ width: Double) {
         guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
-        let clampedWidth = min(Self.maximumGridItemWidth, max(Self.minimumGridItemWidth, width))
+        let clampedWidth = Self.clampedGridItemWidth(width)
+        let glides = GridReflow.shouldGlide(
+            fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
+            toColumns: columnCount(in: layout, itemWidth: clampedWidth),
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        let startFrames = glides ? drawnFramesNearViewport(in: layout) : [:]
         layout.itemSize = gridItemSize(for: clampedWidth)
         layout.invalidateLayout()
-        UserDefaults.standard.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+        if glides { glideElements(from: startFrames) }
+        defaults.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+    }
+
+    private enum GridElement: Hashable {
+        case item(IndexPath)
+        case header(IndexPath)
+    }
+
+    /// Frames as drawn now, for items and headers on screen and within a screen above or below it,
+    /// so the ones that scroll into view during the glide also come from where they were.
+    private func drawnFramesNearViewport(in layout: NSCollectionViewFlowLayout) -> [GridElement: NSRect] {
+        let visibleRect = collectionView.visibleRect
+        var frames: [GridElement: NSRect] = [:]
+        for attributes in layout.layoutAttributesForElements(in: visibleRect.insetBy(dx: 0, dy: -visibleRect.height)) {
+            guard let indexPath = attributes.indexPath else { continue }
+            switch attributes.representedElementCategory {
+            case .item:
+                frames[.item(indexPath)] = attributes.frame
+            case .supplementaryView where attributes.representedElementKind == NSCollectionView.elementKindSectionHeader:
+                frames[.header(indexPath)] = attributes.frame
+            default:
+                break
+            }
+        }
+        for (element, view) in elementViews() {
+            let offset = view.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            frames[element] = view.frame.offsetBy(dx: offset.width, dy: offset.height)
+        }
+        return frames
+    }
+
+    private func glideElements(from startFrames: [GridElement: NSRect]) {
+        collectionView.layoutSubtreeIfNeeded()
+        for (element, view) in elementViews() {
+            guard let layer = view.layer else { continue }
+            let start = startFrames[element] ?? view.frame
+            GridReflow.glide(layer, from: CGSize(width: start.minX - view.frame.minX, height: start.minY - view.frame.minY))
+        }
+    }
+
+    private func elementViews() -> [(GridElement, NSView)] {
+        let items = collectionView.visibleItems().compactMap { item in
+            collectionView.indexPath(for: item).map { (GridElement.item($0), item.view) }
+        }
+        let headerKind = NSCollectionView.elementKindSectionHeader
+        let headers = collectionView.indexPathsForVisibleSupplementaryElements(ofKind: headerKind).compactMap { indexPath in
+            collectionView.supplementaryView(forElementKind: headerKind, at: indexPath).map { (GridElement.header(indexPath), $0) }
+        }
+        return items + headers
+    }
+
+    private func columnCount(in layout: NSCollectionViewFlowLayout, itemWidth: Double) -> Int {
+        GridReflow.columnCount(
+            availableWidth: collectionView.bounds.width - layout.sectionInset.left - layout.sectionInset.right,
+            itemWidth: itemWidth,
+            interitemSpacing: layout.minimumInteritemSpacing
+        )
     }
 
     static func persistedGridItemWidth(defaults: UserDefaults = .standard) -> Double {
         guard let storedWidth = defaults.object(forKey: gridItemWidthDefaultsKey) as? NSNumber else {
             return defaultGridItemWidth
         }
-        return min(maximumGridItemWidth, max(minimumGridItemWidth, storedWidth.doubleValue))
+        return clampedGridItemWidth(storedWidth.doubleValue)
+    }
+
+    private static func clampedGridItemWidth(_ width: Double) -> Double {
+        min(maximumGridItemWidth, max(minimumGridItemWidth, width))
     }
 
     private func gridItemSize(for width: Double) -> NSSize {
@@ -1963,6 +2033,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
         imageTask?.cancel()
         imageRequest = UUID()
         configuredVideo = nil
