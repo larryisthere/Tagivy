@@ -123,10 +123,22 @@ enum NumericConditionKind: Equatable, Sendable {
     /// (37 min, 1.4 GB) and the field never displays a different value than is saved.
     func rounded(_ value: Double) -> Double {
         if case .resolutionWidthAtLeast = self { return scale.nearestDetent(to: value) }
+        let value = min(max(value, valueBounds.lowerBound), valueBounds.upperBound)
         guard let unit = displayUnit(for: value) else { return value }
         let number = value / unit.factor
         let significant = number >= 100 ? number.rounded() : Self.roundedToTwoSignificantDigits(number)
-        return max(1, (significant * unit.factor).rounded())
+        return min(max((significant * unit.factor).rounded(), valueBounds.lowerBound), valueBounds.upperBound)
+    }
+
+    /// What a typed value may be: at least one of the smallest unit the field shows, and small
+    /// enough to store, so the field always shows the saved value.
+    var valueBounds: ClosedRange<Double> {
+        switch self {
+        case .addedWithinDays, .createdWithinDays: 1...36_500
+        case .durationAtLeast: 1...10_000_000
+        case .fileSizeAtLeast: 1_000_000...1_000_000_000_000_000
+        case .resolutionWidthAtLeast: 1...100_000
+        }
     }
 
     func formatted(_ value: Double) -> String {
@@ -146,14 +158,15 @@ enum NumericConditionKind: Equatable, Sendable {
             if let step = Self.resolutionSteps.first(where: { $0.name.lowercased() == trimmed }) {
                 return Double(step.width)
             }
+            if trimmed == "2k" { return 2560 }
             let digits = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789").inverted)
-            guard let number = Double(digits), number > 0 else { return nil }
+            guard let number = Double(digits), number.isFinite, number > 0 else { return nil }
             let byHeight = Self.resolutionSteps.first { $0.name == "\(Int(number))p" }
             return byHeight.map { Double($0.width) } ?? scale.nearestDetent(to: number)
         }
         let numberPart = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
         let unitPart = trimmed.dropFirst(numberPart.count).trimmingCharacters(in: .whitespaces)
-        guard let number = Double(numberPart.replacingOccurrences(of: ",", with: ".")), number > 0 else {
+        guard let number = Self.number(from: String(numberPart)), number.isFinite, number > 0 else {
             return nil
         }
         let unit: Unit?
@@ -164,6 +177,13 @@ enum NumericConditionKind: Equatable, Sendable {
             unit = match
         }
         return rounded(number * (unit?.factor ?? 1))
+    }
+
+    /// "1,000" is a thousands separator; any other comma ("1,5") is a decimal comma.
+    private static func number(from text: String) -> Double? {
+        let groups = text.split(separator: ",", omittingEmptySubsequences: false)
+        let isGrouped = groups.count > 1 && groups.dropFirst().allSatisfy { $0.count == 3 && $0.allSatisfy(\.isNumber) }
+        return Double(isGrouped ? text.replacingOccurrences(of: ",", with: "") : text.replacingOccurrences(of: ",", with: "."))
     }
 
     private static func roundedToTwoSignificantDigits(_ number: Double) -> Double {

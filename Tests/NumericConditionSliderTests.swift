@@ -78,6 +78,29 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(NumericConditionKind.addedWithinDays.parse("5000", currentValue: 30), 5_000)
     }
 
+    func testHugeOrTinyTypedValuesStayWithinWhatCanBeStoredAndShown() {
+        let size = NumericConditionKind.fileSizeAtLeast
+        let huge = size.parse("99999999999 tb", currentValue: 1_000_000_000)
+        XCTAssertEqual(huge, size.valueBounds.upperBound)
+        XCTAssertEqual(huge.map { size.condition(with: $0) }, .fileSizeAtLeast(1_000_000_000_000_000))
+        XCTAssertEqual(size.parse("500 kb", currentValue: 1_000_000_000), 1_000_000)
+        XCTAssertEqual(
+            NumericConditionKind.addedWithinDays.parse("99999999999999999999", currentValue: 30),
+            36_500
+        )
+        XCTAssertNil(NumericConditionKind.durationAtLeast.parse(String(repeating: "9", count: 400), currentValue: 60))
+    }
+
+    func testCommaIsAThousandsSeparatorOnlyBeforeThreeDigits() {
+        let size = NumericConditionKind.fileSizeAtLeast
+        XCTAssertEqual(size.parse("1,000 MB", currentValue: 1_000_000_000), 1_000_000_000)
+        XCTAssertEqual(size.parse("1,5 GB", currentValue: 1_000_000_000), 1_500_000_000)
+    }
+
+    func testTwoKMeansFourteenForty() {
+        XCTAssertEqual(NumericConditionKind.resolutionWidthAtLeast.parse("2K", currentValue: 3840), 2560)
+    }
+
     func testInvalidTextIsRejected() {
         XCTAssertNil(NumericConditionKind.fileSizeAtLeast.parse("big", currentValue: 1_000_000_000))
         XCTAssertNil(NumericConditionKind.durationAtLeast.parse("0", currentValue: 60))
