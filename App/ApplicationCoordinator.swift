@@ -118,7 +118,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         },
         onCreateTag: { [weak self] name, parentID in self?.libraryAccessCoordinator?.createTag(name: name, parentID: parentID) },
         onRenameTag: { [weak self] tag, name in self?.libraryAccessCoordinator?.renameTag(tag, name: name) },
-        onDeleteTag: { [weak self] tag in self?.libraryAccessCoordinator?.deleteTag(tag) },
+        onDeleteTags: { [weak self] tags in self?.libraryAccessCoordinator?.deleteTags(tags) },
         onMoveTags: { [weak self] tags, parentID, order in self?.libraryAccessCoordinator?.moveTags(tags, parentID: parentID, sortOrder: order) },
         onSetTagColor: { [weak self] tag, color in self?.libraryAccessCoordinator?.setTagColor(tag, color: color) },
         onMergeTag: { [weak self] source, target in self?.libraryAccessCoordinator?.mergeTag(source, into: target) },

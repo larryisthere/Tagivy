@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import Tagivy
 
@@ -28,6 +29,74 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertNil(CountRoll(from: "4", to: "4"))
         XCTAssertNil(CountRoll(from: nil, to: "4"))
         XCTAssertNil(CountRoll(from: "4", to: "⌘1"))
+    }
+
+    func testDeleteKeyDeletesSelectedTagsWithoutRepeatingTheirDescendants() {
+        let parent = makeTag(id: "parent", name: "父级")
+        let middle = makeTag(id: "middle", name: "中间", parentID: "parent")
+        let grandchild = makeTag(id: "grandchild", name: "孙级", parentID: "middle")
+        let other = makeTag(id: "other", name: "其他")
+        let allTags = [parent, middle, grandchild, other]
+
+        let deletion = SidebarDeletion(
+            selectedItems: [TagNode(tag: parent), TagNode(tag: grandchild), TagNode(tag: other)],
+            allTags: allTags
+        )
+
+        XCTAssertEqual(deletion, .tags([parent, other]))
+        XCTAssertEqual(
+            SidebarDeletion(selectedItems: [TagNode(tag: middle)], allTags: allTags),
+            .tags([middle])
+        )
+    }
+
+    func testDeleteKeyDeletesOnlyASingleSelectedSmartCollection() {
+        let collection = SmartCollectionRecord(
+            id: "collection",
+            libraryID: LibraryRecord.primaryID,
+            name: "集合",
+            rule: .standard,
+            sortOrder: 0,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        let node = SmartCollectionNode(collection: collection)
+
+        XCTAssertEqual(SidebarDeletion(selectedItems: [node], allTags: []), .smartCollection(collection))
+        XCTAssertNil(SidebarDeletion(selectedItems: [node, SmartCollectionNode(collection: collection)], allTags: []))
+    }
+
+    func testDeleteKeyDeletesNothingForBuiltInRowsOrMixedSelections() {
+        let tag = makeTag(id: "tag", name: "标签")
+        let allVideos = SidebarFilterNode(title: "全部", systemImageName: "film", filter: .all, videoCount: 0)
+
+        XCTAssertNil(SidebarDeletion(selectedItems: [], allTags: [tag]))
+        XCTAssertNil(SidebarDeletion(selectedItems: [allVideos], allTags: [tag]))
+        XCTAssertNil(SidebarDeletion(selectedItems: [TagNode(tag: tag), allVideos], allTags: [tag]))
+    }
+
+    func testDeleteAndCommandDeleteAreTheSidebarDeleteKeys() throws {
+        XCTAssertTrue(SidebarDeleteKey.matches(try keyEvent(SidebarDeleteKey.deleteKeyCode)))
+        XCTAssertTrue(SidebarDeleteKey.matches(try keyEvent(SidebarDeleteKey.deleteKeyCode, modifiers: .command)))
+        XCTAssertTrue(SidebarDeleteKey.matches(try keyEvent(SidebarDeleteKey.forwardDeleteKeyCode)))
+        XCTAssertFalse(SidebarDeleteKey.matches(try keyEvent(SidebarDeleteKey.deleteKeyCode, modifiers: .option)))
+        XCTAssertFalse(SidebarDeleteKey.matches(try keyEvent(SidebarDeleteKey.deleteKeyCode, modifiers: [.command, .shift])))
+        XCTAssertFalse(SidebarDeleteKey.matches(try keyEvent(0)))
+    }
+
+    private func keyEvent(_ keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: keyCode
+        ))
     }
 
     private func makeTag(id: String, name: String, parentID: String? = nil) -> TagRecord {

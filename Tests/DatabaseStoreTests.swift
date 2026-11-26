@@ -274,6 +274,22 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(userTags.map(\.sortOrder), [0, 1, 2])
     }
 
+    func testDeletingSeveralTagsRemovesEachSubtreeAndKeepsTheRest() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let childID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一之子", parentID: firstID)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let keptID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "留", parentID: nil)
+
+        try await store.deleteTags(ids: [firstID, childID, secondID])
+
+        let remaining = try await store.fetchTags(libraryID: LibraryRecord.primaryID).map(\.id)
+        XCTAssertEqual(remaining, [keptID])
+    }
+
     func testDeletingParentRemovesSubtreeAndSnapshotRestoresTagState() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }

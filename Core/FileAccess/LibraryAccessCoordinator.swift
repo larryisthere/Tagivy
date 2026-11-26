@@ -1717,9 +1717,11 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func deleteTag(_ tag: TagRecord) {
+    func deleteTags(_ tags: [TagRecord]) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
         mutateTags(actionName: String(localized: .tagActionDelete)) { database in
-            try await database.deleteTag(id: tag.id)
+            try await database.deleteTags(ids: tagIDs)
         }
     }
 
