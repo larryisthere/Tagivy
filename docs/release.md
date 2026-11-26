@@ -54,6 +54,7 @@ xcrun notarytool store-credentials "FileFacet-Notary" \
 ```
 
 5. 使用 `gh auth login` 登录 GitHub，并为仓库配置 remote 或明确提供仓库名。
+6. App 内更新用 Sparkle 的 EdDSA 私钥签名。私钥只在发布 Mac 的登录钥匙串里（Sparkle `generate_keys` 生成，对应 `Config/Info.plist` 的 `SUPublicEDKey`），需另行安全备份；丢失后已安装的版本无法再验证新更新。
 
 ### 发布
 
@@ -76,6 +77,9 @@ bundle exec fastlane mac github_release
 3. 使用 Manual signing 指定 Developer ID Application 身份，关闭开发调试 entitlement 注入并加入可信时间戳，执行 Release 构建和签名检查。
 4. 公证、stapling、生成 ZIP 与 SHA-256。
 5. 创建指向当前提交的 `v<版本>` 草稿 Release，上传产物（失败自动重试），全部上传成功后再正式发布。
+6. 用 Sparkle 私钥签名安装包，把这一版加入 `appcast` 分支的 `appcast.xml`（App 检查更新读的就是它）。Beta 版进 beta 频道，只有在设置里打开“接收测试版”的用户会收到。
+
+Release 已发布但 appcast 更新失败时，用 `bundle exec fastlane mac appcast_publish`（Beta 加 `beta:<序号>`）重试。
 
 需要覆盖 tag 时可设置 `RELEASE_TAG`。
 

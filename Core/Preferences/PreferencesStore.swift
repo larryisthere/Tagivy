@@ -42,6 +42,7 @@ final class PreferencesStore: ObservableObject {
         static let idleLockInterval = "idleLockInterval"
         static let folderImportPreference = "folderImportPreference"
         static let includeSelectedFolderAsRootTag = "includeSelectedFolderAsRootTag"
+        static let receivesBetaUpdates = "receivesBetaUpdates"
     }
 
     private let defaults: UserDefaults
@@ -62,6 +63,10 @@ final class PreferencesStore: ObservableObject {
         }
     }
 
+    @Published var receivesBetaUpdates: Bool {
+        didSet { defaults.set(receivesBetaUpdates, forKey: Key.receivesBetaUpdates) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         authenticationEnabled = defaults.object(forKey: Key.authenticationEnabled) as? Bool ?? false
@@ -74,6 +79,7 @@ final class PreferencesStore: ObservableObject {
         includeSelectedFolderAsRootTag = defaults.object(
             forKey: Key.includeSelectedFolderAsRootTag
         ) as? Bool ?? false
+        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? false
     }
 
     func setAuthenticationEnabled(_ enabled: Bool) {

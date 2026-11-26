@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case importOptions
     case privacy
+    case updates
     case about
 
     var id: String { rawValue }
@@ -11,6 +12,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .importOptions: String(localized: .settingsImport)
         case .privacy: String(localized: .settingsPrivacy)
+        case .updates: String(localized: .settingsUpdates)
         case .about: String(localized: .settingsAbout)
         }
     }
@@ -18,6 +20,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .importOptions: "tray.and.arrow.down"
         case .privacy: "lock"
+        case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
         }
     }
@@ -31,6 +34,7 @@ final class SettingsNavigationModel: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var preferences: PreferencesStore
     @ObservedObject var navigation: SettingsNavigationModel
+    @ObservedObject var updates: AppUpdateController
     let setAuthenticationEnabled: (Bool) -> Void
 
     var body: some View {
@@ -50,6 +54,8 @@ struct SettingsView: View {
                     importView
                 case .privacy:
                     privacyView
+                case .updates:
+                    updatesView
                 case .about:
                     aboutView
                 }
@@ -120,6 +126,50 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 24)
+    }
+
+    private var updatesView: some View {
+        Form {
+            Section {
+                Toggle(String(localized: .settingsUpdatesCheckAutomatically), isOn: $updates.automaticallyChecksForUpdates)
+                Toggle(String(localized: .settingsUpdatesDownloadAutomatically), isOn: $updates.automaticallyDownloadsUpdates)
+                    .disabled(!updates.automaticallyChecksForUpdates)
+
+                Text(
+                    updates.automaticallyDownloadsUpdates && updates.automaticallyChecksForUpdates
+                        ? String(localized: .settingsUpdatesDownloadAutomaticallyHelp)
+                        : String(localized: .settingsUpdatesPromptHelp)
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
+                Toggle(String(localized: .settingsUpdatesBeta), isOn: $updates.receivesBetaUpdates)
+
+                Text(String(localized: .settingsUpdatesBetaHelp))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
+                HStack {
+                    Text(AppConfiguration.versionDescription)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(String(localized: .menuCheckForUpdates)) {
+                        updates.checkForUpdates()
+                    }
+                    .disabled(!updates.canCheckForUpdates)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .disabled(!updates.isAvailable)
         .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 24)
     }
