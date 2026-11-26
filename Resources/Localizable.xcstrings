@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "inspector.tagLayout" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tag Layout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标签布局" } } } },
+    "inspector.tagLayout.compact" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Compact" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "紧凑" } } } },
+    "inspector.tagLayout.list" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "List" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "列表" } } } },
     "recovery.stopped" : {
       "extractionState" : "manual",
       "localizations" : {
