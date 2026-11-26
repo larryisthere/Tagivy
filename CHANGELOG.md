@@ -12,6 +12,13 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Export a tag, a smart filter, or selected videos to Premiere Pro, DaVinci Resolve, Final Cut Pro, or CapCut with Export to Editing App in their shortcut menus. Premiere Pro and DaVinci Resolve import the saved XML file as bins that follow the tag tree, with videos without tags in their own bin; Final Cut Pro imports the FCPXML file as an event with keywords and keyword collections; CapCut imports a timeline with the videos placed one after another. Each clip's tags also appear in its Log Note or notes, and the original videos are not changed. Unavailable videos are left out.
 - Notices that need no answer, such as a finished export, appear at the bottom of the window and show how long until they close. Pointing at a notice keeps it open.
 
+### Changed
+
+- Tag changes in the Inspector take effect right away, without an Apply step.
+- Switching videos no longer reloads the Inspector's tag list; the selection's tags slide to the top.
+- Tag counts in the sidebar update right away and roll to their new value.
+- Thumbnails that load later fade in instead of appearing abruptly.
+
 ### Fixed
 
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
