@@ -673,7 +673,7 @@ final class LibraryAccessCoordinator {
             } catch {
                 let sqliteCode = await database.lastSQLiteResultCode()
                 AppLogger.library.error(
-                    "Library restore failed: phase=\(self.restorePhase, privacy: .public), error=\(String(describing: error), privacy: .public), sqlite=\(sqliteCode, privacy: .public)"
+                    "Library restore failed: phase=\(self.restorePhase, privacy: .public), error=\(String(describing: type(of: error)), privacy: .public), code=\((error as NSError).code, privacy: .public), sqlite=\(sqliteCode, privacy: .public)"
                 )
                 onError?(String(localized: .importVideoIndexRead))
             }

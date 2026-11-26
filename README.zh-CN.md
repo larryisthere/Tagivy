@@ -173,7 +173,7 @@ xcodebuild \
 
 本地开发脚本为 `./script/build_and_run.sh`。该脚本会构建、签名并启动应用，使用前需要在 Xcode 中配置开发签名。
 
-Ruby 和 Bundler 仅用于 [docs/release.md](docs/release.md) 中记录的 Fastlane 发布流程。
+运行 `ruby script/check_invariants.rb` 可在本地检查项目级规则。Bundler 仅用于 [docs/release.md](docs/release.md) 中记录的 Fastlane 发布流程。
 
 ## 项目结构
 
@@ -181,8 +181,7 @@ Ruby 和 Bundler 仅用于 [docs/release.md](docs/release.md) 中记录的 Fastl
 - `Core/`：数据库、文件访问、扫描、媒体和安全服务
 - `Features/`：资料库、设置和应用锁界面
 - `Tests/`：核心模型和服务自动化检查
-- `docs/product/`：当前需求与验收记录
-- `docs/architecture/`：已接受的架构决策
+- `script/check_invariants.rb`：项目级规则（沙盒、原视频只读、不联网、日志隐私、本地化完整），CI 中执行
 - `docs/release.md`：本地、GitHub 和 App Store 发布流程
 
 自动化检查只验证其中写明的断言。产品逻辑、交互和 UI 仍以用户验收结果为准。
