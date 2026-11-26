@@ -133,6 +133,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var selectionGestureMode: SelectionGestureMode = .replacing
     private var isSynchronizingSelection = false
     private var draggedItemViews: [VideoCollectionItemView] = []
+    private var draggedCloudVideoFiles: [URL] = []
+    var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
@@ -753,6 +755,16 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         importStatusView.configureUndoActionOnly()
     }
 
+    func showCloudVideosLeftOutOfDrag(count: Int) {
+        loadViewIfNeeded()
+        if case .importing = importState { return }
+        importStatusView.configureFinished(
+            title: String(localized: .dragCloudSkippedTitle(count)),
+            detail: String(localized: .dragCloudSkippedDetail)
+        )
+        showImportStatus()
+    }
+
     func showVideoRemovalUndo(videoCount: Int) {
         importStatusView.configureUndo(
             title: String(localized: .videoResultRemoved(videoCount)),
@@ -1007,7 +1019,12 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         if let video = video(at: indexPath),
            video.availability == .available,
            let url = fileURL(video) {
-            item.setString(url.absoluteString, forType: .fileURL)
+            let files = DraggableVideoFiles(urls: [url])
+            if files.ready.isEmpty == false {
+                item.setString(url.absoluteString, forType: .fileURL)
+            } else if draggedCloudVideoFiles.contains(url) == false {
+                draggedCloudVideoFiles.append(url)
+            }
         }
         return item
     }
@@ -1020,6 +1037,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     ) {
         draggedItemViews = indexPaths.compactMap { collectionView.item(at: $0)?.view as? VideoCollectionItemView }
         draggedItemViews.forEach { $0.staysVisibleWhileDragged = true }
+        let cloudFiles = draggedCloudVideoFiles
+        draggedCloudVideoFiles = []
+        if cloudFiles.isEmpty == false {
+            onDragLeftOutCloudVideoFiles(cloudFiles)
+        }
     }
 
     func collectionView(

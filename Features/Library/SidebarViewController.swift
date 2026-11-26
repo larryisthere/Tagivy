@@ -40,12 +40,13 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var isResolvingInlineRename = false
     private var tagSortMode: TagSortMode
     private var showsPresetShortcutHints = false
-    /// Loads the file URLs of the available videos matching the given queries.
-    var loadAvailableFileURLs: ([LibraryQueryRequest], @escaping ([URL]) -> Void) -> Void = { _, completion in
-        completion([])
+    /// Loads the files of the available videos matching the given queries.
+    var loadDraggableVideoFiles: ([LibraryQueryRequest], @escaping (DraggableVideoFiles) -> Void) -> Void = {
+        _, completion in completion(DraggableVideoFiles(urls: []))
     }
+    var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
     private var dragFileURLRequestGeneration = 0
-    private var dragFileURLs: (keys: [SidebarSelectionKey], urls: [URL])?
+    private var dragFileURLs: (keys: [SidebarSelectionKey], files: DraggableVideoFiles)?
     /// Rows the outline view asked pasteboard writers for in the drag that is starting.
     private var draggedFileURLKeys: [SidebarSelectionKey] = []
     /// The file already written with a row, so other apps accept the drag from its start.
@@ -535,7 +536,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
            let dragFileURLs,
            itemKeys.isEmpty == false,
            Set(itemKeys).isSubset(of: dragFileURLs.keys),
-           let firstURL = dragFileURLs.urls.first {
+           let firstURL = dragFileURLs.files.ready.first {
             leadingDragFileURL = firstURL
             leadingURL = firstURL
         }
@@ -572,10 +573,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             draggedFileURLKeys = []
             leadingDragFileURL = nil
         }
-        guard let dragFileURLs, let leadingDragFileURL,
-              Set(dragFileURLs.keys) == Set(draggedFileURLKeys) else { return }
-        let remainingURLs = dragFileURLs.urls.filter { $0 != leadingDragFileURL }
-        session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
+        guard let dragFileURLs, Set(dragFileURLs.keys) == Set(draggedFileURLKeys) else { return }
+        if let leadingDragFileURL {
+            let remainingURLs = dragFileURLs.files.ready.filter { $0 != leadingDragFileURL }
+            session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
+        }
+        if dragFileURLs.files.inCloud.isEmpty == false {
+            onDragLeftOutCloudVideoFiles(dragFileURLs.files.inCloud)
+        }
     }
 
     func outlineView(
@@ -610,9 +615,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let queries = keys.compactMap(dragFileURLQuery(for:))
         guard queries.isEmpty == false else { return }
         let generation = dragFileURLRequestGeneration
-        loadAvailableFileURLs(queries) { [weak self] urls in
+        loadDraggableVideoFiles(queries) { [weak self] files in
             guard let self, generation == dragFileURLRequestGeneration else { return }
-            dragFileURLs = (keys, urls)
+            dragFileURLs = (keys, files)
         }
     }
 

@@ -108,7 +108,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
         fileURL: @escaping (VideoRecord) -> URL?,
-        loadAvailableFileURLs: @escaping ([LibraryQueryRequest], @escaping ([URL]) -> Void) -> Void,
+        loadDraggableVideoFiles: @escaping ([LibraryQueryRequest], @escaping (DraggableVideoFiles) -> Void) -> Void,
+        onDownloadCloudVideoFiles: @escaping ([URL]) -> Void,
         filePath: @escaping (VideoRecord) -> String?,
         offlineSourceName: @escaping (VideoRecord) -> String?,
         onQueryChanged: @escaping (LibraryQueryRequest, Bool) -> Void,
@@ -201,7 +202,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             scanResultsViewController: scanResults
         )
         super.init(nibName: nil, bundle: nil)
-        sidebarViewController.loadAvailableFileURLs = loadAvailableFileURLs
+        sidebarViewController.loadDraggableVideoFiles = loadDraggableVideoFiles
+        let leaveOutCloudVideoFiles: ([URL]) -> Void = { [weak self] urls in
+            onDownloadCloudVideoFiles(urls)
+            self?.videoGridViewController.showCloudVideosLeftOutOfDrag(count: urls.count)
+        }
+        sidebarViewController.onDragLeftOutCloudVideoFiles = leaveOutCloudVideoFiles
+        videoGridViewController.onDragLeftOutCloudVideoFiles = leaveOutCloudVideoFiles
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }

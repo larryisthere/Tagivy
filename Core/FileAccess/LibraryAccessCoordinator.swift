@@ -33,6 +33,23 @@ struct LibraryImportSummary: Equatable, Sendable {
     let createdFolderTagCount: Int
 }
 
+/// Video files a drag can hand to other apps. Videos still in iCloud are kept apart, because apps that
+/// read them directly wait on the download without showing it.
+struct DraggableVideoFiles: Equatable, Sendable {
+    let ready: [URL]
+    let inCloud: [URL]
+
+    init(urls: [URL], isCloudPlaceholder: (URL) -> Bool = VideoCloudReadiness.isPlaceholder(at:)) {
+        var ready: [URL] = []
+        var inCloud: [URL] = []
+        for url in urls {
+            if isCloudPlaceholder(url) { inCloud.append(url) } else { ready.append(url) }
+        }
+        self.ready = ready
+        self.inCloud = inCloud
+    }
+}
+
 struct LibraryScanNotice: Equatable, Sendable {
     let title: String
     let detail: String
@@ -1573,8 +1590,11 @@ final class LibraryAccessCoordinator {
         resolvedVideoURLs[video.id]
     }
 
-    /// File URLs of the available videos matching any of the queries, without duplicates.
-    func availableFileURLs(matching queries: [LibraryQueryRequest], completion: @escaping ([URL]) -> Void) {
+    /// Files of the available videos matching any of the queries, without duplicates.
+    func draggableVideoFiles(
+        matching queries: [LibraryQueryRequest],
+        completion: @escaping (DraggableVideoFiles) -> Void
+    ) {
         Task {
             var videoIDs = Set<String>()
             var urls: [URL] = []
@@ -1584,7 +1604,22 @@ final class LibraryAccessCoordinator {
                     if let url = fileURL(for: video) { urls.append(url) }
                 }
             }
-            completion(urls)
+            completion(DraggableVideoFiles(urls: urls))
+        }
+    }
+
+    /// Asks iCloud to download videos that were left out of a drag because they are not on this Mac yet.
+    func downloadCloudVideoFiles(_ urls: [URL]) {
+        Task.detached(priority: .utility) {
+            for url in urls {
+                do {
+                    try FileManager.default.startDownloadingUbiquitousItem(at: url)
+                } catch {
+                    AppLogger.library.error(
+                        "iCloud download request failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                    )
+                }
+            }
         }
     }
 

@@ -5297,6 +5297,58 @@
         }
       }
     },
+    "drag.cloudSkipped.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld video is still in iCloud"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld videos are still in iCloud"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 个视频还在 iCloud 中"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "drag.cloudSkipped.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left out of this drag. Downloading has started; drag again when it finishes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未包含在本次拖动中。已开始下载，完成后可再次拖出。"
+          }
+        }
+      }
+    },
     "video.result.removed" : {
       "extractionState" : "manual",
       "localizations" : {
