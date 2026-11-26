@@ -1756,7 +1756,7 @@ enum DragExportCaption {
             .font: NSFont.systemFont(ofSize: 12, weight: .medium),
             .foregroundColor: NSColor.white,
         ]
-        let symbol = NSImage(systemSymbolName: "icloud.and.arrow.down", accessibilityDescription: nil)?
+        let symbol = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 12, weight: .medium).applying(.init(paletteColors: [.white])))
         let textSize = (text as NSString).size(withAttributes: attributes)
         let symbolWidth: CGFloat = symbol == nil ? 0 : 18
