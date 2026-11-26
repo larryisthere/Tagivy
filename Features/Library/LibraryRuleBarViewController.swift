@@ -724,7 +724,12 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             guard context.tags.isEmpty == false else { return }
             condition = .tags(operator: .all, tagIDs: [])
         case "untagged":
-            condition = .untagged
+            // Nothing to choose, so it applies without an editor.
+            editorRule.conditions.append(.untagged)
+            guard hasDuplicateCondition(in: editorRule, editing: .condition(editorRule.conditions.count - 1)) == false
+            else { return }
+            mutateRule { $0 = editorRule }
+            return
         case "added":
             condition = NumericConditionKind.addedWithinDays.defaultCondition
         case "created":
@@ -783,68 +788,37 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
     ) {
         activePopover?.close()
         let editorRule = rule ?? context.rule
+        let popover = NSPopover()
         let editor = LibraryRuleEditorViewController(
             mode: mode,
             rule: editorRule,
             tags: context.tags,
-            allowsDeletion: isNew == false,
+            isNew: isNew,
             isDuplicate: { [weak self] rule in
-                guard let self else { return false }
-                return self.hasDuplicateCondition(
-                    in: rule,
-                    editing: mode
-                )
+                self?.hasDuplicateCondition(in: rule, editing: mode) ?? false
             },
-            onCommit: { [weak self] rule in
-                guard let self else { return false }
-                guard self.hasDuplicateCondition(
-                    in: rule,
-                    editing: mode
-                ) == false else {
-                    return false
-                }
-                let normalizedRule = rule.normalized()
-                guard normalizedRule != context.rule else { return true }
-                context.rule = normalizedRule
-                onRuleChanged?(context.rule)
-                return true
+            onApply: { [weak self] rule in
+                self?.applyEditedRule(rule)
             },
-            onDelete: { [weak self] in
-                guard let self else { return }
-                switch mode {
-                case let .filename(index):
-                    if context.rule.filenameContains.indices.contains(index) {
-                        context.rule.filenameContains.remove(at: index)
-                    }
-                case .requiredTags:
-                    context.rule.requiredTagIDs = []
-                case let .requiredCondition(index):
-                    if context.rule.requiredConditions.indices.contains(index) {
-                        context.rule.requiredConditions.remove(at: index)
-                    }
-                case let .condition(index):
-                    if context.rule.conditions.indices.contains(index) {
-                        context.rule.conditions.remove(at: index)
-                    }
-                case .sort:
-                    context.rule.sort = .standard
-                case .matchMode:
-                    break
-                }
-                context.rule = context.rule.normalized()
-                onRuleChanged?(context.rule)
-                activePopover?.close()
+            onClose: { [weak popover] in
+                popover?.close()
             }
         )
-        let popover = NSPopover()
         popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = editor
-        editor.onCancel = { [weak popover] in
-            popover?.close()
-        }
         activePopover = popover
         popover.show(relativeTo: view.bounds, of: view, preferredEdge: .maxY)
+        // A new condition that is complete as offered, such as a default duration, filters right away.
+        if isNew { editor.applyDraftIfValid() }
+    }
+
+    /// Edits in the popover filter the library as they happen; closing it keeps the last valid edit.
+    private func applyEditedRule(_ rule: LibraryQueryRule) {
+        let normalizedRule = rule.normalized()
+        guard normalizedRule != context.rule else { return }
+        context.rule = normalizedRule
+        onRuleChanged?(context.rule)
     }
 
     private func hasDuplicateCondition(
@@ -1204,31 +1178,29 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
     private let mode: Mode
     private var rule: LibraryQueryRule
     private let tags: [TagRecord]
-    private let allowsDeletion: Bool
+    private let isNew: Bool
     private let isDuplicate: (LibraryQueryRule) -> Bool
-    private let onCommit: (LibraryQueryRule) -> Bool
-    private let onDelete: () -> Void
+    private let onApply: (LibraryQueryRule) -> Void
+    private let onClose: () -> Void
     private weak var validationLabel: NSTextField?
-    private weak var doneButton: NSButton?
     private weak var sortDirectionPopup: NSPopUpButton?
-    var onCancel: (() -> Void)?
 
     init(
         mode: Mode,
         rule: LibraryQueryRule,
         tags: [TagRecord],
-        allowsDeletion: Bool,
+        isNew: Bool,
         isDuplicate: @escaping (LibraryQueryRule) -> Bool,
-        onCommit: @escaping (LibraryQueryRule) -> Bool,
-        onDelete: @escaping () -> Void
+        onApply: @escaping (LibraryQueryRule) -> Void,
+        onClose: @escaping () -> Void
     ) {
         self.mode = mode
         self.rule = rule
         self.tags = tags
-        self.allowsDeletion = allowsDeletion
+        self.isNew = isNew
         self.isDuplicate = isDuplicate
-        self.onCommit = onCommit
-        self.onDelete = onDelete
+        self.onApply = onApply
+        self.onClose = onClose
         super.init(nibName: nil, bundle: nil)
         preferredContentSize = NSSize(width: Self.popoverWidth, height: 1)
     }
@@ -1290,56 +1262,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         stack.addArrangedSubview(validation)
         validationLabel = validation
 
-        let actionRow = NSStackView()
-        actionRow.orientation = .horizontal
-        actionRow.alignment = .centerY
-        actionRow.spacing = 8
-        actionRow.widthAnchor.constraint(equalToConstant: Self.fieldWidth).isActive = true
-        let showsDelete: Bool
-        if case .matchMode = mode {
-            showsDelete = false
-        } else {
-            showsDelete = allowsDeletion
-        }
-        if showsDelete {
-            let delete = NSButton(
-                title: deleteTitle,
-                target: self,
-                action: #selector(deleteRule)
-            )
-            delete.bezelStyle = .roundRect
-            delete.controlSize = .regular
-            delete.font = .systemFont(ofSize: NSFont.systemFontSize)
-            actionRow.addArrangedSubview(delete)
-        }
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        actionRow.addArrangedSubview(spacer)
-        let cancel = NSButton(
-            title: String(localized: .actionCancel),
-            target: self,
-            action: #selector(cancelEditor)
-        )
-        cancel.bezelStyle = .roundRect
-        cancel.controlSize = .regular
-        cancel.font = .systemFont(ofSize: NSFont.systemFontSize)
-        cancel.keyEquivalent = "\u{1b}"
-        actionRow.addArrangedSubview(cancel)
-        let done = NSButton(
-            title: String(localized: .actionDone),
-            target: self,
-            action: #selector(commitEditor)
-        )
-        done.bezelStyle = .roundRect
-        done.controlSize = .regular
-        done.font = .systemFont(ofSize: NSFont.systemFontSize)
-        done.keyEquivalent = "\r"
-        actionRow.addArrangedSubview(done)
-        doneButton = done
-        stack.addArrangedSubview(actionRow)
-
         let validationMessage = draftValidationMessage
-        done.isEnabled = validationMessage == nil
         validation.stringValue = validationMessage ?? ""
         validation.isHidden = validationMessage == nil && reservesValidationSpace == false
         let fittedHeight = ceil(stack.fittingSize.height)
@@ -1373,13 +1296,6 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .sort:
             String(localized: "filter.editor.sort", defaultValue: "Sort Videos")
         }
-    }
-
-    private var deleteTitle: String {
-        if case .sort = mode {
-            return String(localized: "filter.sort.reset", defaultValue: "Reset to Default")
-        }
-        return String(localized: "filter.removeCondition", defaultValue: "Remove Filter")
     }
 
     private var reservesValidationSpace: Bool {
@@ -1702,8 +1618,14 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         if rebuild {
             rebuildContent()
         } else {
-            updateDoneAvailability()
+            updateValidation()
         }
+        applyDraftIfValid()
+    }
+
+    func applyDraftIfValid() {
+        guard draftValidationMessage == nil else { return }
+        onApply(rule)
     }
 
     private var draftValidationMessage: String? {
@@ -1733,7 +1655,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
                 )
             }
         case .sort:
-            if allowsDeletion == false, rule.sort == .standard {
+            if isNew, rule.sort == .standard {
                 return String(
                     localized: "filter.validation.selectSort",
                     defaultValue: "Choose a non-default sort order."
@@ -1751,9 +1673,8 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         return nil
     }
 
-    private func updateDoneAvailability() {
+    private func updateValidation() {
         let message = draftValidationMessage
-        doneButton?.isEnabled = message == nil
         validationLabel?.stringValue = message ?? ""
         validationLabel?.textColor = .secondaryLabelColor
         validationLabel?.isHidden = message == nil && reservesValidationSpace == false
@@ -1803,6 +1724,14 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         default: return
         }
         setEditedCondition(condition)
+        if case .untagged = condition {
+            // Nothing left to edit.
+            applyDraftIfValid()
+            if draftValidationMessage == nil {
+                onClose()
+                return
+            }
+        }
         draftDidChange(rebuild: true)
     }
 
@@ -1848,30 +1777,15 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         draftDidChange()
     }
 
-    @objc private func deleteRule() {
-        onDelete()
+    override func cancelOperation(_ sender: Any?) {
+        onClose()
     }
 
-    @objc private func cancelEditor() {
-        onCancel?()
-    }
-
-    @objc private func commitEditor() {
-        guard draftValidationMessage == nil else {
-            updateDoneAvailability()
-            return
-        }
-        guard onCommit(rule) else {
-            doneButton?.isEnabled = false
-            validationLabel?.stringValue = String(
-                localized: "filter.validation.duplicate",
-                defaultValue: "An identical filter condition already exists."
-            )
-            validationLabel?.textColor = .systemRed
-            validationLabel?.isHidden = false
-            return
-        }
-        onCancel?()
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard commandSelector == #selector(NSResponder.insertNewline(_:))
+            || commandSelector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+        onClose()
+        return true
     }
 }
 

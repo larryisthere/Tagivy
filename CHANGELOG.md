@@ -24,10 +24,12 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Thumbnails that load later fade in instead of appearing abruptly.
 - When resizing thumbnails changes how many fit in a row, they glide to their new positions instead of jumping.
 - When you change filters or search, thumbnails that still match glide to their new positions, ones that no longer match fade out, and new matches fade in. Large changes switch at once, and with Reduce Motion on the grid crossfades instead.
+- Changes in a filter's editor apply as you make them, so the editor no longer has Cancel, Done, or Remove buttons; press Return or Escape, or click outside it, to close it, and use the × on a filter to remove it. Untagged applies as soon as you choose it, without opening an editor.
 - Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
 
 ### Fixed
 
+- Thumbnails that were already on screen no longer flash blank when a filter change reloads the grid.
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
 - Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.

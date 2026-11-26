@@ -424,8 +424,10 @@ final class LibraryAccessCoordinator {
     private var currentFilter: LibraryFilter = .all
     private var currentSearch = ""
     private var currentRule = LibraryQueryRule.standard
+    private var currentQueryGeneration = 0
 
-    var onVideosChanged: (([VideoRecord]) -> Void)?
+    /// The videos for the current query, and the generation of the query they were fetched under.
+    var onVideosChanged: (([VideoRecord], Int) -> Void)?
     var onSidebarFilterCountsChanged: ((SidebarFilterCounts) -> Void)?
     var onFilterChangedBySystem: ((LibraryFilter) -> Void)?
     var onVideoChanged: ((VideoRecord) -> Void)?
@@ -1527,7 +1529,8 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func applyQuery(_ query: LibraryQueryRequest, debounceSearch: Bool = false) {
+    func applyQuery(_ query: LibraryQueryRequest, debounceSearch: Bool = false, generation: Int) {
+        currentQueryGeneration = generation
         if currentFilter != query.baseFilter && recoveryTask == nil { recoveryStatus.message = nil }
         currentFilter = query.baseFilter
         publishRecoveryStatus()
@@ -3486,6 +3489,7 @@ final class LibraryAccessCoordinator {
         let filter = currentFilter
         let search = currentSearch
         let rule = currentRule
+        let generation = currentQueryGeneration
         queryTask = Task {
             do {
                 if debounceNanoseconds > 0 { try await Task.sleep(nanoseconds: debounceNanoseconds) }
@@ -3502,7 +3506,8 @@ final class LibraryAccessCoordinator {
                 onVideosChanged?(
                     filter == .unavailable
                         ? orderedUnavailableVideos(videos)
-                        : videos
+                        : videos,
+                    generation
                 )
             } catch is CancellationError {
                 return
@@ -3538,6 +3543,7 @@ final class LibraryAccessCoordinator {
     private func publishVisibleVideosNow() async throws {
         queryTask?.cancel()
         let filter = currentFilter
+        let generation = currentQueryGeneration
         let records = try await database.fetchVideos(
             libraryID: LibraryRecord.primaryID,
             query: LibraryQueryRequest(
@@ -3550,7 +3556,8 @@ final class LibraryAccessCoordinator {
         onVideosChanged?(
             filter == .unavailable
                 ? orderedUnavailableVideos(videos)
-                : videos
+                : videos,
+            generation
         )
     }
 

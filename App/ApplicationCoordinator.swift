@@ -79,8 +79,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         offlineSourceName: { [weak self] video in
             self?.libraryAccessCoordinator?.offlineSourceName(for: video)
         },
-        onQueryChanged: { [weak self] query, debounceSearch in
-            self?.libraryAccessCoordinator?.applyQuery(query, debounceSearch: debounceSearch)
+        onQueryChanged: { [weak self] query, debounceSearch, generation in
+            self?.libraryAccessCoordinator?.applyQuery(query, debounceSearch: debounceSearch, generation: generation)
         },
         onCreateSmartCollection: { [weak self] name, rule, completion in
             guard let coordinator = self?.libraryAccessCoordinator else {
@@ -217,8 +217,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             self?.exportToEditor(scope, format: format)
         }
 
-        libraryAccessCoordinator?.onVideosChanged = { [weak self] videos in
-            self?.libraryViewController.setVideos(videos)
+        libraryAccessCoordinator?.onVideosChanged = { [weak self] videos, queryGeneration in
+            self?.libraryViewController.setVideos(videos, queryGeneration: queryGeneration)
         }
         libraryAccessCoordinator?.onSidebarFilterCountsChanged = { [weak self] counts in
             self?.libraryViewController.setSidebarFilterCounts(counts)

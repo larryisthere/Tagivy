@@ -64,6 +64,31 @@ enum FilterResultTransition {
         return tooMany || mostlyReplaced ? nil : plan
     }
 
+    /// Before the grid reloads, where in the new display order the screen is expected to land: the
+    /// scroll offset stays, so roughly the same positions as before (or the top, when it resets).
+    static func expectedOnScreenRange(firstOldIndex: Int, onScreenCount: Int, newCount: Int) -> Range<Int> {
+        let start = min(max(0, firstOldIndex), newCount)
+        return start..<min(newCount, start + onScreenCount)
+    }
+
+    /// Thumbnails whose views will show other videos after the reload, so they need a snapshot:
+    /// the ones leaving the result, and staying ones expected to land off screen or within `margin`
+    /// positions (about a row) of its edges.
+    static func idsExpectedToLeaveScreen(
+        oldVisibleIDs: [String],
+        newIndices: [String: Int],
+        expectedOnScreen: Range<Int>,
+        margin: Int
+    ) -> [String] {
+        // At the very top nothing can sit above the screen.
+        let lower = expectedOnScreen.lowerBound == 0 ? 0 : expectedOnScreen.lowerBound + margin
+        let safelyOnScreen = lower..<max(lower, expectedOnScreen.upperBound - margin)
+        return oldVisibleIDs.filter { id in
+            guard let index = newIndices[id] else { return true }
+            return safelyOnScreen.contains(index) == false
+        }
+    }
+
     /// Fades and shrinks a snapshot of a thumbnail that left the result, then drops it.
     @MainActor
     static func fadeOut(_ snapshot: CALayer) {
@@ -118,6 +143,25 @@ enum FilterResultTransition {
         context.scaleBy(x: scale, y: scale)
         layer.render(in: context)
         return context.makeImage()
+    }
+}
+
+/// Tells a result that answers a filter change apart from a refresh of the same filter (an import,
+/// a tag edit) that happens to arrive first or later. Each filter change gets a new generation, the
+/// library echoes the generation its result was fetched under, and only the first result shown for
+/// the latest generation counts as the filter change.
+struct FilterQueryGenerations {
+    private(set) var latest = 0
+    private var shown = 0
+
+    mutating func next() -> Int {
+        latest += 1
+        return latest
+    }
+
+    mutating func resultIsFilterChange(generation: Int) -> Bool {
+        defer { shown = max(shown, generation) }
+        return generation == latest && generation > shown
     }
 }
 

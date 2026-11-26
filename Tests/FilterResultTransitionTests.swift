@@ -73,4 +73,55 @@ final class FilterResultTransitionTests: XCTestCase {
         let arriving = ids(1...(FilterResultTransition.maxAnimatedItemsPerRole + 2))
         XCTAssertNil(FilterResultTransition.plan(oldVisibleIDs: ["v1"], newVisibleIDs: arriving, newIDs: Set(arriving)))
     }
+
+    func testOnlyTheFirstResultOfTheLatestFilterChangeAnimates() {
+        var generations = FilterQueryGenerations()
+        XCTAssertFalse(generations.resultIsFilterChange(generation: 0), "initial load")
+        let first = generations.next()
+        XCTAssertTrue(generations.resultIsFilterChange(generation: first))
+        XCTAssertFalse(generations.resultIsFilterChange(generation: first), "a later refresh of the same filter")
+    }
+
+    func testRefreshFetchedBeforeTheFilterChangeDoesNotTakeItsTransition() {
+        var generations = FilterQueryGenerations()
+        let old = generations.next()
+        XCTAssertTrue(generations.resultIsFilterChange(generation: old))
+        let current = generations.next()
+        XCTAssertFalse(generations.resultIsFilterChange(generation: old), "import refresh started under the old filter")
+        XCTAssertTrue(generations.resultIsFilterChange(generation: current))
+    }
+
+    func testSupersededFilterChangeDoesNotAnimate() {
+        var generations = FilterQueryGenerations()
+        let superseded = generations.next()
+        let latest = generations.next()
+        XCTAssertFalse(generations.resultIsFilterChange(generation: superseded))
+        XCTAssertTrue(generations.resultIsFilterChange(generation: latest))
+    }
+
+    func testExpectedScreenKeepsTheScrollPosition() {
+        XCTAssertEqual(FilterResultTransition.expectedOnScreenRange(firstOldIndex: 20, onScreenCount: 12, newCount: 100), 20..<32)
+        XCTAssertEqual(FilterResultTransition.expectedOnScreenRange(firstOldIndex: 20, onScreenCount: 12, newCount: 25), 20..<25)
+        XCTAssertEqual(FilterResultTransition.expectedOnScreenRange(firstOldIndex: 20, onScreenCount: 12, newCount: 5), 5..<5)
+    }
+
+    func testOnlyLeavingThumbnailsAreSnapshotted() {
+        let leaving = FilterResultTransition.idsExpectedToLeaveScreen(
+            oldVisibleIDs: ["gone", "top", "middle", "pushedDown"],
+            newIndices: ["top": 0, "middle": 5, "pushedDown": 40],
+            expectedOnScreen: 0..<12,
+            margin: 4
+        )
+        XCTAssertEqual(leaving, ["gone", "pushedDown"])
+    }
+
+    func testThumbnailsNearAScrolledScreenEdgeAreSnapshotted() {
+        let leaving = FilterResultTransition.idsExpectedToLeaveScreen(
+            oldVisibleIDs: ["firstRow", "middle", "lastRow"],
+            newIndices: ["firstRow": 20, "middle": 26, "lastRow": 31],
+            expectedOnScreen: 20..<32,
+            margin: 4
+        )
+        XCTAssertEqual(leaving, ["firstRow", "lastRow"])
+    }
 }
