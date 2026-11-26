@@ -79,6 +79,7 @@ final class InspectorViewController: NSViewController {
     /// and clicks within that selection leave rows where they are, so a row never moves under the pointer.
     private var tagOrderIDs: [String] = []
     private var isShowingTagList = false
+    private var tagListWasOnScreen = false
     private var tagSearchText = ""
     private var newTagPopover: NSPopover?
     private var collapsedDetailSections: Set<DetailSection> = []
@@ -295,6 +296,7 @@ final class InspectorViewController: NSViewController {
 
     private func renderSelection() {
         loadViewIfNeeded()
+        tagListWasOnScreen = isShowingTagList
         defer {
             updateTagSearchFieldVisibility()
         }
@@ -974,9 +976,9 @@ final class InspectorViewController: NSViewController {
 
     private func addTagControls() {
         guard selectedVideos.isEmpty == false else { return }
-        // Before the first load there are no check marks to show. After that, a selection change keeps
-        // the list on screen and only updates its check marks when the new states arrive.
-        guard tagStateVideoIDs.isEmpty == false else {
+        // Check marks of another selection may only stay while the list they belong to is already on
+        // screen and about to be updated; a list that appears fresh waits for its own states.
+        guard tagStateVideoIDs == selectedVideos.map(\.id) || tagListWasOnScreen else {
             addSecondaryText(String(localized: .tagLoading))
             return
         }
@@ -1049,9 +1051,9 @@ final class InspectorViewController: NSViewController {
         // A load that started before this change would bring back the old check mark.
         tagStateRequestRevision += 1
         onApplyTagDraft([], [tagID: nextState == .on], videoIDs) { [weak self] succeeded in
-            guard let self, succeeded == false, self.selectedVideos.map(\.id) == videoIDs else { return }
-            self.tagStates[tagID] = previousState
-            self.tagCheckboxes[tagID]?.state = InspectorTagList.controlState(previousState)
+            // Show what was actually saved; a captured earlier state can be stale after quick repeat clicks.
+            guard succeeded == false else { return }
+            self?.refreshTagAssignments()
         }
     }
 
