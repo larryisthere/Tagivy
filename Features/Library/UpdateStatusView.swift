@@ -78,50 +78,55 @@ final class UpdateStatusView: NSView {
 
         switch status {
         case .idle:
-            show(text: "")
+            show(.none, text: "")
         case .checking:
-            show(progress: nil, text: String(localized: .updateChecking))
+            show(.spinner, text: String(localized: .updateChecking))
         case .upToDate:
-            show(symbol: "checkmark.circle", text: String(localized: .updateUpToDate))
+            show(.symbol("checkmark.circle"), text: String(localized: .updateUpToDate))
         case .failed:
-            show(symbol: "exclamationmark.circle", text: String(localized: .updateFailed))
+            show(.symbol("exclamationmark.circle"), text: String(localized: .updateFailed))
         case let .available(version):
-            show(symbol: "arrow.down.circle", text: String(localized: .updateInstallVersion(version)), actionable: true)
+            show(.symbol("arrow.down.circle"), text: String(localized: .updateInstallVersion(version)), actionable: true)
         case let .downloading(version, fraction):
-            show(progress: fraction, text: String(localized: .updateDownloadingVersion(version)))
+            show(fraction.map(Leading.progress) ?? .spinner, text: String(localized: .updateDownloadingVersion(version)))
         case .preparing:
-            show(progress: nil, text: String(localized: .updatePreparing))
+            show(.spinner, text: String(localized: .updatePreparing))
         case let .readyToRelaunch(version):
-            show(symbol: "arrow.clockwise.circle", text: String(localized: .updateRelaunchVersion(version)), actionable: true)
+            show(.symbol("arrow.clockwise.circle"), text: String(localized: .updateRelaunchVersion(version)), actionable: true)
         case .installing:
-            show(progress: nil, text: String(localized: .updateInstalling))
+            show(.spinner, text: String(localized: .updateInstalling))
         }
     }
 
-    private func show(symbol: String? = nil, progress: Double?? = .none, text: String, actionable: Bool = false) {
+    private enum Leading {
+        case none
+        case spinner
+        case progress(Double)
+        case symbol(String)
+    }
+
+    private func show(_ leading: Leading, text: String, actionable: Bool = false) {
         label.stringValue = text
         label.textColor = actionable ? .labelColor : .secondaryLabelColor
 
-        if let symbol {
-            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        icon.isHidden = true
+        spinner.isHidden = true
+        spinner.stopAnimation(nil)
+        switch leading {
+        case .none:
+            break
+        case .spinner:
+            spinner.isIndeterminate = true
+            spinner.isHidden = false
+            spinner.startAnimation(nil)
+        case let .progress(fraction):
+            spinner.isIndeterminate = false
+            spinner.doubleValue = fraction
+            spinner.isHidden = false
+        case let .symbol(name):
+            icon.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
             icon.contentTintColor = actionable ? .controlAccentColor : .secondaryLabelColor
             icon.isHidden = false
-        } else {
-            icon.isHidden = true
-        }
-
-        if case let .some(fraction) = progress {
-            spinner.isHidden = false
-            spinner.isIndeterminate = fraction == nil
-            if let fraction {
-                spinner.stopAnimation(nil)
-                spinner.doubleValue = fraction
-            } else {
-                spinner.startAnimation(nil)
-            }
-        } else {
-            spinner.stopAnimation(nil)
-            spinner.isHidden = true
         }
 
         capsule.isActionable = actionable
