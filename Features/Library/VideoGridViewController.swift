@@ -2033,6 +2033,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
         imageTask?.cancel()
         imageRequest = UUID()
         configuredVideo = nil
