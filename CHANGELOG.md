@@ -4,6 +4,10 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+### Added
+
+- Drag one or more selected videos from the library to Finder, video editors such as Premiere Pro, or other apps to copy or import the original files. Unavailable and offline videos are left out of the drag, and dragging into Finder copies the file instead of moving it.
+
 ### Fixed
 
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.

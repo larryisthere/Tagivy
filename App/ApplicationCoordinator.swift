@@ -64,6 +64,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         onCopyPath: { [weak self] video in self?.copyPath(video) },
         onPreviewVideos: { [weak self] videos in self?.previewVideos(videos) },
         thumbnailURL: { [weak self] video in self?.libraryAccessCoordinator?.thumbnailURL(for: video) },
+        fileURL: { [weak self] video in self?.libraryAccessCoordinator?.fileURL(for: video) },
         filePath: { [weak self] video in self?.libraryAccessCoordinator?.displayPath(for: video) },
         offlineSourceName: { [weak self] video in
             self?.libraryAccessCoordinator?.offlineSourceName(for: video)

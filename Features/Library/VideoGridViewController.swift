@@ -108,6 +108,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let onPreviewVideos: ([VideoRecord]) -> Void
     var onSelectionChanged: ([VideoRecord]) -> Void
     private let thumbnailURL: (VideoRecord) -> URL?
+    private let fileURL: (VideoRecord) -> URL?
     private let onAssignTagID: (String, [String]) -> Void
     private let onCancelImport: () -> Void
     private let onImportDroppedItems: ([URL]) -> Void
@@ -144,6 +145,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         onSelectionChanged: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
+        fileURL: @escaping (VideoRecord) -> URL?,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onCancelImport: @escaping () -> Void,
         onImportDroppedItems: @escaping ([URL]) -> Void,
@@ -159,6 +161,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         self.onPreviewVideos = onPreviewVideos
         self.onSelectionChanged = onSelectionChanged
         self.thumbnailURL = thumbnailURL
+        self.fileURL = fileURL
         self.onAssignTagID = onAssignTagID
         self.onCancelImport = onCancelImport
         self.onImportDroppedItems = onImportDroppedItems
@@ -197,6 +200,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             withIdentifier: Self.groupHeaderIdentifier
         )
         collectionView.registerForDraggedTypes([SidebarViewController.tagPasteboardType])
+        // Other apps receive copies; dragging out never moves or deletes the original video.
+        collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
         collectionView.onDoubleClickItem = { [weak self] indexPath in
             self?.openVideo(at: indexPath)
         }
@@ -998,6 +1003,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         guard selectedIDs.isEmpty == false else { return nil }
         let item = NSPasteboardItem()
         item.setString(selectedIDs.joined(separator: "\n"), forType: SidebarViewController.videoPasteboardType)
+        if let video = video(at: indexPath),
+           video.availability == .available,
+           let url = fileURL(video) {
+            item.setString(url.absoluteString, forType: .fileURL)
+        }
         return item
     }
 
@@ -1665,6 +1675,10 @@ private final class VideoImportDropView: NSView {
     }
 
     private func importPlan(from sender: NSDraggingInfo) -> VideoImportPlan {
+        // Videos dragged out of the grid are already in the library.
+        if sender.draggingSource is VideoCollectionView {
+            return VideoImportPlan(acceptedRoots: [], roots: [])
+        }
         let sequenceNumber = sender.draggingSequenceNumber
         if cachedDraggingSequenceNumber == sequenceNumber, let cachedImportPlan {
             return cachedImportPlan
