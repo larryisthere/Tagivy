@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 enum TagSortMode: String, CaseIterable {
     case custom
@@ -129,6 +129,49 @@ final class TagNode {
 
     init(tag: TagRecord) {
         self.tag = tag
+    }
+}
+
+/// What the Delete key removes from the sidebar selection: tags (a selected tag's descendants go with it,
+/// so they are not listed again) or a single smart collection. Any other selection deletes nothing.
+enum SidebarDeletion: Equatable {
+    case tags([TagRecord])
+    case smartCollection(SmartCollectionRecord)
+
+    init?(selectedItems: [Any], allTags: [TagRecord]) {
+        if selectedItems.count == 1, let node = selectedItems.first as? SmartCollectionNode {
+            self = .smartCollection(node.collection)
+            return
+        }
+        let selectedTags = selectedItems.compactMap { ($0 as? TagNode)?.tag }
+        guard selectedTags.isEmpty == false, selectedTags.count == selectedItems.count else { return nil }
+        let selectedIDs = Set(selectedTags.map(\.id))
+        let parentIDs = Dictionary(allTags.map { ($0.id, $0.parentID) }, uniquingKeysWith: { first, _ in first })
+        self = .tags(selectedTags.filter { tag in
+            var ancestorID = tag.parentID
+            var visited: Set<String> = []
+            while let id = ancestorID, visited.insert(id).inserted {
+                if selectedIDs.contains(id) { return false }
+                ancestorID = parentIDs[id] ?? nil
+            }
+            return true
+        })
+    }
+}
+
+/// Delete and Command-Delete (and Forward Delete) remove the sidebar selection, as in Finder.
+enum SidebarDeleteKey {
+    static let deleteKeyCode: UInt16 = 51
+    static let forwardDeleteKeyCode: UInt16 = 117
+
+    static func matches(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        switch event.keyCode {
+        case deleteKeyCode: return modifiers.isEmpty || modifiers == [.command]
+        case forwardDeleteKeyCode: return modifiers.isEmpty
+        default: return false
+        }
     }
 }
 

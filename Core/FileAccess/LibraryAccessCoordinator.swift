@@ -153,8 +153,12 @@ private struct VideoAccessResolution: Sendable {
     let confirmedMissingLocations: [VideoLocationRecord]
 }
 
+struct TagMutationUndoID: Equatable {
+    private let value = UUID()
+}
+
 private enum LastUndoMutation {
-    case tag
+    case tag(TagMutationUndoID)
     case videoRemoval(VideoRemovalSnapshot)
 }
 
@@ -385,7 +389,10 @@ final class LibraryAccessCoordinator {
     var onRelinkingVideoChanged: ((String?) -> Void)?
     var onVideoRemovalUndoDiscarded: (() -> Void)?
     private let undoManager = UndoManager()
-    private var lastUndoMutation: LastUndoMutation?
+    private var lastUndoMutation: LastUndoMutation? {
+        didSet { onUndoHistoryChanged?() }
+    }
+    var onUndoHistoryChanged: (() -> Void)?
 
     var canUndoLastMutation: Bool {
         pendingTagMutationCount == 0 && undoManager.canUndo
@@ -1717,10 +1724,15 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func deleteTag(_ tag: TagRecord) {
-        mutateTags(actionName: String(localized: .tagActionDelete)) { database in
-            try await database.deleteTag(id: tag.id)
-        }
+    /// `onUndoable` runs once the deletion is done and can be undone with the given ID.
+    func deleteTags(_ tags: [TagRecord], onUndoable: ((TagMutationUndoID) -> Void)? = nil) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
+        mutateTags(
+            actionName: String(localized: .tagActionDelete),
+            operation: { database in try await database.deleteTags(ids: tagIDs) },
+            onUndoable: onUndoable
+        )
     }
 
     func moveTags(_ tags: [TagRecord], parentID: String?, sortOrder: Int) {
@@ -2264,7 +2276,21 @@ final class LibraryAccessCoordinator {
 
     func undoLastMutation() {
         guard canUndoLastMutation else { return }
+        let undoneTagMutation: Bool
+        if case .tag = lastUndoMutation { undoneTagMutation = true } else { undoneTagMutation = false }
         undoManager.undo()
+        if undoneTagMutation { lastUndoMutation = nil }
+    }
+
+    /// Whether undoing now would undo exactly this tag change, and nothing done after it.
+    func canUndoTagMutation(_ id: TagMutationUndoID) -> Bool {
+        guard case .tag(let lastID) = lastUndoMutation else { return false }
+        return lastID == id && undoManager.canUndo
+    }
+
+    func undoTagMutation(_ id: TagMutationUndoID) {
+        guard canUndoTagMutation(id) else { return }
+        undoLastMutation()
     }
 
     func discardVideoRemovalUndo() {
@@ -3370,7 +3396,8 @@ final class LibraryAccessCoordinator {
     private func mutateTags(
         actionName: String,
         operation: @escaping @Sendable (DatabaseStore) async throws -> Void,
-        completion: ((Bool) -> Void)? = nil
+        completion: ((Bool) -> Void)? = nil,
+        onUndoable: ((TagMutationUndoID) -> Void)? = nil
     ) {
         let database = self.database
         let previousTask = tagMutationTask
@@ -3395,7 +3422,9 @@ final class LibraryAccessCoordinator {
                         target.restoreTagState(snapshot)
                     }
                     undoManager.setActionName(actionName)
-                    lastUndoMutation = .tag
+                    let undoID = TagMutationUndoID()
+                    lastUndoMutation = .tag(undoID)
+                    onUndoable?(undoID)
                 }
             } catch {
                 completion?(false)

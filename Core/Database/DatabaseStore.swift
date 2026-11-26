@@ -2532,6 +2532,15 @@ actor DatabaseStore {
         guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
     }
 
+    func deleteTags(ids: [String]) throws {
+        try prepareIfNeeded()
+        try execute("BEGIN IMMEDIATE")
+        do {
+            for id in ids { try deleteTag(id: id) }
+            try execute("COMMIT")
+        } catch { try? execute("ROLLBACK"); throw error }
+    }
+
     func moveTag(id: String, parentID: String?, sortOrder: Int) throws {
         try moveTags(ids: [id], parentID: parentID, sortOrder: sortOrder)
     }
