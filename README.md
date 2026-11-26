@@ -8,7 +8,7 @@ English | [简体中文](README.zh-CN.md)
 
 Tagivy is a native, local-first macOS video tag manager for organizing videos across multiple folders with hierarchical tags. Your original files stay in place and remain read-only.
 
-[Download the latest release](https://github.com/larryisthere/Tagivy/releases/latest) · [Browse all releases](https://github.com/larryisthere/Tagivy/releases)
+[Download the latest release](https://github.com/larryisthere/Tagivy/releases/latest) · [Browse all releases](https://github.com/larryisthere/Tagivy/releases) · [Website](https://zhxl.me/tagivy/en/)
 
 > Tagivy supports English and Simplified Chinese and follows the language configured for the app in macOS.
 
@@ -106,7 +106,7 @@ Repeated imports are safe: the same file keeps a single library record, includin
 3. Unzip it and move `Tagivy.app` to your Applications folder.
 4. Open Tagivy and import the videos or folders you want to organize.
 
-Public release builds are Universal Apps signed with Developer ID and notarized by Apple. Each release also includes a SHA-256 checksum.
+Public release builds are Universal Apps signed with Developer ID and notarized by Apple. Each release also includes a SHA-256 checksum. Beta builds are marked as pre-releases on the [releases page](https://github.com/larryisthere/Tagivy/releases) and never replace the latest release.
 
 ### Coming from FileFacet
 
