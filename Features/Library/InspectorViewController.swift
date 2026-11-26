@@ -261,7 +261,12 @@ final class InspectorViewController: NSViewController {
 
     func refreshTagAssignments() {
         let videoIDs = selectedVideos.map(\.id)
-        guard mode == .tags, videoIDs.isEmpty == false else { return }
+        guard mode == .tags, videoIDs.isEmpty == false else {
+            // Assignments changed while Tags isn't showing them: forget the cached states so they load again.
+            tagStateRequestRevision += 1
+            tagStateVideoIDs = []
+            return
+        }
         tagStateRequestRevision += 1
         let requestRevision = tagStateRequestRevision
         loadTagStates(videoIDs) { [weak self] states in
