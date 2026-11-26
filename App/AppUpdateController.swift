@@ -125,10 +125,10 @@ final class AppUpdateController: NSObject, ObservableObject {
     /// A beta offered but not yet installing is dropped when the user stops receiving betas.
     /// One Sparkle already scheduled to install on quit cannot be withdrawn; the setting's help says so.
     private func withdrawOfferedBeta() {
-        guard offeredChannel == Self.betaChannel, installOnQuitNow == nil else { return }
-        let reply = updateFoundReply ?? readyToInstallReply
+        guard offeredChannel == Self.betaChannel, installOnQuitNow == nil,
+              let reply = updateFoundReply ?? readyToInstallReply else { return }
         resetReplies()
-        reply?(.dismiss)
+        reply(.dismiss)
         flow.dismissed(canStillRelaunch: false)
     }
 
