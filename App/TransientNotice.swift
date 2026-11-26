@@ -28,8 +28,7 @@ final class TransientNotice {
         NSLayoutConstraint.activate([
             notice.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             notice.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24),
-            notice.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
-            notice.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
+                        notice.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
         ])
         view = notice
         NSAnimationContext.runAnimationGroup { context in
@@ -75,6 +74,8 @@ final class TransientNotice {
 
 private final class TransientNoticeView: NSVisualEffectView {
     static let textWidth: CGFloat = 300
+    static let horizontalPadding: CGFloat = 16
+    static let verticalPadding: CGFloat = 14
 
     var onHoverChanged: (Bool) -> Void = { _ in }
     private let onAction: () -> Void
@@ -96,36 +97,37 @@ private final class TransientNoticeView: NSVisualEffectView {
             let detailLabel = NSTextField(wrappingLabelWithString: detail)
             detailLabel.textColor = .secondaryLabelColor
             detailLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            // Without a wrapping width the label reports a one-line height and its second line spills out.
             detailLabel.preferredMaxLayoutWidth = Self.textWidth
+            detailLabel.widthAnchor.constraint(equalToConstant: Self.textWidth).isActive = true
             texts.append(detailLabel)
         }
         let textStack = NSStackView(views: texts)
         textStack.orientation = .vertical
         textStack.alignment = .leading
         textStack.spacing = 2
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(textStack)
 
-        var views: [NSView] = [textStack]
+        var constraints = [
+            textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
+            textStack.topAnchor.constraint(equalTo: topAnchor, constant: Self.verticalPadding),
+            textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.verticalPadding),
+        ]
         if let actionTitle {
             let button = NSButton(title: actionTitle, target: self, action: #selector(performAction))
             button.bezelStyle = .push
             button.controlSize = .small
-            button.setContentHuggingPriority(.required, for: .horizontal)
-            views.append(button)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(button)
+            constraints += [
+                button.leadingAnchor.constraint(equalTo: textStack.trailingAnchor, constant: 20),
+                button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.horizontalPadding),
+                button.centerYAnchor.constraint(equalTo: centerYAnchor),
+            ]
+        } else {
+            constraints.append(textStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.horizontalPadding))
         }
-        let row = NSStackView(views: views)
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 16
-        row.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 12)
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor),
-            row.topAnchor.constraint(equalTo: topAnchor),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+        NSLayoutConstraint.activate(constraints)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(title)
