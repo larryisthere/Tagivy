@@ -86,6 +86,24 @@ def prepare_release_versions!(marketing_version)
   next_build
 end
 
+# Beta number from a lane option such as `beta:1`; nil for a regular release.
+def beta_number(options)
+  value = options[:beta].to_s.strip
+  return nil if value.empty?
+  UI.user_error!("beta 必须是正整数，例如：beta:1") unless value.match?(/\A[1-9]\d*\z/)
+  value.to_i
+end
+
+# Version label used in tags and file names, e.g. 1.0.18 or 1.0.18-beta.1.
+def release_label(beta)
+  version = release_build_settings["MARKETING_VERSION"]
+  beta ? "#{version}-beta.#{beta}" : version
+end
+
+def github_output_channel(beta)
+  beta ? "github-beta.#{beta}" : "github"
+end
+
 def release_root(channel)
   File.join(REPO_ROOT, ".build", "releases", release_identifier, channel)
 end
@@ -138,10 +156,13 @@ def release_notes_file!(output_directory)
   path
 end
 
-def package_app!(app_path, output_directory)
+def package_base_name(beta)
+  "Tagivy-#{release_label(beta)}-#{release_build_settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
+end
+
+def package_app!(app_path, output_directory, beta: nil)
   FileUtils.mkdir_p(output_directory)
-  settings = release_build_settings
-  base_name = "Tagivy-#{settings['MARKETING_VERSION']}-#{settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
+  base_name = package_base_name(beta)
   zip_path = File.join(output_directory, "#{base_name}.zip")
   checksum_path = "#{zip_path}.sha256"
   FileUtils.rm_f([zip_path, checksum_path])
@@ -213,12 +234,13 @@ def github_release_state(repository, tag)
 end
 
 # Creates a draft release, uploads assets with retries, then publishes. Safe to rerun after a failed upload.
-def publish_github_release!(output_directory)
+# Betas are published as GitHub pre-releases so they never become the latest release.
+def publish_github_release!(output_directory, beta: nil)
   repository = github_repository
-  settings = release_build_settings
-  version = settings["MARKETING_VERSION"]
-  tag = ENV.fetch("RELEASE_TAG", "v#{version}")
-  base_name = "Tagivy-#{version}-#{settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
+  version = release_build_settings["MARKETING_VERSION"]
+  tag = ENV.fetch("RELEASE_TAG", "v#{release_label(beta)}")
+  title = beta ? "Tagivy #{version} Beta #{beta}" : "Tagivy #{version}"
+  base_name = package_base_name(beta)
   zip_path = File.join(output_directory, "#{base_name}.zip")
   checksum_path = "#{zip_path}.sha256"
   [zip_path, checksum_path].each do |path|
@@ -233,10 +255,10 @@ def publish_github_release!(output_directory)
     UI.user_error!("#{tag} 已经正式发布，如需覆盖请先在 GitHub 上处理")
   when :missing
     sh(
-      "gh release create #{shell_escape(tag)} --draft " \
+      "gh release create #{shell_escape(tag)} --draft #{beta ? '--prerelease ' : ''}" \
       "--repo #{shell_escape(repository)} " \
       "--target #{shell_escape(release_commit)} " \
-      "--title #{shell_escape("Tagivy #{version}")} " \
+      "--title #{shell_escape(title)} " \
       "--notes-file #{shell_escape(notes_path)}"
     )
   else
@@ -297,14 +319,15 @@ platform :mac do
     run_tests!
   end
 
-  desc "测试通过后，使用 Developer ID 签名、公证并发布到 GitHub Releases"
-  lane :github_release do
+  desc "测试通过后，使用 Developer ID 签名、公证并发布到 GitHub Releases；beta:N 发布为 Beta 预发布版"
+  lane :github_release do |options|
+    beta = beta_number(options)
     require_clean_release_source!
     require_github_commit!(github_repository)
     release_notes_file!(release_root("github-notes-check"))
     FileUtils.rm_rf(release_root("github-notes-check"))
     run_tests!
-    output_directory = release_root("github")
+    output_directory = release_root(github_output_channel(beta))
     derived_data = File.join(REPO_ROOT, ".build", "fastlane", "github")
     built_app = File.join(derived_data, "Build", "Products", "Release", "#{PRODUCT_NAME}.app")
     output_app = File.join(output_directory, "#{DISPLAY_NAME}.app")
@@ -333,15 +356,16 @@ platform :mac do
     sh("xcrun stapler staple #{shell_escape(output_app)}")
     sh("xcrun stapler validate #{shell_escape(output_app)}")
     FileUtils.rm_f(submission_zip)
-    package_app!(output_app, output_directory)
-    publish_github_release!(output_directory)
+    package_app!(output_app, output_directory, beta: beta)
+    publish_github_release!(output_directory, beta: beta)
   end
 
   desc "上传失败后重试：复用已公证的产物，重新上传并发布到 GitHub Releases"
-  lane :github_publish do
+  lane :github_publish do |options|
+    beta = beta_number(options)
     require_clean_release_source!
     require_github_commit!(github_repository)
-    publish_github_release!(release_root("github"))
+    publish_github_release!(release_root(github_output_channel(beta)), beta: beta)
   end
 
   desc "构建并上传 Mac App Store Connect 包"

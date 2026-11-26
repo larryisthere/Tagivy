@@ -79,6 +79,19 @@ bundle exec fastlane mac github_release
 
 需要覆盖 tag 时可设置 `RELEASE_TAG`。
 
+### Beta 版
+
+给测试者的 Beta 版走同一条签名、公证流程，只是加上 `beta:<序号>`：
+
+```bash
+bundle exec fastlane mac github_release beta:1
+```
+
+- tag 为 `v<版本>-beta.<序号>`，标题为 `Tagivy <版本> Beta <序号>`，安装包名为 `Tagivy-<版本>-beta.<序号>-<构建号>-macOS-universal.zip`。
+- Release 标记为 GitHub Pre-release，不会成为 `releases/latest`，README 的下载链接仍指向正式版。
+- App 内的版本号保持纯数字（`MARKETING_VERSION`），`CHANGELOG.md` 同样需要 `## [<版本>]` 区块；可以从功能分支发布，只要提交已推到 GitHub。
+- 产物保存在 `.build/releases/<版本>-<构建号>/github-beta.<序号>/`，上传失败后用 `bundle exec fastlane mac github_publish beta:<序号>` 重试。
+
 ### 上传失败后重试
 
 公证后的产物保存在 `.build/releases/<版本>-<构建号>/github/`。若第 5 步因网络失败，无需重新构建和公证，直接执行：
