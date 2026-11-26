@@ -1629,22 +1629,28 @@ final class LibraryAccessCoordinator {
             do {
                 let libraryID = LibraryRecord.primaryID
                 let candidates: [VideoRecord]
-                let rootTagID: String?
+                let rootTagIDs: [String]
                 switch scope {
-                case let .tag(tag):
-                    rootTagID = tag.id
-                    candidates = try await database.fetchVideos(
-                        libraryID: libraryID,
-                        query: LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
-                    )
+                case let .tags(tags):
+                    rootTagIDs = tags.map(\.id)
+                    var seen = Set<String>()
+                    var matches: [VideoRecord] = []
+                    for tag in tags {
+                        let videos = try await database.fetchVideos(
+                            libraryID: libraryID,
+                            query: LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
+                        )
+                        matches += videos.filter { seen.insert($0.id).inserted }
+                    }
+                    candidates = matches
                 case let .smartCollection(collection):
-                    rootTagID = nil
+                    rootTagIDs = []
                     candidates = try await database.fetchVideos(
                         libraryID: libraryID,
                         query: LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
                     )
                 case let .videos(videos):
-                    rootTagID = nil
+                    rootTagIDs = []
                     candidates = videos
                 }
                 let tagState = try await database.captureTagState(libraryID: libraryID)
@@ -1656,7 +1662,7 @@ final class LibraryAccessCoordinator {
                 }
                 completion(NLEExportPlanBuilder.plan(
                     name: name,
-                    rootTagID: rootTagID,
+                    rootTagIDs: rootTagIDs,
                     tags: tagState.tags,
                     relations: tagState.relations,
                     videos: exportable,

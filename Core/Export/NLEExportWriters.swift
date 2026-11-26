@@ -150,8 +150,8 @@ enum FCPXMLWriter {
             }
             xml.close("asset-clip")
         }
-        if plan.mirrorsTags {
-            writeCollections(plan.root, into: &xml)
+        for bin in plan.tagBins {
+            writeCollections(bin, into: &xml)
         }
         xml.close("event")
         xml.close("library")

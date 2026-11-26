@@ -856,12 +856,24 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         mergeItem.isEnabled = mergeMenu.items.isEmpty == false
         menu.addItem(mergeItem)
         menu.addItem(.separator())
-        menu.addItem(exportToEditorItem(.tag(tag), hasVideos: tag.videoCount > 0))
+        let exportedTags: [TagRecord]
+        if let row = row(for: .tag(tag.id)), outlineView.selectedRowIndexes.contains(row) {
+            exportedTags = topLevelTags(
+                from: outlineView.selectedRowIndexes.compactMap { (outlineView.item(atRow: $0) as? TagNode)?.tag }
+            )
+        } else {
+            exportedTags = [tag]
+        }
+        menu.addItem(exportToEditorItem(
+            .tags(exportedTags),
+            hasVideos: exportedTags.contains { $0.videoCount > 0 }
+        ))
     }
 
     private func exportToEditorItem(_ scope: NLEExportScope, hasVideos: Bool) -> NSMenuItem {
         let title = switch scope {
-        case .tag: String(localized: .exportEditorMenuTag)
+        case let .tags(tags) where tags.count > 1: String(localized: .exportEditorMenuTags(tags.count))
+        case .tags: String(localized: .exportEditorMenuTag)
         case .smartCollection: String(localized: .exportEditorMenuSmartCollection)
         case .videos: String(localized: .exportEditorMenuVideos)
         }

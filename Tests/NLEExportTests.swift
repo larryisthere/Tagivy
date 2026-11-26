@@ -52,6 +52,24 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(plan.root.clipIDs, ["sunset", "waves"])
     }
 
+    func testSeveralTagsBecomeSiblingBinsAndNestedChoicesAreNotRepeated() throws {
+        let plan = makePlan(rootTagIDs: ["people", "travel", "coast"], relations: [
+            ("sunset", "coast"), ("family", "people"),
+        ])
+
+        XCTAssertEqual(plan.root.name, "导出")
+        XCTAssertEqual(plan.root.bins.map(\.name), ["旅行", "人物"], "海边 sits inside 旅行, so it is not a bin of its own")
+        XCTAssertEqual(plan.tagBins.map(\.name), ["旅行", "人物"])
+
+        let document = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
+        XCTAssertEqual(try document.nodes(forXPath: "/fcpxml/library/event/@name").first?.stringValue, "导出")
+        XCTAssertEqual(try document.nodes(forXPath: "//collection-folder/@name").map(\.stringValue), ["旅行"])
+        XCTAssertEqual(
+            try document.nodes(forXPath: "/fcpxml/library/event/keyword-collection/@name").map(\.stringValue),
+            ["人物"]
+        )
+    }
+
     func testFrameRates() {
         XCTAssertEqual(NLEFrameRate(29.97), NLEFrameRate(timebase: 30, isNTSC: true))
         XCTAssertEqual(NLEFrameRate(23.976), NLEFrameRate(timebase: 24, isNTSC: true))
@@ -119,6 +137,10 @@ final class NLEExportTests: XCTestCase {
     }
 
     private func makePlan(rootTagID: String?, relations: [(String, String)]) -> NLEExportPlan {
+        makePlan(rootTagIDs: rootTagID.map { [$0] } ?? [], relations: relations)
+    }
+
+    private func makePlan(rootTagIDs: [String], relations: [(String, String)]) -> NLEExportPlan {
         let videoIDs = relations.map(\.0).reduce(into: [String]()) { ids, id in
             if ids.contains(id) == false { ids.append(id) }
         }
@@ -129,8 +151,8 @@ final class NLEExportTests: XCTestCase {
             )
         }
         return NLEExportPlanBuilder.plan(
-            name: rootTagID.flatMap { id in tags.first { $0.id == id }?.name } ?? "导出",
-            rootTagID: rootTagID,
+            name: rootTagIDs.count == 1 ? tags.first { $0.id == rootTagIDs[0] }?.name ?? "" : "导出",
+            rootTagIDs: rootTagIDs,
             tags: tags,
             relations: relations.map { VideoTagRelation(videoID: $0.0, tagID: $0.1) },
             videos: videos,

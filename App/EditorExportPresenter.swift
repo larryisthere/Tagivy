@@ -8,8 +8,8 @@ final class EditorExportPresenter {
 
     static func defaultName(for scope: NLEExportScope) -> String {
         switch scope {
-        case let .tag(tag):
-            tag.name
+        case let .tags(tags):
+            tags.count == 1 ? tags[0].name : String(localized: .exportEditorSelectedTagsName(tags.count))
         case let .smartCollection(collection):
             collection.name
         case let .videos(videos):

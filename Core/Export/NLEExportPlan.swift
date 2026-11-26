@@ -3,7 +3,8 @@ import UniformTypeIdentifiers
 
 /// What a person chose to export to an editing app.
 enum NLEExportScope: Equatable, Sendable {
-    case tag(TagRecord)
+    /// Tags chosen together; each becomes its own bin.
+    case tags([TagRecord])
     case smartCollection(SmartCollectionRecord)
     case videos([VideoRecord])
 }
@@ -80,6 +81,8 @@ struct NLEExportPlan: Equatable, Sendable {
     let skippedCount: Int
     /// Whether the bins mirror a tag tree, or one bin holds every clip.
     let mirrorsTags: Bool
+    /// The bin of each exported tag; Final Cut Pro keyword collections are built from these.
+    let tagBins: [NLEExportBin]
 
     func clip(id: String) -> NLEExportClip? {
         clips.first { $0.id == id }
@@ -127,10 +130,10 @@ enum NLEExportPlanBuilder {
 
     /// - Parameters:
     ///   - name: Name of the outermost bin.
-    ///   - rootTagID: The exported tag; nil puts every clip in one bin.
+    ///   - rootTagIDs: The exported tags; none puts every clip in one bin.
     static func plan(
         name: String,
-        rootTagID: String?,
+        rootTagIDs: [String],
         tags: [TagRecord],
         relations: [VideoTagRelation],
         videos: [Video],
@@ -156,14 +159,21 @@ enum NLEExportPlanBuilder {
             tagIDsByVideo[videoID] = Array(Set(ids)).sorted { (treeOrder[$0] ?? .max) < (treeOrder[$1] ?? .max) }
         }
 
-        var subtreeIDs: Set<String> = []
-        if let rootTagID {
-            var pending = [rootTagID]
-            while let id = pending.popLast() {
-                subtreeIDs.insert(id)
-                pending.append(contentsOf: (childrenByParent[id] ?? []).map(\.id))
+        func subtree(_ id: String) -> Set<String> {
+            var ids: Set<String> = []
+            var pending = [id]
+            while let next = pending.popLast() {
+                ids.insert(next)
+                pending.append(contentsOf: (childrenByParent[next] ?? []).map(\.id))
             }
+            return ids
         }
+        let requestedRoots = rootTagIDs.filter { tagsByID[$0] != nil }
+        // A chosen tag inside another chosen tag already appears in that tag's bin.
+        let rootIDs = requestedRoots
+            .filter { id in requestedRoots.contains { $0 != id && subtree($0).contains(id) } == false }
+            .sorted { (treeOrder[$0] ?? .max) < (treeOrder[$1] ?? .max) }
+        let subtreeIDs = rootIDs.reduce(into: Set<String>()) { $0.formUnion(subtree($1)) }
 
         let clips = videos.map { video -> NLEExportClip in
             let record = video.record
@@ -182,12 +192,13 @@ enum NLEExportPlanBuilder {
             )
         }
 
-        guard let rootTagID, let rootTag = tagsByID[rootTagID] else {
+        guard rootIDs.isEmpty == false else {
             return NLEExportPlan(
                 root: NLEExportBin(name: name, bins: [], clipIDs: clips.map(\.id)),
                 clips: clips,
                 skippedCount: skippedCount,
-                mirrorsTags: false
+                mirrorsTags: false,
+                tagBins: []
             )
         }
 
@@ -197,13 +208,20 @@ enum NLEExportPlanBuilder {
             guard direct.isEmpty == false || children.isEmpty == false else { return nil }
             return NLEExportBin(name: tag.name, bins: children, clipIDs: direct)
         }
-        var root = bin(for: rootTag) ?? NLEExportBin(name: rootTag.name, bins: [], clipIDs: [])
-        root.name = name
+        let tagBins = rootIDs.compactMap { tagsByID[$0] }.compactMap(bin(for:))
+        var root: NLEExportBin
+        if tagBins.count == 1 {
+            root = tagBins[0]
+            root.name = name
+        } else {
+            root = NLEExportBin(name: name, bins: tagBins, clipIDs: [])
+        }
         return NLEExportPlan(
             root: root,
             clips: clips,
             skippedCount: skippedCount,
-            mirrorsTags: true
+            mirrorsTags: true,
+            tagBins: tagBins
         )
     }
 }
