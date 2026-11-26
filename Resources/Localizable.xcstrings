@@ -5486,19 +5486,53 @@
         }
       }
     },
-    "export.editor.menu" : {
+    "export.editor.menu.tag" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export to Editing App…"
+            "value" : "Export Tag…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出到剪辑软件…"
+            "value" : "导出标签…"
+          }
+        }
+      }
+    },
+    "export.editor.menu.smartCollection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Smart Filter…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出智能分类…"
+          }
+        }
+      }
+    },
+    "export.editor.menu.videos" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Videos…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出视频…"
           }
         }
       }
@@ -5589,36 +5623,19 @@
         }
       }
     },
-    "export.editor.format.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "For:"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用于："
-          }
-        }
-      }
-    },
     "export.editor.format.premiere" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro, DaVinci Resolve"
+            "value" : "For Premiere Pro, DaVinci Resolve…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro、DaVinci Resolve"
+            "value" : "用于 Premiere Pro、DaVinci Resolve…"
           }
         }
       }
@@ -5629,13 +5646,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Final Cut Pro"
+            "value" : "For Final Cut Pro…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Final Cut Pro"
+            "value" : "用于 Final Cut Pro…"
           }
         }
       }
@@ -5649,13 +5666,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld unavailable video won’t be exported."
+                  "value" : "%lld unavailable video wasn’t exported."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld unavailable videos won’t be exported."
+                  "value" : "%lld unavailable videos weren’t exported."
                 }
               }
             }
@@ -5667,7 +5684,7 @@
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld 个不可用视频不会导出。"
+                  "value" : "%lld 个不可用视频未导出。"
                 }
               }
             }

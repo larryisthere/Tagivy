@@ -45,7 +45,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         _, completion in completion(DraggableVideoFiles(urls: []))
     }
     var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
-    var onExportToEditor: (NLEExportScope) -> Void = { _ in }
+    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in }
     private var dragFileURLRequestGeneration = 0
     private var dragFileURLs: (keys: [SidebarSelectionKey], files: DraggableVideoFiles)?
     /// Rows the outline view asked pasteboard writers for in the drag that is starting.
@@ -860,19 +860,23 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private func exportToEditorItem(_ scope: NLEExportScope, hasVideos: Bool) -> NSMenuItem {
-        let item = NSMenuItem(
-            title: String(localized: .exportEditorMenu),
-            action: hasVideos ? #selector(exportToEditor(_:)) : nil,
-            keyEquivalent: ""
+        let title = switch scope {
+        case .tag: String(localized: .exportEditorMenuTag)
+        case .smartCollection: String(localized: .exportEditorMenuSmartCollection)
+        case .videos: String(localized: .exportEditorMenuVideos)
+        }
+        return EditorExportMenu.item(
+            title: title,
+            scope: scope,
+            isEnabled: hasVideos,
+            target: self,
+            action: #selector(exportToEditor(_:))
         )
-        item.target = self
-        item.representedObject = NLEExportScopeBox(scope)
-        return item
     }
 
     @objc private func exportToEditor(_ sender: NSMenuItem) {
-        guard let box = sender.representedObject as? NLEExportScopeBox else { return }
-        onExportToEditor(box.scope)
+        guard let choice = sender.representedObject as? NLEExportMenuChoice, let scope = choice.scope else { return }
+        onExportToEditor(scope, choice.format)
     }
 
     private func rebuildNodes() {

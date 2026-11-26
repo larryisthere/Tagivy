@@ -26,7 +26,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private let libraryContentViewController: LibraryContentViewController
     private let inspectorViewController: InspectorViewController
     private let sidebarViewController: SidebarViewController
-    var onExportToEditor: (NLEExportScope) -> Void = { _ in } {
+    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in } {
         didSet {
             sidebarViewController.onExportToEditor = onExportToEditor
             videoGridViewController.onExportToEditor = onExportToEditor

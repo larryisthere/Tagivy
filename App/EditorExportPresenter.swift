@@ -2,12 +2,8 @@ import AppKit
 
 /// Saves an export plan as a file that Premiere Pro, DaVinci Resolve or Final Cut Pro can import.
 @MainActor
-final class EditorExportPresenter: NSObject {
-    private static let formatDefaultsKey = "export.editor.format"
-
-    private var savePanel: NSSavePanel?
-    private var plan: NLEExportPlan?
-    private var format: NLEExportFormat = .fcp7XML
+final class EditorExportPresenter {
+    private var isPresenting = false
 
     static func defaultName(for scope: NLEExportScope) -> String {
         switch scope {
@@ -20,8 +16,10 @@ final class EditorExportPresenter: NSObject {
         }
     }
 
-    func present(_ plan: NLEExportPlan, on window: NSWindow) {
-        guard savePanel == nil else { return }
+    /// The save panel gets no accessory controls: in a sandboxed app it runs in another process,
+    /// and added controls stop responding there.
+    func present(_ plan: NLEExportPlan, format: NLEExportFormat, on window: NSWindow) {
+        guard isPresenting == false else { return }
         guard plan.clips.isEmpty == false else {
             showAlert(
                 on: window,
@@ -31,77 +29,25 @@ final class EditorExportPresenter: NSObject {
             ) { _ in }
             return
         }
-        format = UserDefaults.standard.string(forKey: Self.formatDefaultsKey)
-            .flatMap(NLEExportFormat.init(rawValue:)) ?? .fcp7XML
-        self.plan = plan
-
+        isPresenting = true
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.allowedContentTypes = [format.contentType]
         panel.nameFieldStringValue = "\(plan.root.name).\(format.fileExtension)"
-        panel.accessoryView = makeAccessoryView(skippedCount: plan.skippedCount)
-        savePanel = panel
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
-            let url = panel.url
-            self.savePanel = nil
-            guard response == .OK, let url, var plan = self.plan else {
-                self.plan = nil
-                return
-            }
-            self.plan = nil
+            self.isPresenting = false
+            guard response == .OK, let url = panel.url else { return }
+            var plan = plan
             if plan.mirrorsTags == false {
                 plan.root.name = url.deletingPathExtension().lastPathComponent
             }
-            self.write(plan, format: self.format, to: url, window: window)
+            self.write(plan, format: format, to: url, window: window)
         }
-    }
-
-    private func makeAccessoryView(skippedCount: Int) -> NSView {
-        let label = NSTextField(labelWithString: String(localized: .exportEditorFormatLabel))
-        label.alignment = .right
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        for candidate in NLEExportFormat.allCases {
-            popup.addItem(withTitle: Self.title(for: candidate))
-            popup.lastItem?.representedObject = candidate.rawValue
-        }
-        popup.selectItem(at: NLEExportFormat.allCases.firstIndex(of: format) ?? 0)
-        popup.target = self
-        popup.action = #selector(formatChanged(_:))
-
-        let row = NSStackView(views: [label, popup])
-        row.orientation = .horizontal
-        row.spacing = 8
-        var views: [NSView] = [row]
-        if skippedCount > 0 {
-            let note = NSTextField(labelWithString: String(localized: .exportEditorSkipped(skippedCount)))
-            note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            note.textColor = .secondaryLabelColor
-            views.append(note)
-        }
-        let stack = NSStackView(views: views)
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 12, left: 20, bottom: 12, right: 20)
-        stack.frame.size = stack.fittingSize
-        return stack
-    }
-
-    @objc private func formatChanged(_ sender: NSPopUpButton) {
-        guard let raw = sender.selectedItem?.representedObject as? String,
-              let newFormat = NLEExportFormat(rawValue: raw),
-              let panel = savePanel else { return }
-        format = newFormat
-        UserDefaults.standard.set(newFormat.rawValue, forKey: Self.formatDefaultsKey)
-        panel.allowedContentTypes = [newFormat.contentType]
-        let baseName = (panel.nameFieldStringValue as NSString).deletingPathExtension
-        panel.nameFieldStringValue = "\(baseName).\(newFormat.fileExtension)"
     }
 
     private func write(_ plan: NLEExportPlan, format: NLEExportFormat, to url: URL, window: NSWindow) {
-        UserDefaults.standard.set(format.rawValue, forKey: Self.formatDefaultsKey)
         Task {
             let succeeded = await Task.detached(priority: .userInitiated) { () -> Bool in
                 let data = format.data(for: plan)
@@ -130,17 +76,17 @@ final class EditorExportPresenter: NSObject {
     }
 
     private func showDone(plan: NLEExportPlan, format: NLEExportFormat, url: URL, window: NSWindow) {
-        let count = plan.clips.count
-        let hint = switch format {
-        case .fcp7XML:
-            String(localized: .exportEditorDonePremiere)
-        case .fcpXML:
-            String(localized: .exportEditorDoneFinalCut)
+        var message = switch format {
+        case .fcp7XML: String(localized: .exportEditorDonePremiere)
+        case .fcpXML: String(localized: .exportEditorDoneFinalCut)
+        }
+        if plan.skippedCount > 0 {
+            message += "\n\n" + String(localized: .exportEditorSkipped(plan.skippedCount))
         }
         showAlert(
             on: window,
-            title: String(localized: .exportEditorDoneTitle(count)),
-            message: hint,
+            title: String(localized: .exportEditorDoneTitle(plan.clips.count)),
+            message: message,
             buttons: [
                 String(localized: .exportEditorDoneClose),
                 String(localized: .exportEditorDoneReveal),
@@ -164,14 +110,5 @@ final class EditorExportPresenter: NSObject {
         alert.informativeText = message
         buttons.forEach { alert.addButton(withTitle: $0) }
         alert.beginSheetModal(for: window, completionHandler: completion)
-    }
-
-    static func title(for format: NLEExportFormat) -> String {
-        switch format {
-        case .fcp7XML:
-            String(localized: .exportEditorFormatPremiere)
-        case .fcpXML:
-            String(localized: .exportEditorFormatFinalCut)
-        }
     }
 }

@@ -212,8 +212,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         lockCoordinator.onStateChange = { [weak self] state in
             self?.render(lockState: state)
         }
-        libraryViewController.onExportToEditor = { [weak self] scope in
-            self?.exportToEditor(scope)
+        libraryViewController.onExportToEditor = { [weak self] scope, format in
+            self?.exportToEditor(scope, format: format)
         }
 
         libraryAccessCoordinator?.onVideosChanged = { [weak self] videos in
@@ -581,17 +581,17 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    private func exportToEditor(_ scope: NLEExportScope) {
+    private func exportToEditor(_ scope: NLEExportScope, format: NLEExportFormat) {
         guard lockCoordinator.state == .unlocked,
               let coordinator = libraryAccessCoordinator,
               let window = windowController.window else { return }
         let name = EditorExportPresenter.defaultName(for: scope)
         coordinator.nleExportPlan(for: scope, name: name) { [weak self] plan in
-            guard let self, let plan, plan.clips.isEmpty == false else {
+            guard let self, let plan else {
                 NSSound.beep()
                 return
             }
-            self.editorExportPresenter.present(plan, on: window)
+            self.editorExportPresenter.present(plan, format: format, on: window)
         }
     }
 

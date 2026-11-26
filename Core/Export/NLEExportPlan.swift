@@ -8,12 +8,15 @@ enum NLEExportScope: Equatable, Sendable {
     case videos([VideoRecord])
 }
 
-/// Carries a scope through `NSMenuItem.representedObject`.
-final class NLEExportScopeBox: NSObject {
-    let scope: NLEExportScope
+/// Carries an export choice through `NSMenuItem.representedObject`.
+final class NLEExportMenuChoice: NSObject {
+    /// Nil when the scope is read when the item is chosen, such as the current video selection.
+    let scope: NLEExportScope?
+    let format: NLEExportFormat
 
-    init(_ scope: NLEExportScope) {
+    init(scope: NLEExportScope?, format: NLEExportFormat) {
         self.scope = scope
+        self.format = format
     }
 }
 

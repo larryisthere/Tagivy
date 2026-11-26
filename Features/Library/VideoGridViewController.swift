@@ -138,7 +138,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var draggedSkippedIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
     var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
-    var onExportToEditor: (NLEExportScope) -> Void = { _ in }
+    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
@@ -1157,13 +1157,13 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             video: video
         ))
         menu.addItem(.separator())
-        let exportItem = NSMenuItem(
-            title: String(localized: .exportEditorMenu),
-            action: #selector(exportToEditorFromContextMenu(_:)),
-            keyEquivalent: ""
-        )
-        exportItem.target = self
-        menu.addItem(exportItem)
+        menu.addItem(EditorExportMenu.item(
+            title: String(localized: .exportEditorMenuVideos),
+            scope: nil,
+            isEnabled: true,
+            target: self,
+            action: #selector(exportToEditorFromContextMenu(_:))
+        ))
         menu.addItem(.separator())
         let selectedCount = selectedVideoIDs.count
         let removeItem = NSMenuItem(
@@ -1182,8 +1182,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
     @objc private func exportToEditorFromContextMenu(_ sender: NSMenuItem) {
         let selected = selectedVideos()
-        guard selected.isEmpty == false else { return }
-        onExportToEditor(.videos(selected))
+        guard selected.isEmpty == false, let choice = sender.representedObject as? NLEExportMenuChoice else { return }
+        onExportToEditor(.videos(selected), choice.format)
     }
 
     private func unavailableContextMenu(for selected: [VideoRecord]) -> NSMenu {
