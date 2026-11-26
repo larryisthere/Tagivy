@@ -196,6 +196,12 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertTrue(context.canSaveRuleAsSmartCollection)
     }
 
+    func testRuleBarWhitespaceOnlySearchIsNotUserCondition() {
+        let context = makeRuleBarContext(scopeTitle: "标签", temporarySearch: "  \n")
+        XCTAssertFalse(context.hasUserAddedConditions)
+        XCTAssertFalse(context.canSaveRuleAsSmartCollection)
+    }
+
     func testRuleBarUnsavableScopeKeepsSaveDisabledWithConditions() {
         var context = makeRuleBarContext(scopeTitle: "不可用", canSaveAsSmartCollection: false)
         context.rule.conditions.append(.untagged)

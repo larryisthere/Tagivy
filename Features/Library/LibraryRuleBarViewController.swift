@@ -12,7 +12,8 @@ struct LibraryRuleBarContext {
     var grouping: VideoGroupingPreference
 
     var hasUserAddedConditions: Bool {
-        temporarySearch.isEmpty == false || rule.isStandard == false
+        temporarySearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || rule.isStandard == false
     }
 
     var canSaveRuleAsSmartCollection: Bool {
