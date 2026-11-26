@@ -1,6 +1,6 @@
 # 发布流程
 
-本项目使用 Fastlane 统一读取 Xcode Release Build Settings 中的版本、构建号、Bundle ID 和 Team 配置，并按用途生成三类 Release。所有产物写入 `.build/releases/<版本>-<构建号>/`，该目录不会进入 Git。
+本项目使用 Fastlane 统一读取 Xcode Release Build Settings 中的版本、构建号、Bundle ID 和 Team 配置，并按用途生成 Release 与 Beta 包。所有产物写入 `.build/releases/<版本>-<构建号>/`，该目录不会进入 Git。
 
 ## 环境准备
 
@@ -96,6 +96,22 @@ bundle exec fastlane mac test
 ```
 
 如果当前机器尚未配置 `Developer ID Application` 与公证凭证，可以先在 GitHub 创建仅包含发布说明和源码归档的 Release。开发签名的本地 App 不应作为公开安装包上传。
+
+## Beta 测试版
+
+需要发给测试者、但还不想公开发布时使用：
+
+```bash
+bundle exec fastlane mac beta_build
+```
+
+该 lane 与 GitHub Release 使用同一套 Developer ID 签名、公证和 stapling 流程，同样要求工作区干净、当前提交已推送到 GitHub，并先运行全部测试。区别是：
+
+- 不检查 `CHANGELOG.md`，不创建 tag，也不创建任何 GitHub Release（包括 pre-release）。
+- 产物写入 `.build/releases/<版本>-<构建号>/beta/`，文件名形如 `Tagivy-1.0.18-beta-19-macOS-universal.zip`，由发布者自行发给测试者。
+- App 内的版本号保持 Apple 要求的纯数字格式，`beta` 只出现在文件名中。
+
+打 Beta 前先用 `prepare_release` 把版本设为即将发布的正式版本号并递增构建号，再提交、推送。之后正式发布同一版本时，再执行一次 `prepare_release` 递增构建号，保证测试者能被正式版覆盖升级。
 
 ## Mac App Store
 

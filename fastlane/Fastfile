@@ -138,10 +138,12 @@ def release_notes_file!(output_directory)
   path
 end
 
-def package_app!(app_path, output_directory)
+# label (e.g. "beta") is inserted between version and build number in the file name.
+def package_app!(app_path, output_directory, label: nil)
   FileUtils.mkdir_p(output_directory)
   settings = release_build_settings
-  base_name = "Tagivy-#{settings['MARKETING_VERSION']}-#{settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
+  version_part = [settings["MARKETING_VERSION"], label].compact.join("-")
+  base_name = "Tagivy-#{version_part}-#{settings['CURRENT_PROJECT_VERSION']}-macOS-universal"
   zip_path = File.join(output_directory, "#{base_name}.zip")
   checksum_path = "#{zip_path}.sha256"
   FileUtils.rm_f([zip_path, checksum_path])
@@ -186,6 +188,39 @@ def run_tests!
     "xcodebuild -project #{shell_escape(PROJECT)} -scheme #{shell_escape(SCHEME)} " \
     "-configuration Debug -derivedDataPath #{shell_escape(derived_data)} test"
   )
+end
+
+# Builds a Developer ID signed, notarized and stapled app into output_directory and returns its path.
+def build_notarized_app!(channel, output_directory)
+  derived_data = File.join(REPO_ROOT, ".build", "fastlane", channel)
+  built_app = File.join(derived_data, "Build", "Products", "Release", "#{PRODUCT_NAME}.app")
+  output_app = File.join(output_directory, "#{DISPLAY_NAME}.app")
+  identity = developer_id_identity
+
+  FileUtils.rm_rf(output_directory)
+  FileUtils.mkdir_p(output_directory)
+  sh("security find-identity -p codesigning -v | grep -F #{shell_escape(identity)}")
+  sh(
+    "xcodebuild -project #{shell_escape(PROJECT)} -scheme #{shell_escape(SCHEME)} " \
+    "-configuration Release -destination generic/platform=macOS " \
+    "-derivedDataPath #{shell_escape(derived_data)} -allowProvisioningUpdates clean build " \
+    "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=#{shell_escape(identity)} " \
+    "DEVELOPMENT_TEAM=#{shell_escape(release_build_settings['DEVELOPMENT_TEAM'])} " \
+    "CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp"
+  )
+  sh("ditto #{shell_escape(built_app)} #{shell_escape(output_app)}")
+  validate_app!(output_app, allow_development_signing: false)
+
+  submission_zip = File.join(output_directory, "notarization-submission.zip")
+  sh("ditto -c -k --sequesterRsrc --keepParent #{shell_escape(output_app)} #{shell_escape(submission_zip)}")
+  sh(
+    "xcrun notarytool submit #{shell_escape(submission_zip)} --wait " \
+    "--keychain-profile #{shell_escape(notary_profile)}"
+  )
+  sh("xcrun stapler staple #{shell_escape(output_app)}")
+  sh("xcrun stapler validate #{shell_escape(output_app)}")
+  FileUtils.rm_f(submission_zip)
+  output_app
 end
 
 def with_retries(description)
@@ -305,36 +340,19 @@ platform :mac do
     FileUtils.rm_rf(release_root("github-notes-check"))
     run_tests!
     output_directory = release_root("github")
-    derived_data = File.join(REPO_ROOT, ".build", "fastlane", "github")
-    built_app = File.join(derived_data, "Build", "Products", "Release", "#{PRODUCT_NAME}.app")
-    output_app = File.join(output_directory, "#{DISPLAY_NAME}.app")
-    identity = developer_id_identity
-
-    FileUtils.rm_rf(output_directory)
-    FileUtils.mkdir_p(output_directory)
-    sh("security find-identity -p codesigning -v | grep -F #{shell_escape(identity)}")
-    sh(
-      "xcodebuild -project #{shell_escape(PROJECT)} -scheme #{shell_escape(SCHEME)} " \
-      "-configuration Release -destination generic/platform=macOS " \
-      "-derivedDataPath #{shell_escape(derived_data)} -allowProvisioningUpdates clean build " \
-      "CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=#{shell_escape(identity)} " \
-      "DEVELOPMENT_TEAM=#{shell_escape(release_build_settings['DEVELOPMENT_TEAM'])} " \
-      "CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp"
-    )
-    sh("ditto #{shell_escape(built_app)} #{shell_escape(output_app)}")
-    validate_app!(output_app, allow_development_signing: false)
-
-    submission_zip = File.join(output_directory, "notarization-submission.zip")
-    sh("ditto -c -k --sequesterRsrc --keepParent #{shell_escape(output_app)} #{shell_escape(submission_zip)}")
-    sh(
-      "xcrun notarytool submit #{shell_escape(submission_zip)} --wait " \
-      "--keychain-profile #{shell_escape(notary_profile)}"
-    )
-    sh("xcrun stapler staple #{shell_escape(output_app)}")
-    sh("xcrun stapler validate #{shell_escape(output_app)}")
-    FileUtils.rm_f(submission_zip)
+    output_app = build_notarized_app!("github", output_directory)
     package_app!(output_app, output_directory)
     publish_github_release!(output_directory)
+  end
+
+  desc "测试通过后，构建 Developer ID 签名并公证的 Beta 包，仅生成 ZIP，不创建 GitHub Release"
+  lane :beta_build do
+    require_clean_release_source!
+    require_github_commit!(github_repository)
+    run_tests!
+    output_directory = release_root("beta")
+    output_app = build_notarized_app!("beta", output_directory)
+    package_app!(output_app, output_directory, label: "beta")
   end
 
   desc "上传失败后重试：复用已公证的产物，重新上传并发布到 GitHub Releases"
