@@ -66,7 +66,7 @@ app_target.build_configurations.each do |configuration|
   settings["CODE_SIGN_ENTITLEMENTS"] = "Config/VideoTagManager.entitlements"
   settings["CODE_SIGN_STYLE"] = "Automatic"
   settings["COMBINE_HIDPI_IMAGES"] = "YES"
-  settings["CURRENT_PROJECT_VERSION"] = "19"
+  settings["CURRENT_PROJECT_VERSION"] = "20"
   settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon"
   settings["ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME"] = "AccentColor"
   settings["ENABLE_APP_SANDBOX"] = "YES"
