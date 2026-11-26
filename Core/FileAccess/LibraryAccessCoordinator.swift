@@ -2282,14 +2282,24 @@ final class LibraryAccessCoordinator {
         if undoneTagMutation { lastUndoMutation = nil }
     }
 
-    /// Whether undoing now would undo exactly this tag change, and nothing done after it.
-    func canUndoTagMutation(_ id: TagMutationUndoID) -> Bool {
+    /// Whether this tag change is still the one the next undo would revert, possibly once queued work finishes.
+    func isLatestUndoableTagMutation(_ id: TagMutationUndoID) -> Bool {
         guard case .tag(let lastID) = lastUndoMutation else { return false }
         return lastID == id && undoManager.canUndo
     }
 
+    /// Undoes this tag change, after any tag work queued behind it, unless that work replaced it.
     func undoTagMutation(_ id: TagMutationUndoID) {
-        guard canUndoTagMutation(id) else { return }
+        guard isLatestUndoableTagMutation(id) else { return }
+        guard pendingTagMutationCount == 0 else {
+            Task { [weak self] in
+                while let self, self.pendingTagMutationCount > 0, let task = self.tagMutationTask {
+                    await task.value
+                }
+                self?.undoTagMutation(id)
+            }
+            return
+        }
         undoLastMutation()
     }
 
