@@ -755,16 +755,6 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         importStatusView.configureUndoActionOnly()
     }
 
-    func showCloudVideosLeftOutOfDrag(count: Int) {
-        loadViewIfNeeded()
-        if case .importing = importState { return }
-        importStatusView.configureFinished(
-            title: String(localized: .dragCloudSkippedTitle(count)),
-            detail: String(localized: .dragCloudSkippedDetail)
-        )
-        showImportStatus()
-    }
-
     func showVideoRemovalUndo(videoCount: Int) {
         importStatusView.configureUndo(
             title: String(localized: .videoResultRemoved(videoCount)),
@@ -1040,6 +1030,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         let cloudFiles = draggedCloudVideoFiles
         draggedCloudVideoFiles = []
         if cloudFiles.isEmpty == false {
+            CloudDragCaption.attach(count: cloudFiles.count, to: session, in: collectionView)
             onDragLeftOutCloudVideoFiles(cloudFiles)
         }
     }
@@ -1678,6 +1669,84 @@ private final class ImportStatusView: NSView {
 
     @objc private func dismissNotification() {
         onDismiss?()
+    }
+}
+
+/// Tells the user, on the image that follows the pointer, that videos still in iCloud were left out of the drag.
+@MainActor
+enum CloudDragCaption {
+    static func attach(count: Int, to session: NSDraggingSession, in view: NSView) {
+        let caption = captionImage(String(localized: .dragCloudSkippedCaption(count)))
+        var isAttached = false
+        session.enumerateDraggingItems(
+            options: [],
+            for: view,
+            classes: [NSPasteboardItem.self],
+            searchOptions: [:]
+        ) { item, _, stop in
+            guard isAttached == false else { return }
+            isAttached = true
+            stop.pointee = true
+            let frame = item.draggingFrame
+            let snapshot = view.bitmapImageRepForCachingDisplay(in: frame)
+            if let snapshot { view.cacheDisplay(in: frame, to: snapshot) }
+            let gap: CGFloat = 6
+            let size = NSSize(
+                width: max(frame.width, caption.size.width),
+                height: frame.height + gap + caption.size.height
+            )
+            let image = NSImage(size: size, flipped: false) { _ in
+                snapshot?.draw(
+                    in: NSRect(
+                        x: (size.width - frame.width) / 2,
+                        y: caption.size.height + gap,
+                        width: frame.width,
+                        height: frame.height
+                    )
+                )
+                caption.draw(at: NSPoint(x: (size.width - caption.size.width) / 2, y: 0), from: .zero, operation: .sourceOver, fraction: 1)
+                return true
+            }
+            let originY = view.isFlipped ? frame.minY : frame.maxY - size.height
+            item.setDraggingFrame(
+                NSRect(x: frame.midX - size.width / 2, y: originY, width: size.width, height: size.height),
+                contents: image
+            )
+        }
+    }
+
+    private static func captionImage(_ text: String) -> NSImage {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let symbol = NSImage(systemSymbolName: "icloud.and.arrow.down", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium).applying(.init(paletteColors: [.white])))
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        let symbolWidth: CGFloat = symbol == nil ? 0 : 18
+        let padding = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+        let size = NSSize(
+            width: ceil(padding.left + symbolWidth + textSize.width + padding.right),
+            height: ceil(padding.top + textSize.height + padding.bottom)
+        )
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor.black.withAlphaComponent(0.78).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: size.height / 2, yRadius: size.height / 2).fill()
+            if let symbol {
+                let symbolSize = symbol.size
+                symbol.draw(in: NSRect(
+                    x: padding.left,
+                    y: (size.height - symbolSize.height) / 2,
+                    width: symbolSize.width,
+                    height: symbolSize.height
+                ))
+            }
+            (text as NSString).draw(
+                at: NSPoint(x: padding.left + symbolWidth, y: padding.bottom),
+                withAttributes: attributes
+            )
+            return true
+        }
     }
 }
 

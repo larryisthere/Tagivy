@@ -579,6 +579,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
         }
         if dragFileURLs.files.inCloud.isEmpty == false {
+            CloudDragCaption.attach(count: dragFileURLs.files.inCloud.count, to: session, in: outlineView)
             onDragLeftOutCloudVideoFiles(dragFileURLs.files.inCloud)
         }
     }

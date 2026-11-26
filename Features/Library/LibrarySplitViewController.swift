@@ -203,12 +203,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         )
         super.init(nibName: nil, bundle: nil)
         sidebarViewController.loadDraggableVideoFiles = loadDraggableVideoFiles
-        let leaveOutCloudVideoFiles: ([URL]) -> Void = { [weak self] urls in
-            onDownloadCloudVideoFiles(urls)
-            self?.videoGridViewController.showCloudVideosLeftOutOfDrag(count: urls.count)
-        }
-        sidebarViewController.onDragLeftOutCloudVideoFiles = leaveOutCloudVideoFiles
-        videoGridViewController.onDragLeftOutCloudVideoFiles = leaveOutCloudVideoFiles
+        sidebarViewController.onDragLeftOutCloudVideoFiles = onDownloadCloudVideoFiles
+        videoGridViewController.onDragLeftOutCloudVideoFiles = onDownloadCloudVideoFiles
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }
