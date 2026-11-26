@@ -871,14 +871,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private func exportToEditorItem(_ scope: NLEExportScope, hasVideos: Bool) -> NSMenuItem {
-        let title = switch scope {
-        case let .tags(tags) where tags.count > 1: String(localized: .exportEditorMenuTags(tags.count))
-        case .tags: String(localized: .exportEditorMenuTag)
-        case .smartCollection: String(localized: .exportEditorMenuSmartCollection)
-        case .videos: String(localized: .exportEditorMenuVideos)
-        }
         return EditorExportMenu.item(
-            title: title,
             scope: scope,
             isEnabled: hasVideos,
             target: self,

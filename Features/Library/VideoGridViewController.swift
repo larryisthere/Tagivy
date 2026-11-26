@@ -1158,7 +1158,6 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         ))
         menu.addItem(.separator())
         menu.addItem(EditorExportMenu.item(
-            title: String(localized: .exportEditorMenuVideos),
             scope: nil,
             isEnabled: true,
             target: self,

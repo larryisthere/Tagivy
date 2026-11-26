@@ -1,11 +1,10 @@
 import AppKit
 
-/// "Export Tag ›" with one item per editing app. The format is chosen here, before the save panel
+/// "Export to Editing App ›" with one item per editing app, the same wherever the videos come from. The format is chosen here, before the save panel
 /// opens, because controls added to the sandboxed save panel do not stay in sync with it.
 @MainActor
 enum EditorExportMenu {
     static func item(
-        title: String,
         scope: NLEExportScope?,
         isEnabled: Bool,
         target: AnyObject,
@@ -20,7 +19,7 @@ enum EditorExportMenu {
             item.representedObject = NLEExportMenuChoice(scope: scope, format: format)
             submenu.addItem(item)
         }
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: String(localized: .exportEditorMenu), action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
     }

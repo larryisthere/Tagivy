@@ -5486,53 +5486,19 @@
         }
       }
     },
-    "export.editor.menu.tag" : {
+    "export.editor.menu" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Tag"
+            "value" : "Export to Editing App"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出标签"
-          }
-        }
-      }
-    },
-    "export.editor.menu.smartCollection" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export Tags"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出标签"
-          }
-        }
-      }
-    },
-    "export.editor.menu.videos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export Tags"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出标签"
+            "value" : "导出到剪辑软件"
           }
         }
       }
@@ -5612,13 +5578,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "For Premiere Pro, DaVinci Resolve…"
+            "value" : "Premiere Pro / DaVinci Resolve…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于 Premiere Pro、DaVinci Resolve…"
+            "value" : "Premiere Pro / DaVinci Resolve…"
           }
         }
       }
@@ -5629,13 +5595,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "For CapCut…"
+            "value" : "CapCut…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于剪映…"
+            "value" : "剪映…"
           }
         }
       }
@@ -5646,13 +5612,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "For Final Cut Pro…"
+            "value" : "Final Cut Pro…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于 Final Cut Pro…"
+            "value" : "Final Cut Pro…"
           }
         }
       }
@@ -5825,41 +5791,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Finder 中显示"
-          }
-        }
-      }
-    },
-    "export.editor.menu.tags" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Export %lld Tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Export %lld Tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "导出 %lld 个标签"
-                }
-              }
-            }
           }
         }
       }
