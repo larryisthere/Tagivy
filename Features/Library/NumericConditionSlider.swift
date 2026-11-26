@@ -241,7 +241,7 @@ final class NumericConditionSlider: NSView, NSTextFieldDelegate {
 
     private let kind: NumericConditionKind
     private let scale: NumericConditionScale
-    private let slider = NSSlider()
+    private let slider = DetentSlider()
     private let valueField = NSTextField()
     private(set) var value: Double
     private var lastDetent: Double?
@@ -253,14 +253,12 @@ final class NumericConditionSlider: NSView, NSTextFieldDelegate {
         self.value = value
         super.init(frame: .zero)
 
-        let cell = DetentSliderCell()
-        cell.detentPositions = scale.detentPositions
-        slider.cell = cell
+        slider.detentPositions = scale.detentPositions
         slider.minValue = 0
         slider.maxValue = 1
         slider.isContinuous = true
         slider.controlSize = .small
-        // Two marks give the slider room for ticks; the cell draws the detents instead.
+        // The two end marks reserve room below the track; the detents are drawn between them.
         slider.numberOfTickMarks = 2
         slider.tickMarkPosition = .below
         slider.allowsTickMarkValuesOnly = false
@@ -356,19 +354,26 @@ final class NumericConditionSlider: NSView, NSTextFieldDelegate {
     }
 }
 
-private final class DetentSliderCell: NSSliderCell {
-    var detentPositions: [Double] = []
+private final class DetentSlider: NSSlider {
+    var detentPositions: [Double] = [] {
+        didSet { needsDisplay = true }
+    }
 
-    override func drawTickMarks() {
-        guard numberOfTickMarks >= 2 else { return }
-        let first = rectOfTickMark(at: 0)
-        let last = rectOfTickMark(at: numberOfTickMarks - 1)
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let cell = cell as? NSSliderCell, cell.numberOfTickMarks >= 2 else { return }
+        let first = cell.rectOfTickMark(at: 0)
+        let last = cell.rectOfTickMark(at: cell.numberOfTickMarks - 1)
+        let diameter: CGFloat = 3
         NSColor.tertiaryLabelColor.setFill()
-        for position in detentPositions {
-            var mark = first
-            mark.origin.x = first.minX + (last.minX - first.minX) * position
-            mark.size.width = max(1, first.width)
-            mark.fill()
+        for position in detentPositions where position > 0.001 && position < 0.999 {
+            let centerX = first.midX + (last.midX - first.midX) * position
+            NSBezierPath(ovalIn: NSRect(
+                x: centerX - diameter / 2,
+                y: first.midY - diameter / 2,
+                width: diameter,
+                height: diameter
+            )).fill()
         }
     }
 }
