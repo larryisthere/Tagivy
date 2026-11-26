@@ -68,6 +68,7 @@ end
 # Original videos are never modified. Code that writes, moves or deletes files must be listed here,
 # and only for files the app itself owns or the user explicitly chose as a save destination.
 FILE_WRITERS = [
+  "App/EditorExportPresenter.swift", # export file at the location the user chose
   "Core/Database/DatabaseStore.swift", # library database directory
   "Core/Media/MediaProcessingService.swift" # thumbnail cache
 ].freeze
@@ -88,6 +89,21 @@ check("SwiftUI stays in lightweight auxiliary screens hosted from AppKit") do
       "Features/Settings/SettingsView.swift"
     ]
   )
+end
+
+# Alerts interrupt the user, so they are reserved for prompts that need a decision.
+# Notices that need no decision use the shared transient notice instead.
+ALERT_PRESENTERS = [
+  "App/FolderImportMethodPresenter.swift", # folder import method
+  "Core/FileAccess/LibraryAccessCoordinator.swift", # relink confirmation
+  "Features/Library/InspectorViewController.swift",
+  "Features/Library/LibrarySplitViewController.swift", # smart filter save / leave / delete
+  "Features/Library/SidebarViewController.swift", # delete tag
+  "Features/Library/VideoGridViewController.swift" # remove records
+].freeze
+
+check("NSAlert is only for prompts that need a decision; notices use the shared transient notice") do
+  offenders(/\bNSAlert\s*\(/, allowed: ALERT_PRESENTERS)
 end
 
 # Logging: public interpolations may only carry counts, codes, phases and error types,
