@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class EditorExportPresenter {
     private var isPresenting = false
+    private let notice = TransientNotice()
 
     static func defaultName(for scope: NLEExportScope) -> String {
         switch scope {
@@ -21,12 +22,11 @@ final class EditorExportPresenter {
     func present(_ plan: NLEExportPlan, format: NLEExportFormat, on window: NSWindow) {
         guard isPresenting == false else { return }
         guard plan.clips.isEmpty == false else {
-            showAlert(
-                on: window,
+            notice.show(
+                in: window,
                 title: String(localized: .exportEditorNothingTitle),
-                message: String(localized: .exportEditorNothingDetail),
-                buttons: [String(localized: .exportEditorOk)]
-            ) { _ in }
+                detail: String(localized: .exportEditorNothingDetail)
+            )
             return
         }
         isPresenting = true
@@ -76,25 +76,20 @@ final class EditorExportPresenter {
     }
 
     private func showDone(plan: NLEExportPlan, format: NLEExportFormat, url: URL, window: NSWindow) {
-        var message = switch format {
+        var detail = switch format {
         case .fcp7XML: String(localized: .exportEditorDonePremiere)
         case .fcpXML: String(localized: .exportEditorDoneFinalCut)
         }
         if plan.skippedCount > 0 {
-            message += "\n\n" + String(localized: .exportEditorSkipped(plan.skippedCount))
+            detail += " " + String(localized: .exportEditorSkipped(plan.skippedCount))
         }
-        showAlert(
-            on: window,
+        notice.show(
+            in: window,
             title: String(localized: .exportEditorDoneTitle(plan.clips.count)),
-            message: message,
-            buttons: [
-                String(localized: .exportEditorDoneClose),
-                String(localized: .exportEditorDoneReveal),
-            ]
-        ) { response in
-            if response == .alertSecondButtonReturn {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
+            detail: detail,
+            actionTitle: String(localized: .exportEditorDoneReveal)
+        ) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
         }
     }
 

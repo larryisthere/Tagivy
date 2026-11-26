@@ -5795,23 +5795,6 @@
         }
       }
     },
-    "export.editor.done.close" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成"
-          }
-        }
-      }
-    },
     "export.editor.done.reveal" : {
       "extractionState" : "manual",
       "localizations" : {

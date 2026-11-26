@@ -53,6 +53,7 @@
 		E4719172FCE5D080D5A751BA /* LibraryQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79399E5183176F7612B12A1 /* LibraryQuery.swift */; };
 		E8BCC961F2C8724F76B141E4 /* SecurityScopedResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB6000E03913CDFF89032FF /* SecurityScopedResource.swift */; };
 		F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11D00000000000000000002 /* FolderImportMethodPresenter.swift */; };
+		A0E1000000000000000000B6 /* TransientNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F6 /* TransientNotice.swift */; };
 		A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F1 /* EditorExportPresenter.swift */; };
 		F28A0932B7510114E8910211 /* SyntheticThumbnailFixture.m4v in Resources */ = {isa = PBXBuildFile; fileRef = F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */; };
 /* End PBXBuildFile section */
@@ -116,6 +117,7 @@
 		EC01ADC3215507585598FE5D /* MediaProcessingService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaProcessingService.swift; path = Media/MediaProcessingService.swift; sourceTree = "<group>"; };
 		EE8224925FB1BE4387013B4D /* VideoRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoRecord.swift; path = Database/VideoRecord.swift; sourceTree = "<group>"; };
 		F11D00000000000000000002 /* FolderImportMethodPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolderImportMethodPresenter.swift; sourceTree = "<group>"; };
+		A0E1000000000000000000F6 /* TransientNotice.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransientNotice.swift; sourceTree = "<group>"; };
 		A0E1000000000000000000F1 /* EditorExportPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EditorExportPresenter.swift; sourceTree = "<group>"; };
 		F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */ = {isa = PBXFileReference; lastKnownFileType = file; path = SyntheticThumbnailFixture.m4v; sourceTree = "<group>"; };
 		FEFBAF600C86686F674B5B51 /* DatabaseError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DatabaseError.swift; path = Database/DatabaseError.swift; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 				E90739611A6585A639F67C8B /* AppDelegate.swift */,
 				65BC78F7B6A61CB148B1483D /* ApplicationCoordinator.swift */,
 				F11D00000000000000000002 /* FolderImportMethodPresenter.swift */,
+				A0E1000000000000000000F6 /* TransientNotice.swift */,
 				A0E1000000000000000000F1 /* EditorExportPresenter.swift */,
 				932A36E631207B2E8F36909B /* MainWindowController.swift */,
 			);
@@ -367,6 +370,7 @@
 				3D9BF8338051025B82BFCA63 /* AppDelegate.swift in Sources */,
 				1C1B65FF73D4A4735CE177E8 /* ApplicationCoordinator.swift in Sources */,
 				F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */,
+				A0E1000000000000000000B6 /* TransientNotice.swift in Sources */,
 				A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */,
 				7DB2D23AF1009554B9C3BA4D /* MainWindowController.swift in Sources */,
 				D0109FDB87583764B7BF9312 /* DatabaseError.swift in Sources */,
