@@ -2,6 +2,10 @@ require "digest"
 require "fileutils"
 require "shellwords"
 require "xcodeproj"
+require "base64"
+require "json"
+require "tempfile"
+require_relative "../tool/appcast"
 
 ENV["FASTLANE_OPT_OUT_USAGE"] = "1"
 ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
@@ -25,7 +29,7 @@ def release_build_settings
       "-configuration Release -showBuildSettings",
       log: false
     )
-    keys = %w[MARKETING_VERSION CURRENT_PROJECT_VERSION DEVELOPMENT_TEAM PRODUCT_BUNDLE_IDENTIFIER]
+    keys = %w[MARKETING_VERSION CURRENT_PROJECT_VERSION DEVELOPMENT_TEAM PRODUCT_BUNDLE_IDENTIFIER MACOSX_DEPLOYMENT_TARGET]
     settings = {}
     output.each_line do |line|
       match = line.match(/^\s*(#{keys.join('|')})\s*=\s*(.*?)\s*$/)
@@ -126,6 +130,13 @@ def validate_app!(app_path, allow_development_signing:)
   UI.user_error!("App 缺少架构：#{missing_architectures.join(', ')}") unless missing_architectures.empty?
 
   sh("codesign --verify --deep --strict --verbose=2 #{shell_escape(app_path)}")
+  unless allow_development_signing
+    sparkle_code_paths(app_path).each do |path|
+      details = sh("codesign -dvvv #{shell_escape(path)} 2>&1", log: false)
+      UI.user_error!("Sparkle 组件 Team 不匹配：#{File.basename(path)}") unless details.include?("TeamIdentifier=#{settings['DEVELOPMENT_TEAM']}")
+      UI.user_error!("Sparkle 组件未启用 Hardened Runtime：#{File.basename(path)}") unless details.match?(/flags=0x10000\(runtime\)/)
+    end
+  end
   signing = sh("codesign -dvvv --entitlements - #{shell_escape(app_path)} 2>&1", log: false)
   UI.user_error!("App Team 标识不匹配") unless signing.include?("TeamIdentifier=#{settings['DEVELOPMENT_TEAM']}")
   UI.user_error!("App 未启用 Hardened Runtime") unless signing.include?("flags=0x10000(runtime)")
@@ -177,6 +188,10 @@ end
 DEFAULT_NOTARY_PROFILE = "FileFacet-Notary"
 DEFAULT_GITHUB_REPOSITORY = "larryisthere/Tagivy"
 UPLOAD_ATTEMPTS = 4
+# The app reads https://raw.githubusercontent.com/<repo>/<APPCAST_BRANCH>/<APPCAST_PATH> (SUFeedURL).
+APPCAST_BRANCH = "appcast"
+APPCAST_PATH = "appcast.xml"
+GITHUB_DERIVED_DATA = File.join(REPO_ROOT, ".build", "fastlane", "github")
 
 # Developer ID identity for the configured Team, unless DEVELOPER_ID_APPLICATION overrides it.
 def developer_id_identity
@@ -276,6 +291,113 @@ def publish_github_release!(output_directory, beta: nil)
   end
   sh("gh release edit #{shell_escape(tag)} --draft=false --repo #{shell_escape(repository)}")
   UI.success("已发布 #{tag}")
+  publish_appcast!(zip_path, tag, title, beta)
+end
+
+# Sparkle's helpers, innermost first, as they need re-signing with the app's Developer ID.
+def sparkle_code_paths(app_path)
+  framework = File.join(app_path, "Contents", "Frameworks", "Sparkle.framework")
+  UI.user_error!("App 中缺少 Sparkle.framework") unless File.directory?(framework)
+  version = File.join(framework, "Versions", "B")
+  [
+    *Dir.glob(File.join(version, "XPCServices", "*.xpc")).sort,
+    File.join(version, "Autoupdate"),
+    File.join(version, "Updater.app"),
+    framework
+  ].select { |path| File.exist?(path) }
+end
+
+def resign_sparkle!(app_path, identity)
+  sparkle_code_paths(app_path).each do |path|
+    sh(
+      "codesign --force --timestamp --options runtime --preserve-metadata=entitlements " \
+      "--sign #{shell_escape(identity)} #{shell_escape(path)}"
+    )
+  end
+  sh(
+    "codesign --force --timestamp --options runtime --preserve-metadata=entitlements,requirements,flags " \
+    "--sign #{shell_escape(identity)} #{shell_escape(app_path)}"
+  )
+end
+
+def sparkle_tool(name)
+  path = Dir.glob(File.join(GITHUB_DERIVED_DATA, "SourcePackages", "artifacts", "**", "Sparkle", "bin", name)).first
+  UI.user_error!("找不到 Sparkle 工具 #{name}，请先运行 github_release 构建") unless path
+  path
+end
+
+# EdDSA signature attributes from the private key in the login keychain (created once with Sparkle's generate_keys).
+def sparkle_signature(zip_path)
+  output = sh("#{shell_escape(sparkle_tool('sign_update'))} #{shell_escape(zip_path)}", log: false)
+  signature = output[/sparkle:edSignature="([^"]+)"/, 1]
+  length = output[/length="(\d+)"/, 1]
+  UI.user_error!("sign_update 没有返回签名") unless signature && length
+  [signature, Integer(length)]
+end
+
+def appcast_content(repository)
+  output = sh(
+    "gh api #{shell_escape("repos/#{repository}/contents/#{APPCAST_PATH}?ref=#{APPCAST_BRANCH}")} 2>/dev/null || true",
+    log: false
+  ).strip
+  return [nil, nil] if output.empty?
+
+  payload = JSON.parse(output)
+  return [nil, nil] unless payload["content"]
+
+  [Base64.decode64(payload["content"]).force_encoding("UTF-8"), payload["sha"]]
+end
+
+def gh_api_json!(path, method, body)
+  Tempfile.create(["gh-api", ".json"]) do |file|
+    file.write(JSON.generate(body))
+    file.flush
+    output = sh("gh api --method #{method} #{shell_escape(path)} --input #{shell_escape(file.path)}", log: false)
+    JSON.parse(output)
+  end
+end
+
+def write_appcast!(repository, xml, sha, message)
+  if sha
+    gh_api_json!(
+      "repos/#{repository}/contents/#{APPCAST_PATH}",
+      "PUT",
+      { message: message, content: Base64.strict_encode64(xml), sha: sha, branch: APPCAST_BRANCH }
+    )
+    return
+  end
+
+  blob = gh_api_json!("repos/#{repository}/git/blobs", "POST", { content: xml, encoding: "utf-8" })
+  tree = gh_api_json!("repos/#{repository}/git/trees", "POST", {
+    tree: [{ path: APPCAST_PATH, mode: "100644", type: "blob", sha: blob["sha"] }]
+  })
+  commit = gh_api_json!("repos/#{repository}/git/commits", "POST", { message: message, tree: tree["sha"], parents: [] })
+  gh_api_json!("repos/#{repository}/git/refs", "POST", { ref: "refs/heads/#{APPCAST_BRANCH}", sha: commit["sha"] })
+end
+
+# Runs after the GitHub release is public, so the enclosure URL already resolves when apps see it.
+def publish_appcast!(zip_path, tag, title, beta)
+  repository = github_repository
+  settings = release_build_settings
+  signature, length = sparkle_signature(zip_path)
+  item = Appcast::Item.new(
+    title: title,
+    build: Integer(settings["CURRENT_PROJECT_VERSION"]),
+    display_version: beta ? "#{settings['MARKETING_VERSION']} Beta #{beta}" : settings["MARKETING_VERSION"],
+    beta: !beta.nil?,
+    minimum_system_version: settings["MACOSX_DEPLOYMENT_TARGET"],
+    download_url: "https://github.com/#{repository}/releases/download/#{tag}/#{File.basename(zip_path)}",
+    length: length,
+    ed_signature: signature,
+    release_notes_url: "https://github.com/#{repository}/releases/tag/#{tag}",
+    published_at: Time.now
+  )
+  with_retries("更新 appcast") do
+    existing, sha = appcast_content(repository)
+    xml = Appcast.with_item(existing, item, title: DISPLAY_NAME)
+    write_appcast!(repository, xml, sha, "Add #{title} to appcast")
+  end
+  UI.success("appcast 已加入 #{title}")
 end
 
 def require_environment!(*names)
@@ -329,7 +451,7 @@ platform :mac do
     FileUtils.rm_rf(release_root("github-notes-check"))
     run_tests!
     output_directory = release_root(github_output_channel(beta))
-    derived_data = File.join(REPO_ROOT, ".build", "fastlane", "github")
+    derived_data = GITHUB_DERIVED_DATA
     built_app = File.join(derived_data, "Build", "Products", "Release", "#{PRODUCT_NAME}.app")
     output_app = File.join(output_directory, "#{DISPLAY_NAME}.app")
     identity = developer_id_identity
@@ -346,6 +468,7 @@ platform :mac do
       "CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp"
     )
     sh("ditto #{shell_escape(built_app)} #{shell_escape(output_app)}")
+    resign_sparkle!(output_app, identity)
     validate_app!(output_app, allow_development_signing: false)
 
     submission_zip = File.join(output_directory, "notarization-submission.zip")
@@ -367,6 +490,18 @@ platform :mac do
     require_clean_release_source!
     require_github_commit!(github_repository)
     publish_github_release!(release_root(github_output_channel(beta)), beta: beta)
+  end
+
+  desc "GitHub Release 已发布但 appcast 更新失败时重试：把已发布的包加入 appcast；beta:N 加入 Beta 频道"
+  lane :appcast_publish do |options|
+    beta = beta_number(options)
+    version = release_build_settings["MARKETING_VERSION"]
+    tag = ENV.fetch("RELEASE_TAG", "v#{release_label(beta)}")
+    title = beta ? "Tagivy #{version} Beta #{beta}" : "Tagivy #{version}"
+    zip_path = File.join(release_root(github_output_channel(beta)), "#{package_base_name(beta)}.zip")
+    UI.user_error!("找不到发布产物：#{zip_path}") unless File.file?(zip_path)
+    UI.user_error!("#{tag} 尚未正式发布") unless github_release_state(github_repository, tag) == :published
+    publish_appcast!(zip_path, tag, title, beta)
   end
 
   desc "构建并上传 Mac App Store Connect 包"

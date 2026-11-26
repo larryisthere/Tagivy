@@ -53,6 +53,16 @@ final class PreferencesStoreTests: XCTestCase {
         )
     }
 
+    func testBetaUpdatesDefaultOffAndPersist() {
+        let defaults = makeDefaults()
+        let store = PreferencesStore(defaults: defaults)
+        XCTAssertFalse(store.receivesBetaUpdates)
+
+        store.receivesBetaUpdates = true
+
+        XCTAssertTrue(PreferencesStore(defaults: defaults).receivesBetaUpdates)
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suiteName = "PreferencesStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

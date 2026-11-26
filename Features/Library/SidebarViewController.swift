@@ -11,6 +11,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     )
 
     private let outlineView = SidebarOutlineView()
+    private let bottomAccessory = NSStackView()
     private var tags: [TagRecord] = []
     private var smartCollections: [SmartCollectionRecord] = []
     private var filterCounts = SidebarFilterCounts.zero
@@ -122,14 +123,30 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.menu = menu
         scrollView.documentView = outlineView
 
+        bottomAccessory.orientation = .vertical
+        bottomAccessory.alignment = .width
+        bottomAccessory.spacing = 0
+        bottomAccessory.translatesAutoresizingMaskIntoConstraints = false
+        bottomAccessory.setHuggingPriority(.required, for: .vertical)
+
         container.addSubview(scrollView)
+        container.addSubview(bottomAccessory)
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAccessory.topAnchor),
+            bottomAccessory.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bottomAccessory.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bottomAccessory.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         view = container
+    }
+
+    /// Pins a view below the tag list, in the window's bottom-left corner. Hidden views take no space.
+    func setBottomAccessory(_ accessory: NSView) {
+        loadViewIfNeeded()
+        bottomAccessory.setViews([accessory], in: .top)
     }
 
     override func viewDidAppear() {

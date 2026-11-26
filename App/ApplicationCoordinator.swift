@@ -20,6 +20,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     ]
 
     private let preferencesStore: PreferencesStore
+    private let updateController: AppUpdateController
+    private let updateStatusView = UpdateStatusView()
     private let lockCoordinator: LockCoordinator
     private let databaseStore: DatabaseStore?
     private let windowController = MainWindowController()
@@ -152,6 +154,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         rootView: SettingsView(
             preferences: preferencesStore,
             navigation: settingsNavigation,
+            updates: updateController,
             setAuthenticationEnabled: { [weak self] enabled in
                 self?.setAuthenticationEnabled(enabled)
             }
@@ -183,6 +186,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     override init() {
         let preferencesStore = PreferencesStore()
         self.preferencesStore = preferencesStore
+        updateController = AppUpdateController(preferences: preferencesStore)
         lockCoordinator = LockCoordinator(
             isAuthenticationEnabled: preferencesStore.authenticationEnabled
         )
@@ -283,6 +287,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         }
 
         installMainMenu()
+        startUpdates()
         installModifierFlagsMonitor()
         quickLookCoordinator.install(in: windowController.window)
         render(lockState: lockCoordinator.state)
@@ -446,6 +451,25 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             }
             .filter { $0.isFinite && $0 >= 0 }
             .min()
+    }
+
+    private func startUpdates() {
+        libraryViewController.setSidebarBottomAccessory(updateStatusView)
+        updateStatusView.onInstall = { [weak self] in
+            self?.updateController.installUpdate()
+        }
+        updateController.onShowLibraryWindow = { [weak self] in
+            self?.showLibraryWindow()
+        }
+        updateController.onStatusChange = { [weak self] status in
+            self?.updateStatusView.render(status)
+        }
+        updateController.start()
+    }
+
+    @objc private func checkForUpdates() {
+        guard lockCoordinator.state == .unlocked else { return }
+        updateController.checkForUpdates()
     }
 
     @objc private func showSettings() {
@@ -681,6 +705,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
                 && databaseStore != nil
                 && libraryViewController.canNavigateLibraryPresets
         }
+        if menuItem.action == #selector(checkForUpdates) {
+            return lockCoordinator.state == .unlocked && updateController.canCheckForUpdates
+        }
         if menuItem.action == #selector(showSettings) || menuItem.action == #selector(showAbout) {
             return lockCoordinator.state == .unlocked
         }
@@ -709,6 +736,15 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         )
         aboutItem.target = self
         appMenu.addItem(aboutItem)
+        if AppUpdateController.isEnabledInThisBuild {
+            let checkForUpdatesItem = NSMenuItem(
+                title: String(localized: .menuCheckForUpdates),
+                action: #selector(checkForUpdates),
+                keyEquivalent: ""
+            )
+            checkForUpdatesItem.target = self
+            appMenu.addItem(checkForUpdatesItem)
+        }
         appMenu.addItem(.separator())
         let settingsItem = NSMenuItem(
             title: String(localized: .menuSettings),

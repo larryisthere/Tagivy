@@ -313,6 +313,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func makeToolbar() -> NSToolbar { libraryToolbar }
 
+    func setSidebarBottomAccessory(_ accessory: NSView) {
+        sidebarViewController.setBottomAccessory(accessory)
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         updateSplitViewToggleState()
