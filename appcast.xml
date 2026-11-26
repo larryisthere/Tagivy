@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss version='2.0' xmlns:sparkle='http://www.andymatuschak.org/xml-namespaces/sparkle'>
+  <channel>
+    <title>Tagivy</title>
+    <item>
+      <title>Tagivy 1.0.18 Beta 3</title>
+      <pubDate>Thu, 26 Nov 2026 08:47:50 -0000</pubDate>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>1.0.18 Beta 3</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:fullReleaseNotesLink>https://github.com/larryisthere/Tagivy/releases/tag/v1.0.18-beta.3</sparkle:fullReleaseNotesLink>
+      <enclosure url='https://github.com/larryisthere/Tagivy/releases/download/v1.0.18-beta.3/Tagivy-1.0.18-beta.3-21-macOS-universal.zip' length='6416957' type='application/octet-stream' sparkle:edSignature='+K4sIVdch3lCrtcU/Sbpnfz/bae0myqKPjxIdJv42ooEks/7ZxGBXgSEaGu84+Yo4P30KgDwLmcCN1+BHj8UCQ=='/>
+    </item>
+  </channel>
+</rss>
