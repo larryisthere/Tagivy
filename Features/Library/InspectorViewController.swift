@@ -196,6 +196,15 @@ final class InspectorViewController: NSViewController {
         if selectionChanged {
             closeNewTagPopover()
         }
+        // Clicking another video deselects the old one before selecting the new one. Hold the tag list
+        // through that momentary empty selection; show the empty state only if it is still empty after.
+        if videos.isEmpty, isShowingTagList, browsingContext != .scanResults, mode == .tags {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.selectedVideos.isEmpty else { return }
+                self.renderSelection()
+            }
+            return
+        }
         // The tag list does not depend on which videos are selected; only the check marks do.
         if keepsTagListAcrossSelection {
             if selectionChanged {
