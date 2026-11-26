@@ -5,7 +5,7 @@ import AppKit
 @MainActor
 enum EditorExportMenu {
     static func item(
-        scope: NLEExportScope?,
+        scope: VideoScope?,
         isEnabled: Bool,
         target: AnyObject,
         action: Selector

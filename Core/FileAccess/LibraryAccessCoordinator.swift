@@ -33,29 +33,82 @@ struct LibraryImportSummary: Equatable, Sendable {
     let createdFolderTagCount: Int
 }
 
-/// Video files a drag can hand to other apps. Videos still in iCloud are kept apart, because apps that
-/// read them directly wait on the download without showing it.
-struct DraggableVideoFiles: Equatable, Sendable {
-    let ready: [URL]
-    let inCloud: [URL]
-    /// Matching videos whose files cannot be reached, such as videos on a disconnected drive.
-    let offlineCount: Int
+/// Which videos a drag out of Tagivy or an export to an editing app is about.
+enum VideoScope: Equatable, Sendable {
+    /// Tags chosen together; an export makes each its own bin.
+    case tags([TagRecord])
+    case smartCollection(SmartCollectionRecord)
+    case videos([VideoRecord])
+}
 
-    var skippedCount: Int { inCloud.count + offlineCount }
+struct ResolvedVideo: Equatable, Sendable {
+    let record: VideoRecord
+    let url: URL
+}
 
-    init(
-        urls: [URL],
-        offlineCount: Int = 0,
-        isCloudPlaceholder: (URL) -> Bool = VideoCloudReadiness.isPlaceholder(at:)
-    ) {
-        self.offlineCount = offlineCount
-        var ready: [URL] = []
-        var inCloud: [URL] = []
-        for url in urls {
-            if isCloudPlaceholder(url) { inCloud.append(url) } else { ready.append(url) }
+/// The videos in one or more scopes that other apps can be told about, and how many could not be reached.
+/// Videos not yet downloaded from iCloud are included: downloading them is up to the app that receives them.
+struct ResolvedVideos: Equatable, Sendable {
+    let ready: [ResolvedVideo]
+    /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive
+    /// or videos the library no longer finds.
+    let skippedCount: Int
+
+    static let empty = ResolvedVideos(ready: [], skippedCount: 0)
+
+    /// Each video once, in scope order. `url` gives the file of a reachable video, nil otherwise.
+    @MainActor
+    static func resolve(
+        _ scopes: [VideoScope],
+        fetch: (LibraryQueryRequest) async throws -> [VideoRecord],
+        url: (VideoRecord) -> URL?
+    ) async throws -> ResolvedVideos {
+        var candidates: [VideoRecord] = []
+        for scope in scopes {
+            switch scope {
+            case let .tags(tags):
+                for tag in tags {
+                    candidates += try await fetch(request(LibraryQueryRule(requiredTagIDs: [tag.id])))
+                }
+            case let .smartCollection(collection):
+                candidates += try await fetch(request(collection.rule))
+            case let .videos(videos):
+                candidates += videos
+            }
         }
-        self.ready = ready
-        self.inCloud = inCloud
+        return resolve(candidates, url: url)
+    }
+
+    /// Videos the library no longer finds are listed only under Unavailable, and that query is the one that
+    /// also returns them; they belong to the scope, so they are counted as skipped instead of vanishing.
+    private static func request(_ rule: LibraryQueryRule) -> LibraryQueryRequest {
+        LibraryQueryRequest(baseFilter: .unavailable, temporaryFilenameSearch: "", rule: rule)
+    }
+
+    static func resolve(_ candidates: [VideoRecord], url: (VideoRecord) -> URL?) -> ResolvedVideos {
+        var seen = Set<String>()
+        var ready: [ResolvedVideo] = []
+        var skippedCount = 0
+        for video in candidates where seen.insert(video.id).inserted {
+            if let url = url(video) {
+                ready.append(ResolvedVideo(record: video, url: url))
+            } else {
+                skippedCount += 1
+            }
+        }
+        return ResolvedVideos(ready: ready, skippedCount: skippedCount)
+    }
+
+    /// A video's file can be handed out when it is on this Mac or in iCloud; offline and missing videos are not.
+    static func canHandOut(_ presented: VideoRecord) -> Bool {
+        switch presented.accessPresentation {
+        case .none, .cloud: true
+        case .offline, .accessNeedsVerification, .unavailable: false
+        }
+    }
+
+    static func handoutURL(for presented: VideoRecord, knownURL: URL?) -> URL? {
+        canHandOut(presented) ? knownURL : nil
     }
 }
 
@@ -145,7 +198,7 @@ private struct PendingImportSource {
 
 private struct VideoAccessResolution: Sendable {
     let resolvedURLs: [String: URL]
-    let cloudPlaceholderIDs: Set<String>
+    let cloudPlaceholderURLs: [String: URL]
     let offlineSourceNames: [String: String]
     let accessLostSourceNames: [String: String]
     let reachableSourceIDs: Set<String>
@@ -360,7 +413,7 @@ final class LibraryAccessCoordinator {
     var mediaPriorityVideoIDs: (() -> [String])?
     private var pendingMediaVideos: [String: VideoRecord] = [:]
     private var deferredMediaVideos = DeferredMediaVideos()
-    private var cloudPlaceholderIDs: Set<String> = []
+    private var cloudPlaceholderURLs: [String: URL] = [:]
     private var queryTask: Task<Void, Never>?
     private var smartCollectionTask: Task<Void, Never>?
     private var tagMutationTask: Task<Void, Never>?
@@ -601,7 +654,7 @@ final class LibraryAccessCoordinator {
                 if maintenanceReplay.takePending() { scheduleMaintenance() }
                 publishRecoveryStatus()
                 if let locations = try? await database.fetchVideoLocations() {
-                    scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: cloudPlaceholderIDs)
+                    scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: Set(cloudPlaceholderURLs.keys))
                 }
                 try? await refreshVisibleVideosNow()
                 // Recovery associates existing locations; it does not enqueue content reads.
@@ -1606,115 +1659,54 @@ final class LibraryAccessCoordinator {
         resolvedVideoURLs[video.id]
     }
 
-    /// Files of the available videos matching any of the queries, without duplicates.
-    func draggableVideoFiles(
-        matching queries: [LibraryQueryRequest],
-        completion: @escaping (DraggableVideoFiles) -> Void
-    ) {
-        Task {
-            var videoIDs = Set<String>()
-            var urls: [URL] = []
-            var offlineCount = 0
-            for query in queries {
-                let videos = (try? await database.fetchVideos(libraryID: LibraryRecord.primaryID, query: query)) ?? []
-                for video in videos where videoIDs.insert(video.id).inserted {
-                    let presented = presentedVideo(video)
-                    if presented.availability == .available, let url = fileURL(for: video) {
-                        urls.append(url)
-                    } else {
-                        offlineCount += 1
-                    }
-                }
-            }
-            completion(DraggableVideoFiles(urls: urls, offlineCount: offlineCount))
-        }
+    /// The videos in the scopes, as a drag out of Tagivy or an export to an editing app hands them over.
+    func resolveVideos(in scopes: [VideoScope]) async throws -> ResolvedVideos {
+        let database = database
+        return try await ResolvedVideos.resolve(
+            scopes,
+            fetch: { try await database.fetchVideos(libraryID: LibraryRecord.primaryID, query: $0) },
+            url: handoutURL(for:)
+        )
+    }
+
+    /// Resolves videos already loaded, such as the grid selection, without reading the library.
+    func resolveVideos(_ videos: [VideoRecord]) -> ResolvedVideos {
+        ResolvedVideos.resolve(videos, url: handoutURL(for:))
+    }
+
+    private func handoutURL(for video: VideoRecord) -> URL? {
+        ResolvedVideos.handoutURL(
+            for: presentedVideo(video),
+            knownURL: resolvedVideoURLs[video.id] ?? cloudPlaceholderURLs[video.id]
+        )
     }
 
     /// What an editing app will receive when the scope is exported, read from the library at this moment.
-    func nleExportPlan(for scope: NLEExportScope, name: String, completion: @escaping (NLEExportPlan?) -> Void) {
+    func nleExportPlan(for scope: VideoScope, name: String, completion: @escaping (NLEExportPlan?) -> Void) {
         Task {
             do {
-                let libraryID = LibraryRecord.primaryID
-                let candidates: [VideoRecord]
-                // Videos in scope that the library no longer finds are listed only under Unavailable;
-                // they are counted here so the notice says how many were left out.
-                let inScopeCount: Int
                 let grouping: NLEExportGrouping
                 switch scope {
                 case let .tags(tags):
                     grouping = .chosenTags(tags.map(\.id))
-                    var seen = Set<String>()
-                    var inScope = Set<String>()
-                    var matches: [VideoRecord] = []
-                    for tag in tags {
-                        let videos = try await database.fetchVideos(
-                            libraryID: libraryID,
-                            query: LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
-                        )
-                        matches += videos.filter { seen.insert($0.id).inserted }
-                        let includingMissing = try await database.fetchVideos(
-                            libraryID: libraryID,
-                            query: LibraryQueryRequest(
-                                baseFilter: .unavailable,
-                                temporaryFilenameSearch: "",
-                                rule: LibraryQueryRule(requiredTagIDs: [tag.id])
-                            )
-                        )
-                        inScope.formUnion(includingMissing.map(\.id))
-                    }
-                    candidates = matches
-                    inScopeCount = inScope.union(seen).count
-                case let .smartCollection(collection):
+                case .smartCollection, .videos:
                     grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
-                    candidates = try await database.fetchVideos(
-                        libraryID: libraryID,
-                        query: LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
-                    )
-                    let includingMissing = try await database.fetchVideos(
-                        libraryID: libraryID,
-                        query: LibraryQueryRequest(baseFilter: .unavailable, temporaryFilenameSearch: "", rule: collection.rule)
-                    )
-                    inScopeCount = Set(includingMissing.map(\.id)).union(candidates.map(\.id)).count
-                case let .videos(videos):
-                    grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
-                    candidates = videos
-                    inScopeCount = videos.count
                 }
-                let tagState = try await database.captureTagState(libraryID: libraryID)
-                var exportable: [NLEExportPlanBuilder.Video] = []
-                for video in candidates {
-                    if presentedVideo(video).availability == .available, let url = fileURL(for: video) {
-                        exportable.append(.init(record: video, url: url))
-                    }
-                }
+                let videos = try await resolveVideos(in: [scope])
+                let tagState = try await database.captureTagState(libraryID: LibraryRecord.primaryID)
                 completion(NLEExportPlanBuilder.plan(
                     name: name,
                     grouping: grouping,
                     tags: tagState.tags,
                     relations: tagState.relations,
-                    videos: exportable,
-                    skippedCount: inScopeCount - exportable.count
+                    videos: videos.ready,
+                    skippedCount: videos.skippedCount
                 ))
             } catch {
                 AppLogger.library.error(
                     "Export plan failed with category: \(String(describing: type(of: error)), privacy: .public)"
                 )
                 completion(nil)
-            }
-        }
-    }
-
-    /// Asks iCloud to download videos that were left out of a drag because they are not on this Mac yet.
-    func downloadCloudVideoFiles(_ urls: [URL]) {
-        Task.detached(priority: .utility) {
-            for url in urls {
-                do {
-                    try FileManager.default.startDownloadingUbiquitousItem(at: url)
-                } catch {
-                    AppLogger.library.error(
-                        "iCloud download request failed with category: \(String(describing: type(of: error)), privacy: .public)"
-                    )
-                }
             }
         }
     }
@@ -1952,7 +1944,7 @@ final class LibraryAccessCoordinator {
                 let allowAvailableRecord = RelocationRelinkEligibility.allowsAvailableRecord(
                     reason: video.unavailableReason,
                     hasRuntimeConflict: relocationConflictVideoIDs.contains(video.id),
-                    hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderIDs.contains(video.id)
+                    hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderURLs[video.id] != nil
                 )
                 if let existingVideoID = try await database.existingRelinkVideoID(
                     id: video.id,
@@ -2055,7 +2047,7 @@ final class LibraryAccessCoordinator {
                     allowAvailableRecord: allowAvailableRecord && RelocationRelinkEligibility.allowsAvailableRecord(
                         reason: video.unavailableReason,
                         hasRuntimeConflict: relocationConflictVideoIDs.contains(video.id),
-                        hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderIDs.contains(video.id)
+                        hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderURLs[video.id] != nil
                     ),
                     allowContentMismatch: allowContentMismatch
                 )
@@ -2597,7 +2589,7 @@ final class LibraryAccessCoordinator {
 
     private func restoreAccessibleProtectedVideos() async throws {
         let locations = try await database.fetchVideoLocations(includeUnavailable: true)
-        var restoredIDs = Set(resolvedVideoURLs.keys).union(cloudPlaceholderIDs)
+        var restoredIDs = Set(resolvedVideoURLs.keys).union(cloudPlaceholderURLs.keys)
         // Only previously lost positions are checked. Healthy positions keep normal startup behavior.
         for location in locations where location.requiresRecoveryVerification {
             try Task.checkCancellation()
@@ -2934,10 +2926,10 @@ final class LibraryAccessCoordinator {
         try await database.confirmMissingLocations(resolution.confirmedMissingLocations)
         try Task.checkCancellation()
         resolvedVideoURLs = resolution.resolvedURLs
-        cloudPlaceholderIDs = resolution.cloudPlaceholderIDs
+        cloudPlaceholderURLs = resolution.cloudPlaceholderURLs
         relocationConflictVideoIDs = Set(locations.compactMap { location in
             guard resolution.resolvedURLs[location.videoID] == nil,
-                  !resolution.cloudPlaceholderIDs.contains(location.videoID),
+                  resolution.cloudPlaceholderURLs[location.videoID] == nil,
                   let path = location.lastKnownPath,
                   conflicts.contains(location.sourceID + "|" + path) else { return nil }
             return location.videoID
@@ -2953,7 +2945,7 @@ final class LibraryAccessCoordinator {
         accessLostSourceNameByVideoID = resolution.accessLostSourceNames
         reachableSourceIDs = resolution.reachableSourceIDs
         if recoveryTask == nil {
-            scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: cloudPlaceholderIDs)
+            scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: Set(cloudPlaceholderURLs.keys))
             drainReadyDeferredMedia()
         }
     }
@@ -3123,10 +3115,14 @@ final class LibraryAccessCoordinator {
         }
         return VideoAccessResolution(
             resolvedURLs: resolvedURLs,
-            cloudPlaceholderIDs: Set(cloudURLs.compactMap { id, urls in
-                if let resolved = resolvedURLs[id], !urls.contains(resolved.standardizedFileURL) { return nil }
-                return id
-            }),
+            cloudPlaceholderURLs: cloudURLs.reduce(into: [:]) { placeholders, entry in
+                let (id, urls) = entry
+                if let resolved = resolvedURLs[id] {
+                    if urls.contains(resolved.standardizedFileURL) { placeholders[id] = resolved }
+                } else if let url = urls.min(by: { $0.path < $1.path }) {
+                    placeholders[id] = url
+                }
+            },
             offlineSourceNames: offlineSourceNames,
             accessLostSourceNames: accessLostSourceNames,
             reachableSourceIDs: reachableSourceIDs,
@@ -3601,7 +3597,7 @@ final class LibraryAccessCoordinator {
     }
 
     private func presentedVideo(_ video: VideoRecord) -> VideoRecord {
-        let cloud = cloudPlaceholderIDs.contains(video.id)
+        let cloud = cloudPlaceholderURLs[video.id] != nil
         if !cloud, relocationConflictVideoIDs.contains(video.id) {
             return video.withAvailability(.unavailable, unavailableReason: .missingFromKnownLocation)
         }

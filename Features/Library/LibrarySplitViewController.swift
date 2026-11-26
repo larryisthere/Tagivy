@@ -26,7 +26,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private let libraryContentViewController: LibraryContentViewController
     private let inspectorViewController: InspectorViewController
     private let sidebarViewController: SidebarViewController
-    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in } {
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in } {
         didSet {
             sidebarViewController.onExportToEditor = onExportToEditor
             videoGridViewController.onExportToEditor = onExportToEditor
@@ -111,9 +111,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onCopyPath: @escaping (VideoRecord) -> Void,
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
-        fileURL: @escaping (VideoRecord) -> URL?,
-        loadDraggableVideoFiles: @escaping ([LibraryQueryRequest], @escaping (DraggableVideoFiles) -> Void) -> Void,
-        onDownloadCloudVideoFiles: @escaping ([URL]) -> Void,
+        resolveVideos: @escaping ([VideoRecord]) -> ResolvedVideos,
+        resolveVideosInScopes: @escaping @MainActor ([VideoScope]) async -> ResolvedVideos,
         filePath: @escaping (VideoRecord) -> String?,
         offlineSourceName: @escaping (VideoRecord) -> String?,
         onQueryChanged: @escaping (LibraryQueryRequest, Bool) -> Void,
@@ -182,7 +181,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             onPreviewVideos: onPreviewVideos,
             onSelectionChanged: { [weak inspector] videos in inspector?.setSelection(videos) },
             thumbnailURL: thumbnailURL,
-            fileURL: fileURL,
+            resolveVideos: resolveVideos,
             onAssignTagID: onAssignTagID,
             onCancelImport: onCancelImport,
             onImportDroppedItems: onImportDroppedItems,
@@ -198,9 +197,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             scanResultsViewController: scanResults
         )
         super.init(nibName: nil, bundle: nil)
-        sidebarViewController.loadDraggableVideoFiles = loadDraggableVideoFiles
-        sidebarViewController.onDragLeftOutCloudVideoFiles = onDownloadCloudVideoFiles
-        videoGridViewController.onDragLeftOutCloudVideoFiles = onDownloadCloudVideoFiles
+        sidebarViewController.resolveVideosInScopes = resolveVideosInScopes
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }

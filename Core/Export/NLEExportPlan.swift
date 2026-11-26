@@ -1,21 +1,13 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// What a person chose to export to an editing app.
-enum NLEExportScope: Equatable, Sendable {
-    /// Tags chosen together; each becomes its own bin.
-    case tags([TagRecord])
-    case smartCollection(SmartCollectionRecord)
-    case videos([VideoRecord])
-}
-
 /// Carries an export choice through `NSMenuItem.representedObject`.
 final class NLEExportMenuChoice: NSObject {
     /// Nil when the scope is read when the item is chosen, such as the current video selection.
-    let scope: NLEExportScope?
+    let scope: VideoScope?
     let format: NLEExportFormat
 
-    init(scope: NLEExportScope?, format: NLEExportFormat) {
+    init(scope: VideoScope?, format: NLEExportFormat) {
         self.scope = scope
         self.format = format
     }
@@ -137,18 +129,13 @@ enum NLEExportGrouping: Equatable, Sendable {
 }
 
 enum NLEExportPlanBuilder {
-    struct Video: Sendable {
-        let record: VideoRecord
-        let url: URL
-    }
-
     /// - Parameter name: Name of the outermost bin.
     static func plan(
         name: String,
         grouping: NLEExportGrouping,
         tags: [TagRecord],
         relations: [VideoTagRelation],
-        videos: [Video],
+        videos: [ResolvedVideo],
         skippedCount: Int
     ) -> NLEExportPlan {
         let childrenByParent = Dictionary(grouping: tags, by: \.parentID)

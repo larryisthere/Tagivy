@@ -108,7 +108,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let onPreviewVideos: ([VideoRecord]) -> Void
     var onSelectionChanged: ([VideoRecord]) -> Void
     private let thumbnailURL: (VideoRecord) -> URL?
-    private let fileURL: (VideoRecord) -> URL?
+    private let resolveVideos: ([VideoRecord]) -> ResolvedVideos
     private let onAssignTagID: (String, [String]) -> Void
     private let onCancelImport: () -> Void
     private let onImportDroppedItems: ([URL]) -> Void
@@ -133,12 +133,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var selectionGestureMode: SelectionGestureMode = .replacing
     private var isSynchronizingSelection = false
     private var draggedItemViews: [VideoCollectionItemView] = []
-    private var draggedCloudVideoFiles: [URL] = []
     private var draggedExportIndexPaths = Set<IndexPath>()
     private var draggedSkippedIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
-    var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
-    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in }
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
@@ -152,7 +150,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         onSelectionChanged: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
-        fileURL: @escaping (VideoRecord) -> URL?,
+        resolveVideos: @escaping ([VideoRecord]) -> ResolvedVideos,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onCancelImport: @escaping () -> Void,
         onImportDroppedItems: @escaping ([URL]) -> Void,
@@ -168,7 +166,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         self.onPreviewVideos = onPreviewVideos
         self.onSelectionChanged = onSelectionChanged
         self.thumbnailURL = thumbnailURL
-        self.fileURL = fileURL
+        self.resolveVideos = resolveVideos
         self.onAssignTagID = onAssignTagID
         self.onCancelImport = onCancelImport
         self.onImportDroppedItems = onImportDroppedItems
@@ -1016,17 +1014,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
         let item = NSPasteboardItem()
         item.setString(selectedIDs.joined(separator: "\n"), forType: SidebarViewController.videoPasteboardType)
-        if let video = video(at: indexPath),
-           video.availability == .available,
-           let url = fileURL(video) {
-            let files = DraggableVideoFiles(urls: [url])
-            if files.ready.isEmpty == false {
-                item.setString(url.absoluteString, forType: .fileURL)
-                draggedExportIndexPaths.insert(indexPath)
-            } else {
-                draggedSkippedIndexPaths.insert(indexPath)
-                if draggedCloudVideoFiles.contains(url) == false { draggedCloudVideoFiles.append(url) }
-            }
+        if let video = video(at: indexPath), let resolved = resolveVideos([video]).ready.first {
+            item.setString(resolved.url.absoluteString, forType: .fileURL)
+            draggedExportIndexPaths.insert(indexPath)
         } else {
             draggedSkippedIndexPaths.insert(indexPath)
         }
@@ -1060,15 +1050,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         endedAt screenPoint: NSPoint,
         dragOperation operation: NSDragOperation
     ) {
-        let cloudFiles = draggedCloudVideoFiles
-        draggedCloudVideoFiles = []
         draggedExportIndexPaths = []
         draggedSkippedIndexPaths = []
         dragExportCaption?.stop()
         dragExportCaption = nil
-        if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
-            onDragLeftOutCloudVideoFiles(cloudFiles)
-        }
         let views = draggedItemViews
         draggedItemViews = []
         // The collection view restores the source items right after this call, so release them on the next turn.
@@ -1136,7 +1121,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
         let selected = selectedVideos()
         if selected.isEmpty == false,
-           selected.allSatisfy({ $0.availability != .available }) {
+           selected.contains(where: ResolvedVideos.canHandOut) == false {
             return unavailableContextMenu(for: selected)
         }
         let menu = NSMenu()
@@ -1714,7 +1699,7 @@ private final class ImportStatusView: NSView {
 }
 
 /// Tells the user, on the image that follows the pointer, how many videos the drag exports and, if any,
-/// how many it leaves out because they are not downloaded from iCloud or are offline.
+/// how many it leaves out because their files cannot be reached.
 @MainActor
 final class DragExportCaption: NSObject {
     private let text: String
@@ -1734,12 +1719,12 @@ final class DragExportCaption: NSObject {
             )
         } else if exportCount == 0 {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all left out"),
+                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all unavailable"),
                 skippedCount
             )
         } else {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
+                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out unavailable videos"),
                 exportCount,
                 skippedCount
             )
@@ -1759,7 +1744,7 @@ final class DragExportCaption: NSObject {
     }
 
     @objc private func update() {
-        let shouldShow = Self.endedOutsideApp(at: NSEvent.mouseLocation)
+        let shouldShow = Self.isOutsideApp(NSEvent.mouseLocation)
         guard shouldShow != isShown, let session, let view else { return }
         isShown = shouldShow
         let caption = shouldShow ? Self.captionImage(text) : nil
@@ -1811,9 +1796,7 @@ final class DragExportCaption: NSObject {
         }
     }
 
-    /// Videos left out of a drag are downloaded only when the drag was taken to another app,
-    /// not when it was cancelled or dropped back onto Tagivy.
-    static func endedOutsideApp(at screenPoint: NSPoint) -> Bool {
+    private static func isOutsideApp(_ screenPoint: NSPoint) -> Bool {
         NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) } == false
     }
 

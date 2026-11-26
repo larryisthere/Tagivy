@@ -40,20 +40,13 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var isResolvingInlineRename = false
     private var tagSortMode: TagSortMode
     private var showsPresetShortcutHints = false
-    /// Loads the files of the available videos matching the given queries.
-    var loadDraggableVideoFiles: ([LibraryQueryRequest], @escaping (DraggableVideoFiles) -> Void) -> Void = {
-        _, completion in completion(DraggableVideoFiles(urls: []))
-    }
-    var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
-    var onExportToEditor: (NLEExportScope, NLEExportFormat) -> Void = { _, _ in }
-    private var dragFileURLRequestGeneration = 0
-    private var dragFileURLs: (keys: [SidebarSelectionKey], files: DraggableVideoFiles)?
-    /// Rows the outline view asked pasteboard writers for in the drag that is starting.
-    private var draggedFileURLKeys: [SidebarSelectionKey] = []
+    var resolveVideosInScopes: @MainActor ([VideoScope]) async -> ResolvedVideos = { _ in .empty }
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
+    private var dragPreparationGeneration = 0
+    /// The videos a drag from the pressed row hands to other apps, loaded when the row is pressed.
+    private var preparedDrag: (targets: SidebarTargets, videos: ResolvedVideos)?
     /// The file already written with a row, so other apps accept the drag from its start.
     private var leadingDragFileURL: URL?
-    /// Videos still in iCloud that the current drag left out; downloaded if the drag ends in another app.
-    private var draggedCloudVideoFiles: [URL] = []
     private var dragExportCaption: DragExportCaption?
 
     init(
@@ -540,38 +533,25 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-        let itemKeys = dragFileURLKeys(for: [item])
-        draggedFileURLKeys.append(contentsOf: itemKeys.filter { draggedFileURLKeys.contains($0) == false })
+        guard let target = targetItem(for: item) else { return nil }
         // Other apps decide whether to accept a drag from what it carries when it starts, so the first
         // dragged row carries one file. The remaining files are added once the drag has begun.
         var leadingURL: URL?
         if leadingDragFileURL == nil,
-           let dragFileURLs,
-           itemKeys.isEmpty == false,
-           Set(itemKeys).isSubset(of: dragFileURLs.keys),
-           let firstURL = dragFileURLs.files.ready.first {
+           let preparedDrag,
+           preparedDrag.targets.items.contains(target),
+           let firstURL = preparedDrag.videos.ready.first?.url {
             leadingDragFileURL = firstURL
             leadingURL = firstURL
         }
-        if let smartCollection = item as? SmartCollectionNode {
-            let pasteboardItem = NSPasteboardItem()
-            pasteboardItem.setString(smartCollection.collection.id, forType: Self.smartCollectionPasteboardType)
-            if let leadingURL { pasteboardItem.setString(leadingURL.absoluteString, forType: .fileURL) }
-            return pasteboardItem
-        }
-        guard let tag = item as? TagNode else { return nil }
-        let draggedTags: [TagRecord]
-        if let row = row(for: .tag(tag.tag.id)), outlineView.selectedRowIndexes.contains(row) {
-            draggedTags = topLevelTags(
-                from: outlineView.selectedRowIndexes.compactMap { selectedRow in
-                    (outlineView.item(atRow: selectedRow) as? TagNode)?.tag
-                }
-            )
-        } else {
-            draggedTags = [tag.tag]
-        }
         let pasteboardItem = NSPasteboardItem()
-        pasteboardItem.setString(draggedTags.map(\.id).joined(separator: "\n"), forType: Self.tagPasteboardType)
+        switch target {
+        case let .smartCollection(collection):
+            pasteboardItem.setString(collection.id, forType: Self.smartCollectionPasteboardType)
+        case .tag:
+            let draggedTags = targetItems(forClickedRow: outlineView.row(forItem: item)).tags
+            pasteboardItem.setString(draggedTags.map(\.id).joined(separator: "\n"), forType: Self.tagPasteboardType)
+        }
         if let leadingURL { pasteboardItem.setString(leadingURL.absoluteString, forType: .fileURL) }
         return pasteboardItem
     }
@@ -582,25 +562,22 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         willBeginAt screenPoint: NSPoint,
         forItems draggedItems: [Any]
     ) {
-        defer {
-            draggedFileURLKeys = []
-            leadingDragFileURL = nil
-        }
-        guard let dragFileURLs, Set(dragFileURLs.keys) == Set(draggedFileURLKeys) else { return }
+        defer { leadingDragFileURL = nil }
+        let draggedTargets = SidebarTargets(items: draggedItems.compactMap(targetItem(for:)), allTags: tags)
+        guard let preparedDrag, preparedDrag.targets.actsOnSameVideos(as: draggedTargets) else { return }
+        let videos = preparedDrag.videos
         if let leadingDragFileURL {
-            let remainingURLs = dragFileURLs.files.ready.filter { $0 != leadingDragFileURL }
+            let remainingURLs = videos.ready.map(\.url).filter { $0 != leadingDragFileURL }
             session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
         }
-        let files = dragFileURLs.files
-        if files.ready.isEmpty == false || files.skippedCount > 0 {
+        if videos.ready.isEmpty == false || videos.skippedCount > 0 {
             dragExportCaption = DragExportCaption(
-                exportCount: files.ready.count,
-                skippedCount: files.skippedCount,
+                exportCount: videos.ready.count,
+                skippedCount: videos.skippedCount,
                 session: session,
                 view: outlineView
             )
         }
-        draggedCloudVideoFiles = files.inCloud
     }
 
     func outlineView(
@@ -609,66 +586,45 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         endedAt screenPoint: NSPoint,
         operation: NSDragOperation
     ) {
-        dragFileURLs = nil
+        preparedDrag = nil
         dragExportCaption?.stop()
         dragExportCaption = nil
-        let cloudFiles = draggedCloudVideoFiles
-        draggedCloudVideoFiles = []
-        if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
-            onDragLeftOutCloudVideoFiles(cloudFiles)
-        }
     }
 
-    /// Starts loading the files a drag from the pressed row would carry, so they are ready when the drag begins.
+    /// Starts loading the videos a drag from the pressed row would carry, so they are ready when the drag begins.
     private func prepareDragFileURLs(for event: NSEvent) {
-        dragFileURLRequestGeneration += 1
-        dragFileURLs = nil
-        draggedFileURLKeys = []
+        dragPreparationGeneration += 1
+        preparedDrag = nil
         leadingDragFileURL = nil
-        let point = outlineView.convert(event.locationInWindow, from: nil)
-        let row = outlineView.row(at: point)
-        guard row >= 0, let pressedItem = outlineView.item(atRow: row) else { return }
-        let selectedItems = outlineView.selectedRowIndexes.compactMap { outlineView.item(atRow: $0) }
+        let row = outlineView.row(at: outlineView.convert(event.locationInWindow, from: nil))
+        // Command and Shift add the pressed row to the selection before the drag starts.
         let extendsSelection = event.modifierFlags.intersection([.command, .shift]).isEmpty == false
-        let items: [Any]
-        if outlineView.selectedRowIndexes.contains(row) {
-            items = selectedItems
-        } else if extendsSelection {
-            items = selectedItems + [pressedItem]
-        } else {
-            items = [pressedItem]
-        }
-        let keys = dragFileURLKeys(for: items)
-        let queries = keys.compactMap(dragFileURLQuery(for:))
-        guard queries.isEmpty == false else { return }
-        let generation = dragFileURLRequestGeneration
-        loadDraggableVideoFiles(queries) { [weak self] files in
-            guard let self, generation == dragFileURLRequestGeneration else { return }
-            dragFileURLs = (keys, files)
+        let targets = targetItems(forClickedRow: row, extendingSelection: extendsSelection)
+        guard targets.isEmpty == false else { return }
+        let generation = dragPreparationGeneration
+        let resolve = resolveVideosInScopes
+        Task { [weak self] in
+            let videos = await resolve(targets.scopes)
+            guard let self, generation == dragPreparationGeneration else { return }
+            preparedDrag = (targets, videos)
         }
     }
 
-    private func dragFileURLKeys(for items: [Any]) -> [SidebarSelectionKey] {
-        var keys: [SidebarSelectionKey] = []
-        for item in items {
-            guard item is TagNode || item is SmartCollectionNode,
-                  let key = selectionKey(for: item),
-                  keys.contains(key) == false else { continue }
-            keys.append(key)
+    /// What a drag or context menu from `row` acts on: the whole selection when `row` is part of it,
+    /// otherwise `row` alone.
+    private func targetItems(forClickedRow row: Int, extendingSelection: Bool = false) -> SidebarTargets {
+        guard row >= 0, let clicked = targetItem(for: outlineView.item(atRow: row)) else {
+            return SidebarTargets(items: [], allTags: tags)
         }
-        return keys
+        var selection = outlineView.selectedRowIndexes.compactMap { targetItem(for: outlineView.item(atRow: $0)) }
+        if extendingSelection, selection.contains(clicked) == false { selection.append(clicked) }
+        return SidebarTargets(clicked: clicked, selection: selection, allTags: tags)
     }
 
-    private func dragFileURLQuery(for key: SidebarSelectionKey) -> LibraryQueryRequest? {
-        switch key {
-        case let .tag(tagID):
-            return LibraryQueryRequest(baseFilter: .tag(tagID), temporaryFilenameSearch: "", rule: .standard)
-        case let .smartCollection(collectionID):
-            guard let collection = smartCollections.first(where: { $0.id == collectionID }) else { return nil }
-            return LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
-        default:
-            return nil
-        }
+    private func targetItem(for item: Any?) -> SidebarTargetItem? {
+        if let tag = item as? TagNode { return .tag(tag.tag) }
+        if let smartCollection = item as? SmartCollectionNode { return .smartCollection(smartCollection.collection) }
+        return nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
@@ -704,7 +660,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let dragOrder = tagSortMode == .custom
             ? tagsInOutlineOrder()
             : tags.sorted { TagSortMode.custom.orders($0, before: $1) }
-        let draggedTags = topLevelTags(from: dragOrder.filter { tagIDs.contains($0.id) })
+        let draggedTags = SidebarTargets.topLevelTags(from: dragOrder.filter { tagIDs.contains($0.id) }, allTags: tags)
         guard draggedTags.isEmpty == false else { return false }
         let sortOrder = tagSortMode == .custom
             ? max(0, index)
@@ -716,19 +672,6 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private func tagsInOutlineOrder() -> [TagRecord] {
         (0..<outlineView.numberOfRows).compactMap { row in
             (outlineView.item(atRow: row) as? TagNode)?.tag
-        }
-    }
-
-    private func topLevelTags(from candidates: [TagRecord]) -> [TagRecord] {
-        let candidateIDs = Set(candidates.map(\.id))
-        let tagsByID = Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0) })
-        return candidates.filter { tag in
-            var ancestorID = tag.parentID
-            while let currentID = ancestorID {
-                if candidateIDs.contains(currentID) { return false }
-                ancestorID = tagsByID[currentID]?.parentID
-            }
-            return true
         }
     }
 
@@ -865,21 +808,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         mergeItem.isEnabled = mergeMenu.items.isEmpty == false
         menu.addItem(mergeItem)
         menu.addItem(.separator())
-        let exportedTags: [TagRecord]
-        if let row = row(for: .tag(tag.id)), outlineView.selectedRowIndexes.contains(row) {
-            exportedTags = topLevelTags(
-                from: outlineView.selectedRowIndexes.compactMap { (outlineView.item(atRow: $0) as? TagNode)?.tag }
-            )
-        } else {
-            exportedTags = [tag]
-        }
+        let exportedTags = targetItems(forClickedRow: outlineView.clickedRow).tags
         menu.addItem(exportToEditorItem(
             .tags(exportedTags),
             hasVideos: exportedTags.contains { $0.videoCount > 0 }
         ))
     }
 
-    private func exportToEditorItem(_ scope: NLEExportScope, hasVideos: Bool) -> NSMenuItem {
+    private func exportToEditorItem(_ scope: VideoScope, hasVideos: Bool) -> NSMenuItem {
         return EditorExportMenu.item(
             scope: scope,
             isEnabled: hasVideos,

@@ -66,16 +66,12 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         onCopyPath: { [weak self] video in self?.copyPath(video) },
         onPreviewVideos: { [weak self] videos in self?.previewVideos(videos) },
         thumbnailURL: { [weak self] video in self?.libraryAccessCoordinator?.thumbnailURL(for: video) },
-        fileURL: { [weak self] video in self?.libraryAccessCoordinator?.fileURL(for: video) },
-        loadDraggableVideoFiles: { [weak self] queries, completion in
-            guard let coordinator = self?.libraryAccessCoordinator else {
-                completion(DraggableVideoFiles(urls: []))
-                return
-            }
-            coordinator.draggableVideoFiles(matching: queries, completion: completion)
+        resolveVideos: { [weak self] videos in
+            self?.libraryAccessCoordinator?.resolveVideos(videos) ?? .empty
         },
-        onDownloadCloudVideoFiles: { [weak self] urls in
-            self?.libraryAccessCoordinator?.downloadCloudVideoFiles(urls)
+        resolveVideosInScopes: { [weak self] scopes in
+            guard let coordinator = self?.libraryAccessCoordinator else { return .empty }
+            return (try? await coordinator.resolveVideos(in: scopes)) ?? .empty
         },
         filePath: { [weak self] video in self?.libraryAccessCoordinator?.displayPath(for: video) },
         offlineSourceName: { [weak self] video in
@@ -611,7 +607,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    private func exportToEditor(_ scope: NLEExportScope, format: NLEExportFormat) {
+    private func exportToEditor(_ scope: VideoScope, format: NLEExportFormat) {
         guard lockCoordinator.state == .unlocked,
               let coordinator = libraryAccessCoordinator,
               let window = windowController.window else { return }
