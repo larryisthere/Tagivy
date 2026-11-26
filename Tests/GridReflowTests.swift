@@ -13,27 +13,34 @@ final class GridReflowTests: XCTestCase {
         XCTAssertEqual(GridReflow.columnCount(availableWidth: 0, itemWidth: 150, interitemSpacing: 16), 1)
     }
 
-    func testResizeWithinTheSameColumnsAppliesAtOnce() {
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 5, toColumns: 5, remainingGlide: 0, reduceMotion: false), 0)
-    }
-
-    func testColumnChangeGlides() {
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 5, toColumns: 4, remainingGlide: 0, reduceMotion: false), GridReflow.duration)
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 4, toColumns: 5, remainingGlide: 0.1, reduceMotion: false), GridReflow.duration)
-    }
-
-    func testResizeDuringAGlideFinishesWithIt() {
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 4, toColumns: 4, remainingGlide: 0.1, reduceMotion: false), 0.1, accuracy: 0.0001)
+    func testOnlyAColumnChangeGlides() {
+        XCTAssertFalse(GridReflow.shouldGlide(fromColumns: 5, toColumns: 5, reduceMotion: false))
+        XCTAssertTrue(GridReflow.shouldGlide(fromColumns: 5, toColumns: 4, reduceMotion: false))
+        XCTAssertTrue(GridReflow.shouldGlide(fromColumns: 4, toColumns: 5, reduceMotion: false))
     }
 
     func testReduceMotionNeverGlides() {
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 5, toColumns: 4, remainingGlide: 0, reduceMotion: true), 0)
-        XCTAssertEqual(GridReflow.animationDuration(fromColumns: 4, toColumns: 4, remainingGlide: 0.1, reduceMotion: true), 0)
+        XCTAssertFalse(GridReflow.shouldGlide(fromColumns: 5, toColumns: 4, reduceMotion: true))
     }
 
     func testGlideIsShortEnoughNotToDelayResizing() {
         XCTAssertLessThanOrEqual(GridReflow.duration, 0.25)
     }
+
+    @MainActor
+    func testGlideMovesOnlyTheTopLeftCornerInAStraightLine() throws {
+        let layer = CALayer()
+        GridReflow.glide(layer, from: CGSize(width: 780, height: -222))
+        let animation = try XCTUnwrap(layer.animation(forKey: GridReflow.glideAnimationKey) as? CABasicAnimation)
+        XCTAssertEqual(animation.keyPath, "transform.translation")
+        XCTAssertEqual((animation.fromValue as? NSValue)?.sizeValue, CGSize(width: 780, height: -222))
+        XCTAssertEqual((animation.toValue as? NSValue)?.sizeValue, .zero)
+        XCTAssertEqual(layer.animationKeys(), [GridReflow.glideAnimationKey])
+
+        GridReflow.glide(layer, from: CGSize(width: 0.2, height: 0))
+        XCTAssertNil(layer.animationKeys())
+    }
+
     @MainActor
     func testGridGlidesOnlyWhenTheColumnCountChanges() throws {
         guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else { return }
@@ -65,17 +72,31 @@ final class GridReflowTests: XCTestCase {
             )
         })
         let collection = try XCTUnwrap(grid.view.descendants.compactMap { $0 as? NSCollectionView }.first)
-        func glidingItemCount() -> Int {
+        func itemViews() -> [Int: NSView] {
             collection.layoutSubtreeIfNeeded()
-            return collection.visibleItems().filter { $0.view.layer?.animation(forKey: "position") != nil }.count
+            return Dictionary(uniqueKeysWithValues: collection.visibleItems().compactMap { item in
+                collection.indexPath(for: item).map { ($0.item, item.view) }
+            })
         }
-        XCTAssertEqual(glidingItemCount(), 0)
+        func glide(of view: NSView) -> CGSize? {
+            (view.layer?.animation(forKey: GridReflow.glideAnimationKey) as? CABasicAnimation)
+                .flatMap { $0.fromValue as? NSValue }?.sizeValue
+        }
 
         grid.setGridItemWidth(185)
-        XCTAssertEqual(glidingItemCount(), 0)
+        let before = itemViews().mapValues(\.frame)
+        XCTAssertTrue(itemViews().values.allSatisfy { $0.layer?.animationKeys() == nil })
 
         grid.setGridItemWidth(250)
-        XCTAssertGreaterThan(glidingItemCount(), 0)
+        let after = itemViews()
+        XCTAssertGreaterThan(after.values.compactMap(glide(of:)).count, 0)
+        for (index, view) in after {
+            XCTAssertEqual(view.layer?.animationKeys() ?? [], glide(of: view) == nil ? [] : [GridReflow.glideAnimationKey])
+            guard let start = before[index] else { continue }
+            let travel = CGSize(width: start.minX - view.frame.minX, height: start.minY - view.frame.minY)
+            XCTAssertEqual(glide(of: view) ?? .zero, travel, "item \(index)")
+        }
+        XCTAssertNil(glide(of: try XCTUnwrap(after[0])))
     }
 }
 

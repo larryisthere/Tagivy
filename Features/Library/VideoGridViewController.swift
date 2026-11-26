@@ -78,7 +78,6 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     static let maximumGridItemWidth = 280.0
     private static let thumbnailHeightRatio = 0.55
     private static let gridItemChromeHeight = 64.0
-    private var reflowGlideEndsAt: TimeInterval = 0
     private let defaults: UserDefaults
 
     private struct GroupSection {
@@ -1363,26 +1362,64 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     func setGridItemWidth(_ width: Double) {
         guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
         let clampedWidth = Self.clampedGridItemWidth(width)
-        let now = ProcessInfo.processInfo.systemUptime
-        let duration = GridReflow.animationDuration(
+        let glides = GridReflow.shouldGlide(
             fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
             toColumns: columnCount(in: layout, itemWidth: clampedWidth),
-            remainingGlide: reflowGlideEndsAt - now,
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
+        let startFrames = glides ? drawnFramesNearViewport(in: layout) : [:]
         layout.itemSize = gridItemSize(for: clampedWidth)
-        if duration > 0 {
-            reflowGlideEndsAt = now + duration
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = duration
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                layout.invalidateLayout()
-                collectionView.animator().performBatchUpdates(nil)
-            }
-        } else {
-            layout.invalidateLayout()
-        }
+        layout.invalidateLayout()
+        if glides { glideElements(from: startFrames) }
         defaults.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+    }
+
+    private enum GridElement: Hashable {
+        case item(IndexPath)
+        case header(IndexPath)
+    }
+
+    /// Frames as drawn now, for items and headers on screen and within a screen above or below it,
+    /// so the ones that scroll into view during the glide also come from where they were.
+    private func drawnFramesNearViewport(in layout: NSCollectionViewFlowLayout) -> [GridElement: NSRect] {
+        let visibleRect = collectionView.visibleRect
+        var frames: [GridElement: NSRect] = [:]
+        for attributes in layout.layoutAttributesForElements(in: visibleRect.insetBy(dx: 0, dy: -visibleRect.height)) {
+            guard let indexPath = attributes.indexPath else { continue }
+            switch attributes.representedElementCategory {
+            case .item:
+                frames[.item(indexPath)] = attributes.frame
+            case .supplementaryView where attributes.representedElementKind == NSCollectionView.elementKindSectionHeader:
+                frames[.header(indexPath)] = attributes.frame
+            default:
+                break
+            }
+        }
+        for (element, view) in elementViews() {
+            let offset = view.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            frames[element] = view.frame.offsetBy(dx: offset.width, dy: offset.height)
+        }
+        return frames
+    }
+
+    private func glideElements(from startFrames: [GridElement: NSRect]) {
+        collectionView.layoutSubtreeIfNeeded()
+        for (element, view) in elementViews() {
+            guard let layer = view.layer else { continue }
+            let start = startFrames[element] ?? view.frame
+            GridReflow.glide(layer, from: CGSize(width: start.minX - view.frame.minX, height: start.minY - view.frame.minY))
+        }
+    }
+
+    private func elementViews() -> [(GridElement, NSView)] {
+        let items = collectionView.visibleItems().compactMap { item in
+            collectionView.indexPath(for: item).map { (GridElement.item($0), item.view) }
+        }
+        let headerKind = NSCollectionView.elementKindSectionHeader
+        let headers = collectionView.indexPathsForVisibleSupplementaryElements(ofKind: headerKind).compactMap { indexPath in
+            collectionView.supplementaryView(forElementKind: headerKind, at: indexPath).map { (GridElement.header(indexPath), $0) }
+        }
+        return items + headers
     }
 
     private func columnCount(in layout: NSCollectionViewFlowLayout, itemWidth: Double) -> Int {
