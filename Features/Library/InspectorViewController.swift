@@ -1052,8 +1052,13 @@ final class InspectorViewController: NSViewController {
         tagStateRequestRevision += 1
         onApplyTagDraft([], [tagID: nextState == .on], videoIDs) { [weak self] succeeded in
             // Show what was actually saved; a captured earlier state can be stale after quick repeat clicks.
-            guard succeeded == false else { return }
-            self?.refreshTagAssignments()
+            guard succeeded == false, let self else { return }
+            if self.mode == .tags, self.selectedVideos.isEmpty == false {
+                self.refreshTagAssignments()
+            } else {
+                // Not on screen now: forget the optimistic states so Tags loads them again when shown.
+                self.tagStateVideoIDs = []
+            }
         }
     }
 
