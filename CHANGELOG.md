@@ -15,6 +15,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 ### Changed
 
 - Tag changes in the Inspector take effect right away, without an Apply step.
+- Inspector tags appear as capsules, in a List or Compact layout you can switch beside the search field.
 - Switching videos no longer reloads the Inspector's tag list; the selection's tags slide to the top.
 - Tag counts in the sidebar update right away and roll to their new value.
 - Thumbnails that load later fade in instead of appearing abruptly.
