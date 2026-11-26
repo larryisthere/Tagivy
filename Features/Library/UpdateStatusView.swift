@@ -1,17 +1,16 @@
 import AppKit
 
-/// The bottom-left corner of the library: update progress, and the one button that installs and relaunches.
+/// The bottom-left corner of the library: a rounded row under a separator showing update progress.
+/// When an update can be installed, the whole row is the button that installs and relaunches.
 @MainActor
 final class UpdateStatusView: NSView {
     var onInstall: () -> Void = {}
 
+    private let separator = NSBox()
+    private let capsule = UpdateStatusCapsule()
     private let spinner = NSProgressIndicator()
-    private let progressBar = NSProgressIndicator()
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
-    private let button = NSButton(title: "", target: nil, action: nil)
-    private let row = NSStackView()
-    private let stack = NSStackView()
 
     private(set) var status: AppUpdateStatus = .idle
 
@@ -19,47 +18,53 @@ final class UpdateStatusView: NSView {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
 
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+
         spinner.style = .spinning
         spinner.controlSize = .small
-        spinner.isIndeterminate = true
+        spinner.minValue = 0
+        spinner.maxValue = 1
+        spinner.translatesAutoresizingMaskIntoConstraints = false
 
-        progressBar.style = .bar
-        progressBar.controlSize = .small
-        progressBar.minValue = 0
-        progressBar.maxValue = 1
+        icon.symbolConfiguration = .init(pointSize: 14, weight: .regular)
+        icon.translatesAutoresizingMaskIntoConstraints = false
 
-        icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
-
-        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        label.textColor = .secondaryLabelColor
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        button.bezelStyle = .push
-        button.controlSize = .regular
-        button.bezelColor = .controlAccentColor
-        button.keyEquivalent = ""
-        button.target = self
-        button.action = #selector(install(_:))
-        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        capsule.translatesAutoresizingMaskIntoConstraints = false
+        capsule.onPress = { [weak self] in self?.onInstall() }
+        capsule.addSubview(spinner)
+        capsule.addSubview(icon)
+        capsule.addSubview(label)
 
-        row.orientation = .horizontal
-        row.spacing = 6
-        row.alignment = .centerY
-        row.setViews([spinner, icon, label], in: .leading)
-
-        stack.orientation = .vertical
-        stack.alignment = .width
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 10, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.setViews([row, progressBar, button], in: .top)
-        addSubview(stack)
+        addSubview(separator)
+        addSubview(capsule)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            separator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: trailingAnchor),
+            separator.topAnchor.constraint(equalTo: topAnchor),
+
+            capsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            capsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            capsule.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
+            capsule.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            capsule.heightAnchor.constraint(equalToConstant: 32),
+
+            spinner.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 10),
+            spinner.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+            spinner.widthAnchor.constraint(equalToConstant: 16),
+            spinner.heightAnchor.constraint(equalToConstant: 16),
+
+            icon.centerXAnchor.constraint(equalTo: spinner.centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+
+            label.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: capsule.trailingAnchor, constant: -10),
+            label.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
         ])
         render(.idle)
     }
@@ -70,65 +75,130 @@ final class UpdateStatusView: NSView {
     func render(_ status: AppUpdateStatus) {
         self.status = status
         isHidden = status == .idle
-        spinner.stopAnimation(nil)
-        spinner.isHidden = true
-        icon.isHidden = true
-        row.isHidden = false
-        progressBar.isHidden = true
-        button.isHidden = true
 
         switch status {
         case .idle:
-            break
+            show(text: "")
         case .checking:
-            showSpinner(String(localized: .updateChecking))
+            show(progress: nil, text: String(localized: .updateChecking))
         case .upToDate:
-            showIcon("checkmark.circle", tint: .secondaryLabelColor, String(localized: .updateUpToDate))
+            show(symbol: "checkmark.circle", text: String(localized: .updateUpToDate))
         case .failed:
-            showIcon("exclamationmark.circle", tint: .secondaryLabelColor, String(localized: .updateFailed))
+            show(symbol: "exclamationmark.circle", text: String(localized: .updateFailed))
         case let .available(version):
-            row.isHidden = true
-            showButton(String(localized: .updateInstallVersion(version)))
+            show(symbol: "arrow.down.circle", text: String(localized: .updateInstallVersion(version)), actionable: true)
         case let .downloading(version, fraction):
-            label.stringValue = String(localized: .updateDownloadingVersion(version))
-            progressBar.isHidden = false
-            progressBar.isIndeterminate = fraction == nil
-            if let fraction {
-                progressBar.doubleValue = fraction
-            } else {
-                progressBar.startAnimation(nil)
-            }
+            show(progress: fraction, text: String(localized: .updateDownloadingVersion(version)))
         case .preparing:
-            showSpinner(String(localized: .updatePreparing))
+            show(progress: nil, text: String(localized: .updatePreparing))
         case let .readyToRelaunch(version):
-            row.isHidden = true
-            showButton(String(localized: .updateRelaunchVersion(version)))
+            show(symbol: "arrow.clockwise.circle", text: String(localized: .updateRelaunchVersion(version)), actionable: true)
         case .installing:
-            showSpinner(String(localized: .updateInstalling))
+            show(progress: nil, text: String(localized: .updateInstalling))
         }
-        setAccessibilityLabel(button.isHidden ? label.stringValue : button.title)
     }
 
-    private func showSpinner(_ text: String) {
-        spinner.isHidden = false
-        spinner.startAnimation(nil)
+    private func show(symbol: String? = nil, progress: Double?? = .none, text: String, actionable: Bool = false) {
         label.stringValue = text
+        label.textColor = actionable ? .labelColor : .secondaryLabelColor
+
+        if let symbol {
+            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            icon.contentTintColor = actionable ? .controlAccentColor : .secondaryLabelColor
+            icon.isHidden = false
+        } else {
+            icon.isHidden = true
+        }
+
+        if case let .some(fraction) = progress {
+            spinner.isHidden = false
+            spinner.isIndeterminate = fraction == nil
+            if let fraction {
+                spinner.stopAnimation(nil)
+                spinner.doubleValue = fraction
+            } else {
+                spinner.startAnimation(nil)
+            }
+        } else {
+            spinner.stopAnimation(nil)
+            spinner.isHidden = true
+        }
+
+        capsule.isActionable = actionable
+        capsule.setAccessibilityLabel(text)
+    }
+}
+
+/// The rounded row itself; clickable only while it offers an install.
+@MainActor
+private final class UpdateStatusCapsule: NSView {
+    var onPress: () -> Void = {}
+    var isActionable = false {
+        didSet {
+            guard isActionable != oldValue else { return }
+            isHovered = false
+            setAccessibilityRole(isActionable ? .button : .staticText)
+            window?.invalidateCursorRects(for: self)
+            needsDisplay = true
+        }
     }
 
-    private func showIcon(_ symbolName: String, tint: NSColor, _ text: String) {
-        icon.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        icon.contentTintColor = tint
-        icon.isHidden = false
-        label.stringValue = text
+    private var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
+    }
+    private var isPressed = false {
+        didSet { if isPressed != oldValue { needsDisplay = true } }
     }
 
-    private func showButton(_ title: String) {
-        button.title = title
-        button.toolTip = title
-        button.isHidden = false
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
     }
 
-    @objc private func install(_ sender: Any?) {
-        onInstall()
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let emphasis = isActionable && (isHovered || isPressed)
+        let fill = NSColor.labelColor.withAlphaComponent(isPressed && isActionable ? 0.14 : emphasis ? 0.1 : 0.06)
+        fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func resetCursorRects() {
+        if isActionable { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = isActionable }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isActionable else { return super.mouseDown(with: event) }
+        isPressed = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isActionable, isPressed else { return super.mouseUp(with: event) }
+        isPressed = false
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress() }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isActionable else { return false }
+        onPress()
+        return true
     }
 }
