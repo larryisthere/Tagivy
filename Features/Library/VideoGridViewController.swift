@@ -1713,16 +1713,23 @@ final class DragExportCaption: NSObject {
     /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
     /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
     init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
-        text = skippedCount == 0
-            ? String.localizedStringWithFormat(
+        if skippedCount == 0 {
+            text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption.all", comment: "Caption on a drag out of Tagivy"),
                 exportCount
             )
-            : String.localizedStringWithFormat(
+        } else if exportCount == 0 {
+            text = String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all left out"),
+                skippedCount
+            )
+        } else {
+            text = String.localizedStringWithFormat(
                 NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
                 exportCount,
                 skippedCount
             )
+        }
         self.session = session
         self.view = view
         super.init()

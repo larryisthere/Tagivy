@@ -5327,6 +5327,36 @@
         }
       }
     },
+    "drag.exportCaption.none" : {
+      "comment" : "Caption on a drag whose videos are all left out",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No videos to export (%lld not downloaded or offline)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No videos to export (%lld not downloaded or offline)"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可导出的视频（%lld 个未下载或离线）"
+          }
+        }
+      }
+    },
     "drag.exportCaption" : {
       "comment" : "Caption on a drag that leaves out some videos",
       "extractionState" : "manual",
