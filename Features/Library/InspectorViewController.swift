@@ -75,6 +75,9 @@ final class InspectorViewController: NSViewController {
     private var tagStateVideoIDs: [String] = []
     private var tagStateRequestRevision = 0
     private var tagCheckboxes: [String: TagCheckbox] = [:]
+    /// Tags the selected videos have come first. The order is set when a selection's states load,
+    /// and clicks within that selection leave rows where they are, so a row never moves under the pointer.
+    private var tagOrderIDs: [String] = []
     private var isShowingTagList = false
     private var tagSearchText = ""
     private var newTagPopover: NSPopover?
@@ -228,13 +231,59 @@ final class InspectorViewController: NSViewController {
             guard let self,
                   self.tagStateRequestRevision == requestRevision,
                   self.selectedVideos.map(\.id) == videoIDs else { return }
+            let selectionChanged = self.tagStateVideoIDs != videoIDs
             self.tagStates = states
             self.tagStateVideoIDs = videoIDs
+            if selectionChanged {
+                self.tagOrderIDs = InspectorTagList.order(self.tags, states: states).map(\.id)
+            }
             if self.keepsTagListAcrossSelection {
                 self.updateTagCheckboxStates()
+                if selectionChanged {
+                    self.moveTagCheckboxesIntoOrder()
+                }
             } else {
                 self.renderSelection()
             }
+        }
+    }
+
+    private var orderedTags: [TagRecord] {
+        let ordered = Set(tagOrderIDs)
+        let tagsByID = Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0) })
+        // Tags created after the order was set show first, where the new tag is easy to find.
+        return tags.filter { ordered.contains($0.id) == false } + tagOrderIDs.compactMap { tagsByID[$0] }
+    }
+
+    /// Slides rows to the selection's order instead of rebuilding the list, so only rows whose
+    /// place changes move and the rest stay still.
+    private func moveTagCheckboxesIntoOrder() {
+        let arranged = contentStack.arrangedSubviews
+        let slots = arranged.indices.filter { arranged[$0] is TagCheckbox }
+        let checkboxes = orderedTags.compactMap { tagCheckboxes[$0.id] }
+        guard checkboxes.count == slots.count else {
+            renderSelection()
+            return
+        }
+        guard checkboxes.map(ObjectIdentifier.init) != slots.map({ ObjectIdentifier(arranged[$0]) }) else { return }
+        let previousFrames = Dictionary(uniqueKeysWithValues: checkboxes.map { (ObjectIdentifier($0), $0.frame) })
+        for checkbox in checkboxes {
+            contentStack.removeArrangedSubview(checkbox)
+        }
+        for (checkbox, slot) in zip(checkboxes, slots) {
+            contentStack.insertArrangedSubview(checkbox, at: slot)
+        }
+        contentStack.layoutSubtreeIfNeeded()
+        for checkbox in checkboxes {
+            guard let previousFrame = previousFrames[ObjectIdentifier(checkbox)] else { continue }
+            let offset = previousFrame.minY - checkbox.frame.minY
+            guard offset != 0, let layer = checkbox.layer else { continue }
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = offset
+            slide.toValue = 0
+            slide.duration = InspectorTagList.reorderDuration
+            slide.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(slide, forKey: "reorder")
         }
     }
 
@@ -938,11 +987,12 @@ final class InspectorViewController: NSViewController {
         if tagSearchText.isEmpty == false, hasExactMatch == false {
             addCreateTagButton(title: tagSearchText)
         }
-        let visibleTags = tags.filter {
+        let visibleTags = orderedTags.filter {
             tagSearchText.isEmpty || $0.name.localizedCaseInsensitiveContains(tagSearchText)
         }
         for tag in visibleTags {
             let button = TagCheckbox(tag: tag, target: self, action: #selector(toggleTag(_:)))
+            button.wantsLayer = true
             button.title = tag.name
             button.setButtonType(.switch)
             button.allowsMixedState = true
@@ -1455,6 +1505,15 @@ enum InspectorTagList {
     struct Entry: Equatable {
         let id: String
         let name: String
+    }
+
+    static let reorderDuration: CFTimeInterval = 0.25
+
+    /// Tags any of the selected videos have, then the rest, each in library order.
+    static func order(_ tags: [TagRecord], states: [String: TagAssignmentState]) -> [TagRecord] {
+        let assigned = tags.filter { (states[$0.id] ?? .off) != .off }
+        let unassigned = tags.filter { (states[$0.id] ?? .off) == .off }
+        return assigned + unassigned
     }
 
     static func entries(_ tags: [TagRecord]) -> [Entry] {

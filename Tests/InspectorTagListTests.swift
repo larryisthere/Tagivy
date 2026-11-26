@@ -15,6 +15,12 @@ final class InspectorTagListTests: XCTestCase {
         XCTAssertEqual(InspectorTagList.controlState(.on), .on)
     }
 
+    func testTagsTheSelectionHasComeFirstInLibraryOrder() {
+        let tags = ["a", "b", "c", "d"].map { makeTag(id: $0, name: $0) }
+        let order = InspectorTagList.order(tags, states: ["c": .on, "b": .mixed, "d": .off])
+        XCTAssertEqual(order.map(\.id), ["b", "c", "a", "d"])
+    }
+
     func testVideoCountChangesDoNotRebuildTheTagList() {
         let before = [makeTag(id: "a", name: "Interview", videoCount: 1)]
         let after = [makeTag(id: "a", name: "Interview", videoCount: 2)]

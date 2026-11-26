@@ -151,14 +151,16 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
            tags.contains(where: { $0.id == tagID }) == false {
             clearInlineRenameState()
         }
-        rebuildNodes()
         loadViewIfNeeded()
+        let previousCounts = visibleTrailingTexts()
+        rebuildNodes()
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
+        showTrailingTexts(rollingFrom: previousCounts)
     }
 
     func setSmartCollections(_ collections: [SmartCollectionRecord]) {
@@ -168,22 +170,25 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
            collections.contains(where: { $0.id == collectionID }) == false {
             clearInlineRenameState()
         }
-        rebuildNodes()
         loadViewIfNeeded()
+        let previousCounts = visibleTrailingTexts()
+        rebuildNodes()
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
         outlineView.reloadData()
         restoreExpansionState()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
+        showTrailingTexts(rollingFrom: previousCounts)
     }
 
     func setFilterCounts(_ counts: SidebarFilterCounts) {
         guard counts != filterCounts else { return }
         let selection = selectedItemKeys()
         filterCounts = counts
-        rebuildNodes()
         loadViewIfNeeded()
+        let previousCounts = visibleTrailingTexts()
+        rebuildNodes()
         isRestoringSelection = true
         defer { isRestoringSelection = false }
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
@@ -192,6 +197,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
+        showTrailingTexts(rollingFrom: previousCounts)
     }
 
     func setScanResultCount(_ count: Int?) {
@@ -1349,6 +1355,36 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
     }
 
+    private func visibleTrailingTexts() -> [SidebarSelectionKey: String] {
+        guard isViewLoaded else { return [:] }
+        var texts: [SidebarSelectionKey: String] = [:]
+        for row in 0..<outlineView.numberOfRows {
+            guard let item = outlineView.item(atRow: row),
+                  let key = selectionKey(for: item),
+                  let text = trailingText(for: item) else { continue }
+            texts[key] = text
+        }
+        return texts
+    }
+
+    /// Puts the current counts on the visible rows; a count that changed since the previous
+    /// texts rolls to its new value instead of being swapped.
+    private func showTrailingTexts(rollingFrom previousTexts: [SidebarSelectionKey: String]) {
+        let visibleRows = outlineView.rows(in: outlineView.visibleRect)
+        for row in visibleRows.location..<(visibleRows.location + visibleRows.length) {
+            guard let item = outlineView.item(atRow: row),
+                  let rowView = outlineView.rowView(atRow: row, makeIfNecessary: true)
+                    as? SidebarCountRowView else { continue }
+            let text = trailingText(for: item)
+            let previousText = selectionKey(for: item).flatMap { previousTexts[$0] }
+            if let roll = CountRoll(from: previousText, to: text) {
+                rowView.roll(from: previousText, to: text, direction: roll)
+            } else {
+                rowView.configure(text: text)
+            }
+        }
+    }
+
     private func selectedItemKeys() -> Set<SidebarSelectionKey> {
         guard isViewLoaded else { return [] }
         return Set(outlineView.selectedRowIndexes.compactMap { row in
@@ -1666,6 +1702,48 @@ private final class SidebarCountRowView: NSTableRowView {
         countLabel.isHidden = text == nil
         countLabelWidth = Self.width(for: text)
         needsLayout = true
+    }
+
+    static let rollDuration: CFTimeInterval = 0.25
+
+    func roll(from oldText: String?, to newText: String?, direction: CountRoll) {
+        configure(text: oldText)
+        layoutSubtreeIfNeeded()
+        let outgoing = NSTextField(labelWithString: oldText ?? "")
+        outgoing.font = countLabel.font
+        outgoing.alignment = countLabel.alignment
+        outgoing.textColor = countLabel.textColor
+        outgoing.frame = countLabel.frame
+        outgoing.wantsLayer = true
+        addSubview(outgoing)
+        configure(text: newText)
+        layoutSubtreeIfNeeded()
+        countLabel.wantsLayer = true
+
+        // A larger number rises from below and pushes the old one up; a smaller one falls from above.
+        let travel = countLabel.frame.height * 0.8
+        let below = isFlipped ? travel : -travel
+        let entering = direction == .up ? below : -below
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { outgoing.removeFromSuperview() }
+        countLabel.layer?.add(Self.roll(fromY: entering, toY: 0, fromOpacity: 0, toOpacity: 1), forKey: "roll")
+        outgoing.layer?.add(Self.roll(fromY: 0, toY: -entering, fromOpacity: 1, toOpacity: 0), forKey: "roll")
+        outgoing.layer?.opacity = 0
+        CATransaction.commit()
+    }
+
+    private static func roll(fromY: CGFloat, toY: CGFloat, fromOpacity: Float, toOpacity: Float) -> CAAnimation {
+        let move = CABasicAnimation(keyPath: "transform.translation.y")
+        move.fromValue = fromY
+        move.toValue = toY
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = fromOpacity
+        fade.toValue = toOpacity
+        let group = CAAnimationGroup()
+        group.animations = [move, fade]
+        group.duration = rollDuration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        return group
     }
 
     static func width(for text: String?) -> CGFloat {
