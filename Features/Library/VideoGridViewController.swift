@@ -1359,7 +1359,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
     func setGridItemWidth(_ width: Double) {
         guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
-        let clampedWidth = min(Self.maximumGridItemWidth, max(Self.minimumGridItemWidth, width))
+        let clampedWidth = Self.clampedGridItemWidth(width)
         let now = ProcessInfo.processInfo.systemUptime
         let duration = GridReflow.animationDuration(
             fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
@@ -1394,7 +1394,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         guard let storedWidth = defaults.object(forKey: gridItemWidthDefaultsKey) as? NSNumber else {
             return defaultGridItemWidth
         }
-        return min(maximumGridItemWidth, max(minimumGridItemWidth, storedWidth.doubleValue))
+        return clampedGridItemWidth(storedWidth.doubleValue)
+    }
+
+    private static func clampedGridItemWidth(_ width: Double) -> Double {
+        min(maximumGridItemWidth, max(minimumGridItemWidth, width))
     }
 
     private func gridItemSize(for width: Double) -> NSSize {
