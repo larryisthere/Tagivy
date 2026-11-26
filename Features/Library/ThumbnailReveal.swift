@@ -20,16 +20,15 @@ enum ThumbnailReveal: Equatable {
     @MainActor
     func prepare(_ layer: CALayer?) {
         guard let layer else { return }
-        layer.removeAnimation(forKey: Self.animationKey)
+        layer.removeAnimation(forKey: kCATransition)
         guard self == .fade else { return }
         let transition = CATransition()
         transition.type = .fade
         transition.duration = Self.fadeDuration
         transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(transition, forKey: Self.animationKey)
+        // Core Animation files every transition under kCATransition, whatever key it is given.
+        layer.add(transition, forKey: kCATransition)
     }
-
-    private static let animationKey = "thumbnailReveal"
 }
 
 /// Measures how long a view has been waiting for its thumbnail.
