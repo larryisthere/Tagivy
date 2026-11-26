@@ -137,6 +137,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var draggedExportIndexPaths = Set<IndexPath>()
     private var draggedSkippedIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
+    private let filterResultOverlay = FilterResultOverlayView()
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
@@ -820,13 +821,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         scrollTopWithoutStatus?.isActive = true
     }
 
-    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false) {
+    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false, isFilterChange: Bool = false) {
         loadViewIfNeeded()
         if !resetBrowsingState, self.videos.map(\.id) == videos.map(\.id),
            zip(self.videos, videos).allSatisfy({ groupBucket(for: $0.0).id == groupBucket(for: $0.1).id }) {
             for video in videos { updateVideo(video, refreshThumbnail: false) }
             return
         }
+        let transition = beginFilterResultTransition(
+            isFilterChange: isFilterChange,
+            newIDs: Set(videos.map(\.id))
+        )
         selectedVideoIDs = resetBrowsingState ? [] : selectedVideoIDs.intersection(videos.map(\.id))
         self.videos = videos
         if resetBrowsingState {
@@ -843,8 +848,144 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         scrollView.hasVerticalScroller = videos.isEmpty == false
+        transition.map(finishFilterResultTransition)
         updateEmptyState()
         notifySelectionChanged()
+    }
+
+    // MARK: - Filter result transition
+
+    private struct PendingFilterResultTransition {
+        let newIDs: Set<String>
+        let departingIDs: [String]
+        /// Where each departing thumbnail was drawn, in the overlay's coordinates.
+        let startFrames: [String: NSRect]
+        let snapshots: [String: CALayer]
+    }
+
+    /// Stops what an earlier filter change left running, then records what is on screen so the
+    /// coming reload can be animated, or starts a crossfade when motion is reduced.
+    private func beginFilterResultTransition(isFilterChange: Bool, newIDs: Set<String>) -> PendingFilterResultTransition? {
+        cancelFilterResultTransition()
+        let canAnimate = isFilterChange && view.window != nil && view.isHiddenOrHasHiddenAncestor == false
+        let departing = canAnimate ? onScreenItemViews() : []
+        let style = FilterResultTransition.style(
+            isFilterChange: canAnimate,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            oldVisibleIDs: departing.map(\.id),
+            newIDs: newIDs
+        )
+        switch style {
+        case .instant:
+            return nil
+        case .crossfade:
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = FilterResultTransition.reducedMotionCrossfadeDuration
+            scrollView.contentView.layer?.add(fade, forKey: kCATransition)
+            return nil
+        case .animated:
+            break
+        }
+        let overlay = installFilterResultOverlay()
+        let scale = view.window?.backingScaleFactor ?? 2
+        var startFrames: [String: NSRect] = [:]
+        var snapshots: [String: CALayer] = [:]
+        for (id, itemView) in departing {
+            let offset = itemView.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            let frame = overlay.convert(itemView.frame.offsetBy(dx: offset.width, dy: offset.height), from: collectionView)
+            startFrames[id] = frame
+            guard let layer = itemView.layer,
+                  let image = FilterResultTransition.snapshot(of: layer, scale: scale) else { continue }
+            let snapshot = CALayer()
+            snapshot.frame = frame
+            snapshot.contents = image
+            snapshot.contentsScale = scale
+            snapshots[id] = snapshot
+        }
+        return PendingFilterResultTransition(
+            newIDs: newIDs,
+            departingIDs: departing.map(\.id),
+            startFrames: startFrames,
+            snapshots: snapshots
+        )
+    }
+
+    /// Runs after the grid has reloaded with the new result.
+    private func finishFilterResultTransition(_ pending: PendingFilterResultTransition) {
+        collectionView.layoutSubtreeIfNeeded()
+        let arriving = onScreenItemViews()
+        guard let plan = FilterResultTransition.plan(
+            oldVisibleIDs: pending.departingIDs,
+            newVisibleIDs: arriving.map(\.id),
+            newIDs: pending.newIDs
+        ) else { return }
+        let overlay = filterResultOverlay
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let arrivingViews = Dictionary(arriving.map { ($0.id, $0.view) }, uniquingKeysWith: { first, _ in first })
+
+        for id in plan.removed {
+            guard let snapshot = pending.snapshots[id] else { continue }
+            overlay.layer?.addSublayer(snapshot)
+            FilterResultTransition.fadeOut(snapshot)
+        }
+        for id in plan.staying {
+            guard let start = pending.startFrames[id] else { continue }
+            if let itemView = arrivingViews[id], let layer = itemView.layer {
+                let end = overlay.convert(itemView.frame, from: collectionView)
+                GridReflow.glide(layer, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+            } else if let snapshot = pending.snapshots[id] {
+                // Still in the result but moved off screen, or into a collapsed group: show it leaving.
+                overlay.layer?.addSublayer(snapshot)
+                if let path = indexPath(forVideoID: id),
+                   let attributes = collectionView.layoutAttributesForItem(at: path) {
+                    let end = overlay.convert(attributes.frame, from: collectionView)
+                    snapshot.frame = end
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    CATransaction.setCompletionBlock { snapshot.removeFromSuperlayer() }
+                    GridReflow.glide(snapshot, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+                    CATransaction.commit()
+                } else {
+                    FilterResultTransition.fadeOut(snapshot)
+                }
+            }
+        }
+        for id in plan.inserted {
+            arrivingViews[id]?.layer.map(FilterResultTransition.fadeIn)
+        }
+    }
+
+    /// Lands an earlier filter change at once, so the next one starts from a settled grid.
+    private func cancelFilterResultTransition() {
+        filterResultOverlay.removeSnapshots()
+        for item in collectionView.visibleItems() {
+            item.view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+        }
+    }
+
+    private func installFilterResultOverlay() -> FilterResultOverlayView {
+        let overlay = filterResultOverlay
+        // The scroll view can be replaced (see renewScrollViewAfterPinnedHeaders), so keep the overlay on top of it.
+        if overlay.superview !== scrollViewport || scrollViewport.subviews.last !== overlay {
+            overlay.removeFromSuperview()
+            scrollViewport.addSubview(overlay, positioned: .above, relativeTo: nil)
+        }
+        overlay.frame = scrollView.frame
+        return overlay
+    }
+
+    /// Thumbnails that are at least partly on screen, with the video each one shows.
+    private func onScreenItemViews() -> [(id: String, view: NSView)] {
+        let visibleRect = collectionView.visibleRect
+        return collectionView.visibleItems().compactMap { item in
+            guard item.view.frame.intersects(visibleRect),
+                  let path = collectionView.indexPath(for: item),
+                  let video = video(at: path) else { return nil }
+            return (video.id, item.view)
+        }
     }
 
     func updateVideo(_ video: VideoRecord, refreshThumbnail: Bool = true) {
@@ -2034,6 +2175,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     override func prepareForReuse() {
         super.prepareForReuse()
         view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
         imageTask?.cancel()
         imageRequest = UUID()
         configuredVideo = nil

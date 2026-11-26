@@ -74,6 +74,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var isPresentingSmartCollectionAlert = false
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
+    private var nextVideoUpdateIsFilterChange = false
     private var didApplyInitialLayout = false
     private var shouldApplyInitialLayout = false
     private var isLibraryAvailable = true
@@ -347,7 +348,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         visibleVideoCount = videos.count
         let resetBrowsingState = resetBrowsingStateForNextVideoUpdate
         resetBrowsingStateForNextVideoUpdate = false
-        videoGridViewController.setVideos(videos, resetBrowsingState: resetBrowsingState)
+        let isFilterChange = nextVideoUpdateIsFilterChange
+        nextVideoUpdateIsFilterChange = false
+        videoGridViewController.setVideos(
+            videos,
+            resetBrowsingState: resetBrowsingState,
+            isFilterChange: isFilterChange
+        )
         if let request = pendingVideoRevealRequest,
            videoGridViewController.selectAndRevealVideos(ids: request.videoIDs) {
             pendingVideoRevealRequest = nil
@@ -666,6 +673,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     }
 
     private func applyCurrentQuery(debounce: Bool = false) {
+        nextVideoUpdateIsFilterChange = true
         onQueryChanged(
             LibraryQueryRequest(
                 baseFilter: selectedSmartCollection == nil ? currentBaseFilter : .all,

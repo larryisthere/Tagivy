@@ -52,6 +52,8 @@
 		A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */; };
 		A0E2000000000000000000B7 /* GridReflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F7 /* GridReflow.swift */; };
 		A0E2000000000000000000B8 /* GridReflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F8 /* GridReflowTests.swift */; };
+		A0E3000000000000000000B1 /* FilterResultTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E3000000000000000000F1 /* FilterResultTransition.swift */; };
+		A0E3000000000000000000B2 /* FilterResultTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E3000000000000000000F2 /* FilterResultTransitionTests.swift */; };
 		A0F3000000000000000000B1 /* NumericConditionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3000000000000000000F1 /* NumericConditionSlider.swift */; };
 		A0F3000000000000000000B2 /* NumericConditionSliderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */; };
 		A11C0A000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A11C0A000000000000000002 /* Assets.xcassets */; };
@@ -126,6 +128,8 @@
 		A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagStateCacheTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F7 /* GridReflow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GridReflow.swift; path = Library/GridReflow.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F8 /* GridReflowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GridReflowTests.swift; sourceTree = "<group>"; };
+		A0E3000000000000000000F1 /* FilterResultTransition.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FilterResultTransition.swift; path = Library/FilterResultTransition.swift; sourceTree = "<group>"; };
+		A0E3000000000000000000F2 /* FilterResultTransitionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilterResultTransitionTests.swift; sourceTree = "<group>"; };
 		A0F3000000000000000000F1 /* NumericConditionSlider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NumericConditionSlider.swift; path = Library/NumericConditionSlider.swift; sourceTree = "<group>"; };
 		A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumericConditionSliderTests.swift; sourceTree = "<group>"; };
 		A11C0A000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -234,6 +238,7 @@
 				A0E2000000000000000000F5 /* TagCapsulesTests.swift */,
 				A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */,
 				A0E2000000000000000000F8 /* GridReflowTests.swift */,
+				A0E3000000000000000000F2 /* FilterResultTransitionTests.swift */,
 				A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */,
 				4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */,
 				D0AA92E51624A2CF7E78A87B /* AppUpdateFlowTests.swift */,
@@ -297,6 +302,7 @@
 				A0E2000000000000000000F1 /* ThumbnailReveal.swift */,
 				A0E2000000000000000000F4 /* TagCapsules.swift */,
 				A0E2000000000000000000F7 /* GridReflow.swift */,
+				A0E3000000000000000000F1 /* FilterResultTransition.swift */,
 				A0F3000000000000000000F1 /* NumericConditionSlider.swift */,
 				999DD897E04F33DB96FBAF98 /* SidebarViewController.swift */,
 				A1FF02AA6C391F4A09600494 /* VideoGridViewController.swift */,
@@ -449,6 +455,7 @@
 				A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */,
 				A0E2000000000000000000B4 /* TagCapsules.swift in Sources */,
 				A0E2000000000000000000B7 /* GridReflow.swift in Sources */,
+				A0E3000000000000000000B1 /* FilterResultTransition.swift in Sources */,
 				A0F3000000000000000000B1 /* NumericConditionSlider.swift in Sources */,
 				1E40E58D5FC7F491D7B2D1D9 /* SidebarViewController.swift in Sources */,
 				9AF05198436650CF3898E5F0 /* VideoGridViewController.swift in Sources */,
@@ -478,6 +485,7 @@
 				A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */,
 				A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */,
 				A0E2000000000000000000B8 /* GridReflowTests.swift in Sources */,
+				A0E3000000000000000000B2 /* FilterResultTransitionTests.swift in Sources */,
 				A0F3000000000000000000B2 /* NumericConditionSliderTests.swift in Sources */,
 				2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */,
 				788BA0C0D9644F01F4E01267 /* AppUpdateFlowTests.swift in Sources */,

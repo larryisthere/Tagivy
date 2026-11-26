@@ -23,6 +23,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Tag counts in the sidebar update right away and roll to their new value.
 - Thumbnails that load later fade in instead of appearing abruptly.
 - When resizing thumbnails changes how many fit in a row, they glide to their new positions instead of jumping.
+- When you change filters or search, thumbnails that still match glide to their new positions, ones that no longer match fade out, and new matches fade in. Large changes switch at once, and with Reduce Motion on the grid crossfades instead.
 - Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
 
 ### Fixed
