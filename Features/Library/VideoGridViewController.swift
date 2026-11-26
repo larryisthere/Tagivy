@@ -78,6 +78,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     static let maximumGridItemWidth = 280.0
     private static let thumbnailHeightRatio = 0.55
     private static let gridItemChromeHeight = 64.0
+    private var reflowGlideEndsAt: TimeInterval = 0
 
     private struct GroupSection {
         let id: String
@@ -1359,9 +1360,34 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     func setGridItemWidth(_ width: Double) {
         guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
         let clampedWidth = min(Self.maximumGridItemWidth, max(Self.minimumGridItemWidth, width))
+        let now = ProcessInfo.processInfo.systemUptime
+        let duration = GridReflow.animationDuration(
+            fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
+            toColumns: columnCount(in: layout, itemWidth: clampedWidth),
+            remainingGlide: reflowGlideEndsAt - now,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
         layout.itemSize = gridItemSize(for: clampedWidth)
-        layout.invalidateLayout()
+        if duration > 0 {
+            reflowGlideEndsAt = now + duration
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layout.invalidateLayout()
+                collectionView.animator().performBatchUpdates(nil)
+            }
+        } else {
+            layout.invalidateLayout()
+        }
         UserDefaults.standard.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+    }
+
+    private func columnCount(in layout: NSCollectionViewFlowLayout, itemWidth: Double) -> Int {
+        GridReflow.columnCount(
+            availableWidth: collectionView.bounds.width - layout.sectionInset.left - layout.sectionInset.right,
+            itemWidth: itemWidth,
+            interitemSpacing: layout.minimumInteritemSpacing
+        )
     }
 
     static func persistedGridItemWidth(defaults: UserDefaults = .standard) -> Double {

@@ -22,6 +22,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Switching videos no longer reloads the Inspector's tag list; the selection's tags slide to the top.
 - Tag counts in the sidebar update right away and roll to their new value.
 - Thumbnails that load later fade in instead of appearing abruptly.
+- When resizing thumbnails changes how many fit in a row, they glide to their new positions instead of jumping.
 
 ### Fixed
 
