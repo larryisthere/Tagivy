@@ -5578,13 +5578,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro / DaVinci Resolve…"
+            "value" : "Premiere Pro / DaVinci Resolve (.xml)…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro / DaVinci Resolve…"
+            "value" : "Premiere Pro / DaVinci Resolve（.xml）…"
           }
         }
       }
@@ -5595,13 +5595,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CapCut…"
+            "value" : "CapCut (.fcpxml)…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "剪映…"
+            "value" : "剪映（.fcpxml）…"
           }
         }
       }
@@ -5612,13 +5612,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Final Cut Pro…"
+            "value" : "Final Cut Pro (.fcpxml)…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Final Cut Pro…"
+            "value" : "Final Cut Pro（.fcpxml）…"
           }
         }
       }
