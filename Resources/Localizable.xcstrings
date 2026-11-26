@@ -5297,37 +5297,62 @@
         }
       }
     },
-    "drag.cloudSkipped.caption" : {
+    "drag.exportCaption" : {
+      "comment" : "Caption on a drag that leaves out some videos",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld video isn’t downloaded yet and is skipped. It downloads when you drop."
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporting %#@exported@, excluding %#@skipped@ not downloaded or offline"
+          },
+          "substitutions" : {
+            "exported" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg video"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg videos"
+                    }
+                  }
                 }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld videos aren’t downloaded yet and are skipped. They download when you drop."
+              }
+            },
+            "skipped" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg"
+                    }
+                  }
                 }
               }
             }
           }
         },
         "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld 个视频还没下载，这次先跳过，松手后开始下载"
-                }
-              }
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将导出 %1$lld 个视频，不包含未下载和离线的 %2$lld 个视频"
           }
         }
       }

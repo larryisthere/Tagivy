@@ -38,8 +38,17 @@ struct LibraryImportSummary: Equatable, Sendable {
 struct DraggableVideoFiles: Equatable, Sendable {
     let ready: [URL]
     let inCloud: [URL]
+    /// Matching videos whose files cannot be reached, such as videos on a disconnected drive.
+    let offlineCount: Int
 
-    init(urls: [URL], isCloudPlaceholder: (URL) -> Bool = VideoCloudReadiness.isPlaceholder(at:)) {
+    var skippedCount: Int { inCloud.count + offlineCount }
+
+    init(
+        urls: [URL],
+        offlineCount: Int = 0,
+        isCloudPlaceholder: (URL) -> Bool = VideoCloudReadiness.isPlaceholder(at:)
+    ) {
+        self.offlineCount = offlineCount
         var ready: [URL] = []
         var inCloud: [URL] = []
         for url in urls {
@@ -1598,13 +1607,19 @@ final class LibraryAccessCoordinator {
         Task {
             var videoIDs = Set<String>()
             var urls: [URL] = []
+            var offlineCount = 0
             for query in queries {
                 let videos = (try? await database.fetchVideos(libraryID: LibraryRecord.primaryID, query: query)) ?? []
-                for video in videos where video.availability == .available && videoIDs.insert(video.id).inserted {
-                    if let url = fileURL(for: video) { urls.append(url) }
+                for video in videos where videoIDs.insert(video.id).inserted {
+                    let presented = presentedVideo(video)
+                    if presented.availability == .available, let url = fileURL(for: video) {
+                        urls.append(url)
+                    } else {
+                        offlineCount += 1
+                    }
                 }
             }
-            completion(DraggableVideoFiles(urls: urls))
+            completion(DraggableVideoFiles(urls: urls, offlineCount: offlineCount))
         }
     }
 

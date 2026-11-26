@@ -134,6 +134,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var isSynchronizingSelection = false
     private var draggedItemViews: [VideoCollectionItemView] = []
     private var draggedCloudVideoFiles: [URL] = []
+    private var draggedExportIndexPaths = Set<IndexPath>()
+    private var draggedSkippedIndexPaths = Set<IndexPath>()
     var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
 
     private let emptyState = NSStackView()
@@ -1018,9 +1020,13 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             let files = DraggableVideoFiles(urls: [url])
             if files.ready.isEmpty == false {
                 item.setString(url.absoluteString, forType: .fileURL)
-            } else if draggedCloudVideoFiles.contains(url) == false {
-                draggedCloudVideoFiles.append(url)
+                draggedExportIndexPaths.insert(indexPath)
+            } else {
+                draggedSkippedIndexPaths.insert(indexPath)
+                if draggedCloudVideoFiles.contains(url) == false { draggedCloudVideoFiles.append(url) }
             }
+        } else {
+            draggedSkippedIndexPaths.insert(indexPath)
         }
         return item
     }
@@ -1036,8 +1042,13 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             itemView.staysVisibleWhileDragged = true
             draggedItemViews.append(itemView)
         }
-        if draggedCloudVideoFiles.isEmpty == false {
-            CloudDragCaption.attach(count: draggedCloudVideoFiles.count, to: session, in: collectionView)
+        if draggedSkippedIndexPaths.isEmpty == false {
+            DragExportCaption.attach(
+                exportCount: draggedExportIndexPaths.count,
+                skippedCount: draggedSkippedIndexPaths.count,
+                to: session,
+                in: collectionView
+            )
         }
     }
 
@@ -1049,7 +1060,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     ) {
         let cloudFiles = draggedCloudVideoFiles
         draggedCloudVideoFiles = []
-        if cloudFiles.isEmpty == false, CloudDragCaption.endedOutsideApp(at: screenPoint) {
+        draggedExportIndexPaths = []
+        draggedSkippedIndexPaths = []
+        if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
             onDragLeftOutCloudVideoFiles(cloudFiles)
         }
         let views = draggedItemViews
@@ -1683,11 +1696,17 @@ private final class ImportStatusView: NSView {
     }
 }
 
-/// Tells the user, on the image that follows the pointer, that videos still in iCloud were left out of the drag.
+/// Tells the user, on the image that follows the pointer, how many videos the drag exports and how many
+/// it leaves out because they are not downloaded from iCloud or are offline.
 @MainActor
-enum CloudDragCaption {
-    static func attach(count: Int, to session: NSDraggingSession, in view: NSView) {
-        let caption = captionImage(String(localized: .dragCloudSkippedCaption(count)))
+enum DragExportCaption {
+    static func attach(exportCount: Int, skippedCount: Int, to session: NSDraggingSession, in view: NSView) {
+        let text = String.localizedStringWithFormat(
+            NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
+            exportCount,
+            skippedCount
+        )
+        let caption = captionImage(text)
         var isAttached = false
         session.enumerateDraggingItems(
             options: [],

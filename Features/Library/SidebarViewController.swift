@@ -580,10 +580,16 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             let remainingURLs = dragFileURLs.files.ready.filter { $0 != leadingDragFileURL }
             session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
         }
-        if dragFileURLs.files.inCloud.isEmpty == false {
-            CloudDragCaption.attach(count: dragFileURLs.files.inCloud.count, to: session, in: outlineView)
-            draggedCloudVideoFiles = dragFileURLs.files.inCloud
+        let files = dragFileURLs.files
+        if files.skippedCount > 0 {
+            DragExportCaption.attach(
+                exportCount: files.ready.count,
+                skippedCount: files.skippedCount,
+                to: session,
+                in: outlineView
+            )
         }
+        draggedCloudVideoFiles = files.inCloud
     }
 
     func outlineView(
@@ -595,7 +601,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         dragFileURLs = nil
         let cloudFiles = draggedCloudVideoFiles
         draggedCloudVideoFiles = []
-        if cloudFiles.isEmpty == false, CloudDragCaption.endedOutsideApp(at: screenPoint) {
+        if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
             onDragLeftOutCloudVideoFiles(cloudFiles)
         }
     }
