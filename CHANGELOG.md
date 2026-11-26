@@ -4,6 +4,8 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-11-26
+
 ### Added
 
 - Drag selected videos, a tag, or a smart filter from the library to Finder, video editors such as Premiere Pro, or other apps to copy or import the original files. A tag includes the videos of its subtags. Unavailable and offline videos are left out, and dragging into Finder copies the files instead of moving them. Videos that are still in iCloud are left out and start downloading once you drop outside Tagivy. While a drag is outside Tagivy, the dragged image shows how many videos it exports and, if any, how many it leaves out.
