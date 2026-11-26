@@ -6,6 +6,7 @@ require "base64"
 require "json"
 require "tempfile"
 require_relative "../tool/appcast"
+require_relative "../tool/release_notes"
 
 ENV["FASTLANE_OPT_OUT_USAGE"] = "1"
 ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
@@ -150,19 +151,27 @@ def validate_app!(app_path, allow_development_signing:)
   end
 end
 
-def release_notes_file!(output_directory)
+# Release notes: the whole CHANGELOG section for a release; for Beta N > 1, only the entries added
+# since Beta N-1 of the same version (read from that beta's tag).
+def release_notes_file!(output_directory, beta: nil)
   version = release_build_settings["MARKETING_VERSION"]
-  changelog_path = File.join(REPO_ROOT, "CHANGELOG.md")
-  lines = File.readlines(changelog_path)
-  heading = /^## \[#{Regexp.escape(version)}\](?:\s+-.*)?\s*$/
-  start_index = lines.index { |line| line.match?(heading) }
-  UI.user_error!("CHANGELOG.md 缺少版本 #{version} 的发布说明") unless start_index
-  end_index = lines.each_index.find { |index| index > start_index && lines[index].match?(/^## \[/) } || lines.length
-  notes = lines[start_index...end_index].join.strip
-  UI.user_error!("版本 #{version} 的发布说明为空") if notes.empty?
+  section = ReleaseNotes.section(File.read(File.join(REPO_ROOT, "CHANGELOG.md")), version)
+  UI.user_error!("CHANGELOG.md 缺少版本 #{version} 的发布说明") unless section
+  UI.user_error!("版本 #{version} 的发布说明为空") if section.empty?
+
+  notes = "## [#{version}]\n\n#{section}"
+  if beta && beta > 1
+    previous_tag = "v#{version}-beta.#{beta - 1}"
+    sh("git -C #{shell_escape(REPO_ROOT)} fetch --quiet origin #{shell_escape("refs/tags/#{previous_tag}:refs/tags/#{previous_tag}")} 2>/dev/null || true", log: false)
+    previous_changelog = sh("git -C #{shell_escape(REPO_ROOT)} show #{shell_escape("#{previous_tag}:CHANGELOG.md")} 2>/dev/null || true", log: false)
+    UI.user_error!("找不到上一个 Beta 的 tag：#{previous_tag}") if previous_changelog.strip.empty?
+    added = ReleaseNotes.added_since(ReleaseNotes.section(previous_changelog, version), section)
+    UI.user_error!("CHANGELOG.md 的 #{version} 段落自 Beta #{beta - 1} 以来没有新条目") if added.empty?
+    notes = "Changes since Beta #{beta - 1}.\n\n#{added}"
+  end
 
   FileUtils.mkdir_p(output_directory)
-  path = File.join(output_directory, "release-notes-#{version}.md")
+  path = File.join(output_directory, "release-notes-#{release_label(beta)}.md")
   File.write(path, "#{notes}\n")
   path
 end
@@ -264,7 +273,7 @@ def publish_github_release!(output_directory, beta: nil)
   end
   expected = File.read(checksum_path).split.first
   UI.user_error!("发布包 SHA-256 与校验文件不一致") unless Digest::SHA256.file(zip_path).hexdigest == expected
-  notes_path = release_notes_file!(output_directory)
+  notes_path = release_notes_file!(output_directory, beta: beta)
 
   case github_release_state(repository, tag)
   when :published
@@ -456,7 +465,7 @@ platform :mac do
     beta = beta_number(options)
     require_clean_release_source!
     require_github_commit!(github_repository)
-    release_notes_file!(release_root("github-notes-check"))
+    release_notes_file!(release_root("github-notes-check"), beta: beta)
     FileUtils.rm_rf(release_root("github-notes-check"))
     run_tests!
     output_directory = release_root(github_output_channel(beta))
