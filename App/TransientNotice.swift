@@ -74,6 +74,8 @@ final class TransientNotice {
 }
 
 private final class TransientNoticeView: NSVisualEffectView {
+    static let textWidth: CGFloat = 300
+
     var onHoverChanged: (Bool) -> Void = { _ in }
     private let onAction: () -> Void
 
@@ -84,7 +86,7 @@ private final class TransientNoticeView: NSVisualEffectView {
         blendingMode = .withinWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = 12
         layer?.masksToBounds = true
 
         let titleLabel = NSTextField(labelWithString: title)
@@ -94,6 +96,8 @@ private final class TransientNoticeView: NSVisualEffectView {
             let detailLabel = NSTextField(wrappingLabelWithString: detail)
             detailLabel.textColor = .secondaryLabelColor
             detailLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            // Without a wrapping width the label reports a one-line height and its second line spills out.
+            detailLabel.preferredMaxLayoutWidth = Self.textWidth
             texts.append(detailLabel)
         }
         let textStack = NSStackView(views: texts)
@@ -113,7 +117,7 @@ private final class TransientNoticeView: NSVisualEffectView {
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 16
-        row.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 12)
+        row.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 12)
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
