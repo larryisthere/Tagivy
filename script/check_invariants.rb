@@ -96,7 +96,7 @@ end
 ALERT_PRESENTERS = [
   "App/FolderImportMethodPresenter.swift", # folder import method
   "Core/FileAccess/LibraryAccessCoordinator.swift", # relink confirmation
-  "Features/Library/InspectorViewController.swift",
+  "Features/Library/InspectorViewController.swift", # remove unavailable videos
   "Features/Library/LibrarySplitViewController.swift", # smart filter save / leave / delete
   "Features/Library/SidebarViewController.swift", # delete tag
   "Features/Library/VideoGridViewController.swift" # remove records
