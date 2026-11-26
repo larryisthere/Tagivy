@@ -53,7 +53,7 @@ enum FCP7XMLWriter {
             xml.close("video")
             if clip.hasAudio {
                 xml.open("audio")
-                xml.element("channelcount", "2")
+                xml.element("channelcount", String(clip.audioChannels ?? 2))
                 xml.close("audio")
             }
             xml.close("media")

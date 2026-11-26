@@ -59,6 +59,8 @@ struct NLEExportClip: Equatable, Sendable {
     let width: Int?
     let height: Int?
     let hasAudio: Bool
+    /// Nil when the library has not recorded it.
+    let audioChannels: Int?
     /// Every tag on the video, in tag tree order. Written where editors can search it.
     let tagNames: [String]
     /// Tags inside the exported tag group, in tag tree order. Final Cut Pro keywords.
@@ -198,7 +200,10 @@ enum NLEExportPlanBuilder {
             .sorted { (treeOrder[$0] ?? .max) < (treeOrder[$1] ?? .max) }
         let subtreeIDs = rootIDs.reduce(into: Set<String>()) { $0.formUnion(subtree($1)) }
 
-        let clips = videos.map { video -> NLEExportClip in
+        // Editing apps need a clip's length; a video whose length is not known yet is left out like an unavailable one.
+        let timedVideos = videos.filter { $0.record.duration.map { $0.isFinite && $0 > 0 } == true }
+        let leftOutCount = skippedCount + videos.count - timedVideos.count
+        let clips = timedVideos.map { video -> NLEExportClip in
             let record = video.record
             let tagIDs = tagIDsByVideo[record.id] ?? []
             return NLEExportClip(
@@ -210,6 +215,7 @@ enum NLEExportPlanBuilder {
                 width: record.width,
                 height: record.height,
                 hasAudio: record.mediaSourceInfo.map { $0.audioCodec != nil || $0.audioChannels != nil } ?? true,
+                audioChannels: record.mediaSourceInfo?.audioChannels,
                 tagNames: tagIDs.compactMap { tagsByID[$0]?.name },
                 keywords: tagIDs.filter(subtreeIDs.contains).compactMap { tagsByID[$0]?.name }
             )
@@ -242,7 +248,7 @@ enum NLEExportPlanBuilder {
         return NLEExportPlan(
             root: root,
             clips: clips,
-            skippedCount: skippedCount,
+            skippedCount: leftOutCount,
             rootIsTag: rootIsTag,
             tagBins: tagBins
         )
