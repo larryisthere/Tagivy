@@ -35,7 +35,7 @@
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/larryisthere/Tagivy/appcast/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>SPARKLE_PUBLIC_ED_KEY</string>
+	<string>3tI/R9FpuyliCsbWgziLEiWXzVbCEQHFhJQIJ6AcgOw=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>3600</integer>
 </dict>
