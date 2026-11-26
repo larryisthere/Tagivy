@@ -173,7 +173,7 @@ xcodebuild \
 
 The local development script is `./script/build_and_run.sh`. It builds, signs, and launches the app, so configure your development signing in Xcode before using it.
 
-Ruby and Bundler are only required for the Fastlane release workflow documented in [docs/release.md](docs/release.md).
+Run `ruby script/check_invariants.rb` to check project-wide rules locally. Bundler is only required for the Fastlane release workflow documented in [docs/release.md](docs/release.md).
 
 ## Project structure
 
@@ -181,8 +181,7 @@ Ruby and Bundler are only required for the Fastlane release workflow documented 
 - `Core/` — database, file access, scanning, media, and security services
 - `Features/` — library, settings, and app-lock interfaces
 - `Tests/` — automated checks for core models and services
-- `docs/product/` — current requirements and acceptance records
-- `docs/architecture/` — accepted architecture decisions
+- `script/check_invariants.rb` — project-wide rules (sandbox, read-only originals, no network, logging privacy, localization) checked in CI
 - `docs/release.md` — local, GitHub, and App Store release workflows
 
 Automated checks validate only their stated assertions. Product logic, interaction, and UI remain subject to user acceptance.

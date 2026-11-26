@@ -1327,7 +1327,7 @@ actor DatabaseStore {
             )
         case .recent:
             conditions.append("videos.first_indexed_at >= ?")
-            bindings.append(.double(now.addingTimeInterval(-30 * 24 * 60 * 60).timeIntervalSince1970))
+            bindings.append(.double(now.addingTimeInterval(-LibraryFilter.recentlyAddedInterval).timeIntervalSince1970))
         case let .tag(tagID):
             conditions.append(tagMatchPredicate(tagID: tagID, bindings: &bindings))
         case let .tags(tagIDs):
@@ -1509,7 +1509,7 @@ actor DatabaseStore {
         sqlite3_bind_double(
             statement,
             1,
-            now.addingTimeInterval(-30 * 24 * 60 * 60).timeIntervalSince1970
+            now.addingTimeInterval(-LibraryFilter.recentlyAddedInterval).timeIntervalSince1970
         )
         bindText(libraryID, to: 2, in: statement)
         bindText(libraryID, to: 3, in: statement)
