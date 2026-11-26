@@ -48,6 +48,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var dragFileURLs: (keys: [SidebarSelectionKey], urls: [URL])?
     /// Rows the outline view asked pasteboard writers for in the drag that is starting.
     private var draggedFileURLKeys: [SidebarSelectionKey] = []
+    /// The file already written with a row, so other apps accept the drag from its start.
+    private var leadingDragFileURL: URL?
 
     init(
         onFilterChanged: @escaping (LibraryFilter) -> Void,
@@ -113,9 +115,6 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.setDraggingSourceOperationMask(.copy, forLocal: false)
         outlineView.onMouseDown = { [weak self] event in
             self?.prepareDragFileURLs(for: event)
-        }
-        outlineView.fileURLsForDrag = { [weak self] in
-            self?.fileURLsForCurrentDrag() ?? []
         }
         let menu = NSMenu()
         menu.delegate = self
@@ -519,10 +518,23 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-        draggedFileURLKeys.append(contentsOf: dragFileURLKeys(for: [item]).filter { draggedFileURLKeys.contains($0) == false })
+        let itemKeys = dragFileURLKeys(for: [item])
+        draggedFileURLKeys.append(contentsOf: itemKeys.filter { draggedFileURLKeys.contains($0) == false })
+        // Other apps decide whether to accept a drag from what it carries when it starts, so the first
+        // dragged row carries one file. The remaining files are added once the drag has begun.
+        var leadingURL: URL?
+        if leadingDragFileURL == nil,
+           let dragFileURLs,
+           itemKeys.isEmpty == false,
+           Set(itemKeys).isSubset(of: dragFileURLs.keys),
+           let firstURL = dragFileURLs.urls.first {
+            leadingDragFileURL = firstURL
+            leadingURL = firstURL
+        }
         if let smartCollection = item as? SmartCollectionNode {
             let pasteboardItem = NSPasteboardItem()
             pasteboardItem.setString(smartCollection.collection.id, forType: Self.smartCollectionPasteboardType)
+            if let leadingURL { pasteboardItem.setString(leadingURL.absoluteString, forType: .fileURL) }
             return pasteboardItem
         }
         guard let tag = item as? TagNode else { return nil }
@@ -538,13 +550,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         let pasteboardItem = NSPasteboardItem()
         pasteboardItem.setString(draggedTags.map(\.id).joined(separator: "\n"), forType: Self.tagPasteboardType)
+        if let leadingURL { pasteboardItem.setString(leadingURL.absoluteString, forType: .fileURL) }
         return pasteboardItem
-    }
-
-    /// Files of the available videos in the rows being dragged, once they have loaded.
-    private func fileURLsForCurrentDrag() -> [URL] {
-        guard let dragFileURLs, Set(dragFileURLs.keys) == Set(draggedFileURLKeys) else { return [] }
-        return dragFileURLs.urls
     }
 
     func outlineView(
@@ -553,7 +560,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         willBeginAt screenPoint: NSPoint,
         forItems draggedItems: [Any]
     ) {
-        draggedFileURLKeys = []
+        defer {
+            draggedFileURLKeys = []
+            leadingDragFileURL = nil
+        }
+        guard let dragFileURLs, let leadingDragFileURL,
+              Set(dragFileURLs.keys) == Set(draggedFileURLKeys) else { return }
+        let remainingURLs = dragFileURLs.urls.filter { $0 != leadingDragFileURL }
+        session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
     }
 
     func outlineView(
@@ -570,6 +584,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         dragFileURLRequestGeneration += 1
         dragFileURLs = nil
         draggedFileURLKeys = []
+        leadingDragFileURL = nil
         let point = outlineView.convert(event.locationInWindow, from: nil)
         let row = outlineView.row(at: point)
         guard row >= 0, let pressedItem = outlineView.item(atRow: row) else { return }
@@ -1501,26 +1516,10 @@ private enum SidebarInlineRenameTarget: Equatable {
 @MainActor
 private final class SidebarOutlineView: NSOutlineView {
     var onMouseDown: ((NSEvent) -> Void)?
-    var fileURLsForDrag: (() -> [URL])?
 
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)
         super.mouseDown(with: event)
-    }
-
-    /// Adds one dragging item per video file, because other apps read one file from each pasteboard item.
-    override func beginDraggingSession(
-        with items: [NSDraggingItem],
-        event: NSEvent,
-        source: NSDraggingSource
-    ) -> NSDraggingSession {
-        let frame = items.first?.draggingFrame ?? .zero
-        let fileItems = (fileURLsForDrag?() ?? []).map { url in
-            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
-            item.setDraggingFrame(frame, contents: nil)
-            return item
-        }
-        return super.beginDraggingSession(with: items + fileItems, event: event, source: source)
     }
 }
 
