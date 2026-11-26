@@ -54,6 +54,9 @@
 		E8BCC961F2C8724F76B141E4 /* SecurityScopedResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB6000E03913CDFF89032FF /* SecurityScopedResource.swift */; };
 		F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11D00000000000000000002 /* FolderImportMethodPresenter.swift */; };
 		A0E1000000000000000000B6 /* TransientNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F6 /* TransientNotice.swift */; };
+		A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F1 /* ThumbnailReveal.swift */; };
+		A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F2 /* InspectorTagListTests.swift */; };
+		A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */; };
 		A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F1 /* EditorExportPresenter.swift */; };
 		F28A0932B7510114E8910211 /* SyntheticThumbnailFixture.m4v in Resources */ = {isa = PBXBuildFile; fileRef = F28A0932B7510114E8910212 /* SyntheticThumbnailFixture.m4v */; };
 /* End PBXBuildFile section */
@@ -107,6 +110,9 @@
 		C2129BA05EEE64F81130DCAB /* LockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LockView.swift; path = Lock/LockView.swift; sourceTree = "<group>"; };
 		C520765DD1E9E7CB1BA8D58C /* SidebarModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SidebarModel.swift; path = Library/SidebarModel.swift; sourceTree = "<group>"; };
 		A0E1000000000000000000F5 /* EditorExportMenu.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EditorExportMenu.swift; path = Library/EditorExportMenu.swift; sourceTree = "<group>"; };
+		A0E2000000000000000000F1 /* ThumbnailReveal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThumbnailReveal.swift; path = Library/ThumbnailReveal.swift; sourceTree = "<group>"; };
+		A0E2000000000000000000F2 /* InspectorTagListTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagListTests.swift; sourceTree = "<group>"; };
+		A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThumbnailRevealTests.swift; sourceTree = "<group>"; };
 		C6074EECBDF10CF9B772C1A5 /* MediaProcessingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaProcessingServiceTests.swift; sourceTree = "<group>"; };
 		CB2E252D426AB761A06F5F9F /* InspectorViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InspectorViewController.swift; path = Library/InspectorViewController.swift; sourceTree = "<group>"; };
 		DF4B385CF17799F7594B30A2 /* AuthenticationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AuthenticationService.swift; path = Security/AuthenticationService.swift; sourceTree = "<group>"; };
@@ -198,6 +204,8 @@
 				97EB9F42F6AE50FE1F8671DE /* PreferencesStoreTests.swift */,
 				AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */,
 				A0E1000000000000000000F4 /* NLEExportTests.swift */,
+				A0E2000000000000000000F2 /* InspectorTagListTests.swift */,
+				A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */,
 				4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */,
 			);
 			path = Tests;
@@ -255,6 +263,7 @@
 				4ECC7AA422EA282386D5974C /* LibrarySplitViewController.swift */,
 				C520765DD1E9E7CB1BA8D58C /* SidebarModel.swift */,
 				A0E1000000000000000000F5 /* EditorExportMenu.swift */,
+				A0E2000000000000000000F1 /* ThumbnailReveal.swift */,
 				999DD897E04F33DB96FBAF98 /* SidebarViewController.swift */,
 				A1FF02AA6C391F4A09600494 /* VideoGridViewController.swift */,
 				C2129BA05EEE64F81130DCAB /* LockView.swift */,
@@ -396,6 +405,7 @@
 				0C54A3A5BC0A2404DCA91C8D /* LibrarySplitViewController.swift in Sources */,
 				D4FE04895A1AB608482B131C /* SidebarModel.swift in Sources */,
 				A0E1000000000000000000B5 /* EditorExportMenu.swift in Sources */,
+				A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */,
 				1E40E58D5FC7F491D7B2D1D9 /* SidebarViewController.swift in Sources */,
 				9AF05198436650CF3898E5F0 /* VideoGridViewController.swift in Sources */,
 				0EA6CA27889C08E04FAC7081 /* LockView.swift in Sources */,
@@ -416,6 +426,8 @@
 				DF49AD9A88819521E8985E78 /* PreferencesStoreTests.swift in Sources */,
 				1E908D672F65231A67801238 /* SidebarModelTests.swift in Sources */,
 				A0E1000000000000000000B4 /* NLEExportTests.swift in Sources */,
+				A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */,
+				A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */,
 				2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

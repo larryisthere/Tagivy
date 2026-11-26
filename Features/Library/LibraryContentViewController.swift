@@ -688,6 +688,7 @@ private final class ScanCandidateCollectionViewItem: NSCollectionViewItem {
         thumbnailContainer.layer?.backgroundColor = NSColor.quaternaryLabelColor
             .withAlphaComponent(0.12).cgColor
         iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.wantsLayer = true
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.contentTintColor = .secondaryLabelColor
         filenameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -751,6 +752,7 @@ private final class ScanCandidateCollectionViewItem: NSCollectionViewItem {
         let scale = view.window?.backingScaleFactor
             ?? NSScreen.main?.backingScaleFactor
             ?? 2
+        let wait = ThumbnailWait()
         thumbnailTask = Task { @MainActor [weak self] in
             let image = await thumbnailStore.image(
                 for: candidate,
@@ -761,6 +763,7 @@ private final class ScanCandidateCollectionViewItem: NSCollectionViewItem {
                   let self,
                   representedCandidateID == candidate.id,
                   let image else { return }
+            wait.reveal.prepare(iconView.layer)
             iconView.contentTintColor = nil
             iconView.image = image
         }

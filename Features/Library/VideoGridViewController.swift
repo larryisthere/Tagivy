@@ -1976,6 +1976,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private var imageRequest = UUID()
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
+    private var placeholderWait = ThumbnailWait()
 
     override func prepareForReuse() {
         super.prepareForReuse()
@@ -1983,7 +1984,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         imageRequest = UUID()
         configuredVideo = nil
         configuredURL = nil
-        thumbnailView.image = nil
+        thumbnailView.setImage(nil, reveal: .immediate)
         isHovered = false
         updateSelectionAppearance()
     }
@@ -2041,7 +2042,8 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         let needsImage = refreshThumbnail || configuredVideo?.id != video.id || configuredURL != thumbnailURL
             || configuredVideo?.thumbnailStatus != video.thumbnailStatus
             || configuredVideo?.contentFingerprint != video.contentFingerprint
-        if configuredVideo?.id != video.id {
+        let isSameVideo = configuredVideo?.id == video.id
+        if isSameVideo == false {
             isHovered = false
             updateSelectionAppearance()
         }
@@ -2051,13 +2053,25 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
             imageTask?.cancel()
             let request = UUID()
             imageRequest = request
-            thumbnailView.image = nil
+            let previewMayStillArrive = video.thumbnailStatus == .pending
+            // A refreshed thumbnail of the same video replaces the old image instead of
+            // dropping back to the placeholder first.
+            if isSameVideo == false {
+                thumbnailView.setImage(nil, reveal: .immediate)
+                placeholderWait = ThumbnailWait()
+            }
             if let thumbnailURL {
+                thumbnailView.showsMissingPreview = false
                 imageTask = Task { [weak self] in
                     let image = await DecodedVideoThumbnailCache.shared.image(at: thumbnailURL)
                     guard !Task.isCancelled, let self, imageRequest == request else { return }
-                    thumbnailView.image = image
+                    let reveal: ThumbnailReveal = thumbnailView.image == nil ? placeholderWait.reveal : .fade
+                    thumbnailView.setImage(image, reveal: reveal)
+                    thumbnailView.showsMissingPreview = image == nil && previewMayStillArrive == false
                 }
+            } else {
+                thumbnailView.setImage(nil, reveal: .immediate)
+                thumbnailView.showsMissingPreview = previewMayStillArrive == false
             }
         }
         thumbnailView.setStatus(video.accessPresentation)
@@ -2095,11 +2109,30 @@ private final class VideoThumbnailView: NSView {
     private let offlineBadgeView = NSView()
     private let statusIcon = NSImageView()
 
-    var image: CGImage? {
-        didSet {
-            placeholderView.isHidden = image != nil
-            updateImageLayer()
-        }
+    private(set) var image: CGImage?
+
+    /// The film symbol marks a video that has no preview. While one may still arrive the
+    /// placeholder stays a plain fill, so the thumbnail fades in over nothing distracting.
+    var showsMissingPreview = false {
+        didSet { updatePlaceholder() }
+    }
+
+    func setImage(_ newImage: CGImage?, reveal: ThumbnailReveal) {
+        guard newImage !== image else { return }
+        (newImage == nil ? ThumbnailReveal.immediate : reveal).prepare(layer)
+        image = newImage
+        updatePlaceholder()
+        updateImageLayer()
+    }
+
+    private func updatePlaceholder() {
+        placeholderView.isHidden = image != nil || showsMissingPreview == false
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
     }
 
     func setStatus(_ status: VideoThumbnailStatus) {
@@ -2127,6 +2160,7 @@ private final class VideoThumbnailView: NSView {
         placeholderView.symbolConfiguration = .init(pointSize: 34, weight: .light)
         placeholderView.contentTintColor = .secondaryLabelColor
         placeholderView.imageScaling = .scaleProportionallyUpOrDown
+        placeholderView.isHidden = true
         addSubview(placeholderView)
 
         offlineOverlayView.translatesAutoresizingMaskIntoConstraints = false
