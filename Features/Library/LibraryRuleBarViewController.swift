@@ -1239,6 +1239,18 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
     }
 
     override func loadView() {
+        view = NSView()
+        rebuildContent()
+    }
+
+    /// Replaces the editor's content inside the same root view, so the popover keeps its
+    /// window and resizes to the new content instead of collapsing around a swapped view.
+    private func rebuildContent() {
+        if let responder = view.window?.firstResponder as? NSView, responder.isDescendant(of: view) {
+            view.window?.makeFirstResponder(nil)
+        }
+        view.subviews.forEach { $0.removeFromSuperview() }
+
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1332,7 +1344,16 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         validation.isHidden = validationMessage == nil && reservesValidationSpace == false
         let fittedHeight = ceil(stack.fittingSize.height)
 
-        view = stack
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: view.topAnchor),
+        ])
+        let bottom = stack.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        bottom.priority = .defaultHigh
+        bottom.isActive = true
         preferredContentSize = NSSize(
             width: Self.popoverWidth,
             height: min(Self.maximumPopoverHeight, fittedHeight)
@@ -1677,7 +1698,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
 
     private func draftDidChange(rebuild: Bool = false) {
         if rebuild {
-            loadView()
+            rebuildContent()
         } else {
             updateDoneAvailability()
         }
