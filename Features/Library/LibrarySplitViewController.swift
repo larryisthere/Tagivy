@@ -32,7 +32,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             videoGridViewController.onExportToEditor = onExportToEditor
         }
     }
-    private let onQueryChanged: (LibraryQueryRequest, Bool) -> Void
+    /// The query, whether to debounce it, and its filter-change generation.
+    private let onQueryChanged: (LibraryQueryRequest, Bool, Int) -> Void
     private let onCreateSmartCollection: (
         String,
         LibraryQueryRule,
@@ -74,6 +75,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var isPresentingSmartCollectionAlert = false
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
+    private var filterQueryGenerations = FilterQueryGenerations()
     private var didApplyInitialLayout = false
     private var shouldApplyInitialLayout = false
     private var isLibraryAvailable = true
@@ -115,7 +117,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         resolveVideosInScopes: @escaping @MainActor ([VideoScope]) async -> ResolvedVideos,
         filePath: @escaping (VideoRecord) -> String?,
         offlineSourceName: @escaping (VideoRecord) -> String?,
-        onQueryChanged: @escaping (LibraryQueryRequest, Bool) -> Void,
+        onQueryChanged: @escaping (LibraryQueryRequest, Bool, Int) -> Void,
         onCreateSmartCollection: @escaping (
             String,
             LibraryQueryRule,
@@ -336,7 +338,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         splitView.setPosition(max(640, width - 280), ofDividerAt: 1)
     }
 
-    func setVideos(_ videos: [VideoRecord]) {
+    func setVideos(_ videos: [VideoRecord], queryGeneration: Int) {
         if isLibraryAvailable == false {
             // A later successful load recovers from an earlier library error.
             isLibraryAvailable = true
@@ -347,7 +349,12 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         visibleVideoCount = videos.count
         let resetBrowsingState = resetBrowsingStateForNextVideoUpdate
         resetBrowsingStateForNextVideoUpdate = false
-        videoGridViewController.setVideos(videos, resetBrowsingState: resetBrowsingState)
+        let isFilterChange = filterQueryGenerations.resultIsFilterChange(generation: queryGeneration)
+        videoGridViewController.setVideos(
+            videos,
+            resetBrowsingState: resetBrowsingState,
+            isFilterChange: isFilterChange
+        )
         if let request = pendingVideoRevealRequest,
            videoGridViewController.selectAndRevealVideos(ids: request.videoIDs) {
             pendingVideoRevealRequest = nil
@@ -672,7 +679,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
                 temporaryFilenameSearch: temporaryFilenameSearch,
                 rule: currentRule
             ),
-            debounce
+            debounce,
+            filterQueryGenerations.next()
         )
     }
 

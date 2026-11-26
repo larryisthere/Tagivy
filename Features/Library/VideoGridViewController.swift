@@ -137,6 +137,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var draggedExportIndexPaths = Set<IndexPath>()
     private var draggedSkippedIndexPaths = Set<IndexPath>()
     private var dragExportCaption: DragExportCaption?
+    private let filterResultOverlay = FilterResultOverlayView()
+    private var scrollObserver: NSObjectProtocol?
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
@@ -227,6 +229,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
 
         scrollViewport.translatesAutoresizingMaskIntoConstraints = false
+        // Installed once and kept above the grid, so a filter change never alters the view tree.
+        filterResultOverlay.frame = scrollViewport.bounds
+        scrollViewport.addSubview(filterResultOverlay)
         installScrollView(scrollView)
 
         emptyState.translatesAutoresizingMaskIntoConstraints = false
@@ -296,7 +301,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         // The viewport is already below the rule bar and any active status.
         scroll.automaticallyAdjustsContentInsets = false
         scroll.contentView.clipsToBounds = true
-        scrollViewport.addSubview(scroll)
+        scroll.contentView.postsBoundsChangedNotifications = true
+        scrollObserver.map(NotificationCenter.default.removeObserver)
+        // Snapshots of leaving thumbnails sit above the grid and would not scroll with it.
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scroll.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.filterResultOverlay.removeSnapshots() }
+        }
+        scrollViewport.addSubview(scroll, positioned: .below, relativeTo: filterResultOverlay)
         scroll.documentView = collectionView
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: scrollViewport.leadingAnchor),
@@ -820,13 +835,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         scrollTopWithoutStatus?.isActive = true
     }
 
-    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false) {
+    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false, isFilterChange: Bool = false) {
         loadViewIfNeeded()
         if !resetBrowsingState, self.videos.map(\.id) == videos.map(\.id),
            zip(self.videos, videos).allSatisfy({ groupBucket(for: $0.0).id == groupBucket(for: $0.1).id }) {
             for video in videos { updateVideo(video, refreshThumbnail: false) }
             return
         }
+        var transition = beginFilterResultTransition(
+            isFilterChange: isFilterChange,
+            newIDs: Set(videos.map(\.id))
+        )
         selectedVideoIDs = resetBrowsingState ? [] : selectedVideoIDs.intersection(videos.map(\.id))
         self.videos = videos
         if resetBrowsingState {
@@ -837,14 +856,183 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             self.selectionAnchorVideoID = nil
         }
         rebuildSections()
+        transition = transition.flatMap { snapshotLeavingThumbnails($0, resetsScroll: resetBrowsingState) }
         reloadCollectionDataPreservingSelection()
         if resetBrowsingState {
             scrollView.contentView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         scrollView.hasVerticalScroller = videos.isEmpty == false
+        transition.map(finishFilterResultTransition)
         updateEmptyState()
         notifySelectionChanged()
+    }
+
+    // MARK: - Filter result transition
+
+    private struct PendingFilterResultTransition {
+        let newIDs: Set<String>
+        let departing: [(id: String, view: NSView)]
+        /// Where each departing thumbnail was drawn, in the overlay's coordinates.
+        let startFrames: [String: NSRect]
+        /// Position of the first departing thumbnail in the old display order.
+        let firstDepartingIndex: Int
+        var snapshots: [String: CALayer] = [:]
+
+        var departingIDs: [String] { departing.map(\.id) }
+    }
+
+    /// Stops what an earlier filter change left running, then records where the on-screen thumbnails
+    /// are so the coming reload can be animated, or starts a crossfade when motion is reduced.
+    private func beginFilterResultTransition(isFilterChange: Bool, newIDs: Set<String>) -> PendingFilterResultTransition? {
+        cancelFilterResultTransition()
+        let canAnimate = isFilterChange && view.window != nil && view.isHiddenOrHasHiddenAncestor == false
+        let departing = canAnimate ? onScreenItemViews() : []
+        let style = FilterResultTransition.style(
+            isFilterChange: canAnimate,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            oldVisibleIDs: departing.map(\.id),
+            newIDs: newIDs
+        )
+        switch style {
+        case .instant:
+            return nil
+        case .crossfade:
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = FilterResultTransition.reducedMotionCrossfadeDuration
+            scrollView.contentView.layer?.add(fade, forKey: kCATransition)
+            return nil
+        case .animated:
+            break
+        }
+        let overlay = filterResultOverlay
+        var startFrames: [String: NSRect] = [:]
+        for (id, itemView) in departing {
+            let offset = itemView.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            startFrames[id] = overlay.convert(itemView.frame.offsetBy(dx: offset.width, dy: offset.height), from: collectionView)
+        }
+        let departingIDs = Set(departing.map(\.id))
+        return PendingFilterResultTransition(
+            newIDs: newIDs,
+            departing: departing,
+            startFrames: startFrames,
+            firstDepartingIndex: displayOrder().firstIndex(where: departingIDs.contains) ?? 0
+        )
+    }
+
+    /// Runs after the sections hold the new result but before the grid reloads, while the item
+    /// views still show the old one. Snapshots only the thumbnails expected to leave the screen,
+    /// and gives up before any snapshot when the change is expected to land without motion.
+    private func snapshotLeavingThumbnails(
+        _ pending: PendingFilterResultTransition,
+        resetsScroll: Bool
+    ) -> PendingFilterResultTransition? {
+        guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return nil }
+        let newOrder = displayOrder()
+        let window = FilterResultTransition.expectedOnScreenRange(
+            firstOldIndex: resetsScroll ? 0 : pending.firstDepartingIndex,
+            onScreenCount: pending.departing.count,
+            newCount: newOrder.count
+        )
+        guard FilterResultTransition.plan(
+            oldVisibleIDs: pending.departingIDs,
+            newVisibleIDs: Array(newOrder[window]),
+            newIDs: pending.newIDs
+        ) != nil else { return nil }
+        let newIndices = Dictionary(newOrder.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        let leaving = Set(FilterResultTransition.idsExpectedToLeaveScreen(
+            oldVisibleIDs: pending.departingIDs,
+            newIndices: newIndices,
+            expectedOnScreen: window,
+            margin: columnCount(in: layout, itemWidth: layout.itemSize.width)
+        ))
+        var result = pending
+        let scale = view.window?.backingScaleFactor ?? 2
+        for (id, itemView) in pending.departing where leaving.contains(id) {
+            guard let frame = pending.startFrames[id], let layer = itemView.layer,
+                  let image = FilterResultTransition.snapshot(of: layer, scale: scale) else { continue }
+            let snapshot = CALayer()
+            snapshot.frame = frame
+            snapshot.contents = image
+            snapshot.contentsScale = scale
+            result.snapshots[id] = snapshot
+        }
+        return result
+    }
+
+    /// Runs after the grid has reloaded with the new result.
+    private func finishFilterResultTransition(_ pending: PendingFilterResultTransition) {
+        // Settle the scroll position first; a later clamp would drop the snapshots added below.
+        scrollView.layoutSubtreeIfNeeded()
+        collectionView.layoutSubtreeIfNeeded()
+        let arriving = onScreenItemViews()
+        guard let plan = FilterResultTransition.plan(
+            oldVisibleIDs: pending.departingIDs,
+            newVisibleIDs: arriving.map(\.id),
+            newIDs: pending.newIDs
+        ) else { return }
+        let overlay = filterResultOverlay
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let arrivingViews = Dictionary(arriving.map { ($0.id, $0.view) }, uniquingKeysWith: { first, _ in first })
+
+        for id in plan.removed {
+            guard let snapshot = pending.snapshots[id] else { continue }
+            overlay.layer?.addSublayer(snapshot)
+            FilterResultTransition.fadeOut(snapshot)
+        }
+        for id in plan.staying {
+            guard let start = pending.startFrames[id] else { continue }
+            if let itemView = arrivingViews[id], let layer = itemView.layer {
+                let end = overlay.convert(itemView.frame, from: collectionView)
+                GridReflow.glide(layer, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+            } else if let snapshot = pending.snapshots[id] {
+                // Still in the result but moved off screen, or into a collapsed group: show it leaving.
+                overlay.layer?.addSublayer(snapshot)
+                if let path = indexPath(forVideoID: id),
+                   let attributes = collectionView.layoutAttributesForItem(at: path) {
+                    let end = overlay.convert(attributes.frame, from: collectionView)
+                    snapshot.frame = end
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    CATransaction.setCompletionBlock { snapshot.removeFromSuperlayer() }
+                    GridReflow.glide(snapshot, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+                    CATransaction.commit()
+                } else {
+                    FilterResultTransition.fadeOut(snapshot)
+                }
+            }
+        }
+        let insertedViews = Set(plan.inserted.compactMap { arrivingViews[$0].map(ObjectIdentifier.init) })
+        for item in collectionView.visibleItems() where insertedViews.contains(ObjectIdentifier(item.view)) {
+            (item as? VideoCollectionViewItem)?.fadeInAsNewResult()
+        }
+    }
+
+    /// Lands an earlier filter change at once, so the next one starts from a settled grid.
+    private func cancelFilterResultTransition() {
+        filterResultOverlay.removeSnapshots()
+        for item in collectionView.visibleItems() {
+            (item as? VideoCollectionViewItem)?.cancelNewResultFade()
+        }
+    }
+
+    /// Video IDs in the order the grid shows them, skipping collapsed groups.
+    private func displayOrder() -> [String] {
+        sections.filter { collapsedGroupIDs.contains($0.id) == false }.flatMap { $0.videos.map(\.id) }
+    }
+
+    /// Thumbnails that are at least partly on screen, with the video each one shows.
+    private func onScreenItemViews() -> [(id: String, view: NSView)] {
+        let visibleRect = collectionView.visibleRect
+        return collectionView.visibleItems().compactMap { item in
+            guard item.view.frame.intersects(visibleRect),
+                  let path = collectionView.indexPath(for: item),
+                  let video = video(at: path) else { return nil }
+            return (video.id, item.view)
+        }
     }
 
     func updateVideo(_ video: VideoRecord, refreshThumbnail: Bool = true) {
@@ -2026,15 +2214,40 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private let detailLabel = NSTextField(labelWithString: "")
     private var isHovered = false
     private var imageTask: Task<Void, Never>?
+    private var isLoadingImage = false
     private var imageRequest = UUID()
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
     private var placeholderWait = ThumbnailWait()
+    /// Set while a new filter result stays hidden waiting for its image; the image then shows
+    /// at once and the whole item fades in, so the placeholder never fades in first.
+    private var awaitsImageToFadeInUntil: CFTimeInterval = 0
+    private var awaitsImageToFadeIn: Bool { CACurrentMediaTime() < awaitsImageToFadeInUntil }
+
+    /// Lands a fade-in left by an earlier filter change at full opacity.
+    func cancelNewResultFade() {
+        awaitsImageToFadeInUntil = 0
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+    }
+
+    func fadeInAsNewResult() {
+        guard let layer = view.layer else { return }
+        if thumbnailView.image != nil || isLoadingImage == false {
+            FilterResultTransition.fadeIn(layer)
+        } else {
+            awaitsImageToFadeInUntil = CACurrentMediaTime() + FilterResultTransition.longestImageWait
+            FilterResultTransition.fadeInAwaitingImage(layer)
+        }
+    }
 
     override func prepareForReuse() {
         super.prepareForReuse()
         view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+        awaitsImageToFadeInUntil = 0
         imageTask?.cancel()
+        imageTask = nil
+        isLoadingImage = false
         imageRequest = UUID()
         configuredVideo = nil
         configuredURL = nil
@@ -2111,19 +2324,32 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
             // A refreshed thumbnail of the same video replaces the old image instead of
             // dropping back to the placeholder first.
             if isSameVideo == false {
-                thumbnailView.setImage(nil, reveal: .immediate)
+                // A reload hands views to other videos; one already shown elsewhere keeps its
+                // image instead of flashing the placeholder while the cache answers.
+                thumbnailView.setImage(thumbnailURL.flatMap(ShownThumbnails.image(at:)), reveal: .immediate)
                 placeholderWait = ThumbnailWait()
             }
             if let thumbnailURL {
                 thumbnailView.showsMissingPreview = false
+                isLoadingImage = true
                 imageTask = Task { [weak self] in
                     let image = await DecodedVideoThumbnailCache.shared.image(at: thumbnailURL)
                     guard !Task.isCancelled, let self, imageRequest == request else { return }
-                    let reveal: ThumbnailReveal = thumbnailView.image == nil ? placeholderWait.reveal : .fade
+                    isLoadingImage = false
+                    let reveal: ThumbnailReveal = awaitsImageToFadeIn
+                        ? .immediate
+                        : thumbnailView.image == nil ? placeholderWait.reveal : .fade
+                    if let image { ShownThumbnails.remember(image, at: thumbnailURL) }
                     thumbnailView.setImage(image, reveal: reveal)
                     thumbnailView.showsMissingPreview = image == nil && previewMayStillArrive == false
+                    if awaitsImageToFadeIn, let layer = view.layer {
+                        awaitsImageToFadeInUntil = 0
+                        FilterResultTransition.fadeIn(layer, after: 0)
+                    }
                 }
             } else {
+                imageTask = nil
+                isLoadingImage = false
                 thumbnailView.setImage(nil, reveal: .immediate)
                 thumbnailView.showsMissingPreview = previewMayStillArrive == false
             }
@@ -2340,6 +2566,25 @@ private final class VideoCollectionItemView: NSView {
             NotificationCenter.default.addObserver(self, selector: #selector(refreshHover), name: NSWindow.didBecomeKeyNotification, object: window)
         }
         refreshHover()
+    }
+}
+
+/// Thumbnails already decoded and shown, readable on the main actor without file I/O. They are the
+/// same images the decoded cache holds, so this adds references rather than memory.
+@MainActor
+private enum ShownThumbnails {
+    private static let cache: NSCache<NSURL, CGImage> = {
+        let cache = NSCache<NSURL, CGImage>()
+        cache.totalCostLimit = 64 * 1_024 * 1_024
+        return cache
+    }()
+
+    static func image(at url: URL) -> CGImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    static func remember(_ image: CGImage, at url: URL) {
+        cache.setObject(image, forKey: url as NSURL, cost: image.bytesPerRow * image.height)
     }
 }
 
