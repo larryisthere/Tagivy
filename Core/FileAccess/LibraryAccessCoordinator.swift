@@ -1629,11 +1629,15 @@ final class LibraryAccessCoordinator {
             do {
                 let libraryID = LibraryRecord.primaryID
                 let candidates: [VideoRecord]
+                // Videos in scope that the library no longer finds are listed only under Unavailable;
+                // they are counted here so the notice says how many were left out.
+                let inScopeCount: Int
                 let grouping: NLEExportGrouping
                 switch scope {
                 case let .tags(tags):
                     grouping = .chosenTags(tags.map(\.id))
                     var seen = Set<String>()
+                    var inScope = Set<String>()
                     var matches: [VideoRecord] = []
                     for tag in tags {
                         let videos = try await database.fetchVideos(
@@ -1641,17 +1645,33 @@ final class LibraryAccessCoordinator {
                             query: LibraryQueryRequest(baseFilter: .tag(tag.id), temporaryFilenameSearch: "", rule: .standard)
                         )
                         matches += videos.filter { seen.insert($0.id).inserted }
+                        let includingMissing = try await database.fetchVideos(
+                            libraryID: libraryID,
+                            query: LibraryQueryRequest(
+                                baseFilter: .unavailable,
+                                temporaryFilenameSearch: "",
+                                rule: LibraryQueryRule(requiredTagIDs: [tag.id])
+                            )
+                        )
+                        inScope.formUnion(includingMissing.map(\.id))
                     }
                     candidates = matches
+                    inScopeCount = inScope.union(seen).count
                 case let .smartCollection(collection):
                     grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
                     candidates = try await database.fetchVideos(
                         libraryID: libraryID,
                         query: LibraryQueryRequest(baseFilter: .all, temporaryFilenameSearch: "", rule: collection.rule)
                     )
+                    let includingMissing = try await database.fetchVideos(
+                        libraryID: libraryID,
+                        query: LibraryQueryRequest(baseFilter: .unavailable, temporaryFilenameSearch: "", rule: collection.rule)
+                    )
+                    inScopeCount = Set(includingMissing.map(\.id)).union(candidates.map(\.id)).count
                 case let .videos(videos):
                     grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
                     candidates = videos
+                    inScopeCount = videos.count
                 }
                 let tagState = try await database.captureTagState(libraryID: libraryID)
                 var exportable: [NLEExportPlanBuilder.Video] = []
@@ -1666,7 +1686,7 @@ final class LibraryAccessCoordinator {
                     tags: tagState.tags,
                     relations: tagState.relations,
                     videos: exportable,
-                    skippedCount: candidates.count - exportable.count
+                    skippedCount: inScopeCount - exportable.count
                 ))
             } catch {
                 AppLogger.library.error(

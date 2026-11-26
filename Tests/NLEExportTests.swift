@@ -146,6 +146,13 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try XMLDocument(xmlString: FCPXMLWriter.document(for: plan)).nodes(forXPath: "//project").count, 0)
     }
 
+    func testVideosWithoutAKnownLengthAreLeftOutAndCounted() {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("pending", "coast")], unknownDuration: ["pending"])
+
+        XCTAssertEqual(plan.clips.map(\.id), ["sunset"])
+        XCTAssertEqual(plan.skippedCount, 1)
+    }
+
     func testNamesAreEscaped() throws {
         var plan = makePlan(rootTagID: nil, relations: [])
         plan.root.name = "A & B <\"cut\">"
@@ -155,11 +162,16 @@ final class NLEExportTests: XCTestCase {
     }
 
     /// No root tag exports the way a smart filter or a video selection does.
-    private func makePlan(rootTagID: String?, relations: [(String, String?)]) -> NLEExportPlan {
+    private func makePlan(
+        rootTagID: String?,
+        relations: [(String, String?)],
+        unknownDuration: Set<String> = []
+    ) -> NLEExportPlan {
         makePlan(
             name: rootTagID.flatMap { id in tags.first { $0.id == id }?.name } ?? "导出",
             grouping: rootTagID.map { .chosenTags([$0]) } ?? .videoTags(untaggedName: "未打标签"),
-            relations: relations
+            relations: relations,
+            unknownDuration: unknownDuration
         )
     }
 
@@ -167,13 +179,18 @@ final class NLEExportTests: XCTestCase {
         makePlan(name: "导出", grouping: .chosenTags(rootTagIDs), relations: relations)
     }
 
-    private func makePlan(name: String, grouping: NLEExportGrouping, relations: [(String, String?)]) -> NLEExportPlan {
+    private func makePlan(
+        name: String,
+        grouping: NLEExportGrouping,
+        relations: [(String, String?)],
+        unknownDuration: Set<String> = []
+    ) -> NLEExportPlan {
         let videoIDs = relations.map(\.0).reduce(into: [String]()) { ids, id in
             if ids.contains(id) == false { ids.append(id) }
         }
         let videos = (videoIDs.isEmpty ? ["sunset", "waves"] : videoIDs).map { id in
             NLEExportPlanBuilder.Video(
-                record: video(id),
+                record: video(id, duration: unknownDuration.contains(id) ? nil : 10.01),
                 url: URL(fileURLWithPath: "/Volumes/Footage/A 海/\(id).mov")
             )
         }
@@ -187,7 +204,7 @@ final class NLEExportTests: XCTestCase {
         )
     }
 
-    private func video(_ id: String) -> VideoRecord {
+    private func video(_ id: String, duration: Double?) -> VideoRecord {
         VideoRecord(
             id: id,
             libraryID: LibraryRecord.primaryID,
@@ -197,7 +214,7 @@ final class NLEExportTests: XCTestCase {
             fileSize: 1,
             creationDate: nil,
             modificationDate: nil,
-            duration: 10.01,
+            duration: duration,
             width: 3840,
             height: 2160,
             thumbnailID: nil,
