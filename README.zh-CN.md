@@ -1,7 +1,5 @@
 # Tagivy — macOS 本地优先视频标签管理器
 
-> Tagivy 使用新的 macOS 应用标识，不会自动导入 FileFacet 的图库、设置、缩略图或文件夹权限。如仍需旧图库，请保留 FileFacet 及其数据。
-
 <p align="center">
   <img src="Resources/Assets.xcassets/AppIcon.appiconset/app-icon-256@2x.png" width="128" alt="Tagivy macOS 视频标签管理器 App 图标">
 </p>
@@ -10,12 +8,12 @@
 
 Tagivy 是一款原生、以本地数据为基础的 macOS 视频标签管理器，可通过层级标签统一整理多个文件夹中的视频。所有原始文件均保留在原位置，并始终以只读方式访问。
 
-[下载最新版本](https://github.com/larryisthere/FileFacet/releases/latest) · [查看版本历史](CHANGELOG.md)
+[下载最新版本](https://github.com/larryisthere/Tagivy/releases/latest) · [查看版本历史](CHANGELOG.md)
 
 > Tagivy 支持英文和简体中文，并跟随 macOS 中为该 App 设置的语言。
 
 <p align="center">
-  <img src="docs/assets/readme/filefacet-video-tag-manager.png" alt="Tagivy macOS 本地视频标签管理器，展示层级标签树、可搜索视频网格和批量标签编辑">
+  <img src="docs/assets/readme/tagivy-video-tag-manager.png" alt="Tagivy macOS 本地视频标签管理器，展示层级标签树、可搜索视频网格和批量标签编辑">
 </p>
 
 ## Tagivy 适合谁
@@ -39,7 +37,7 @@ Tagivy 面向在本地保存视频，并希望灵活整理视频且保持现有�
 - **本地优先与隐私保护**：资料库索引、标签、访问授权和缩略图均保存在 Mac 本机；Tagivy 默认不发起网络请求。
 - **原生 macOS 工作流**：支持 Quick Look、默认播放器、Finder 定位，以及可选的系统身份验证保护。
 
-如果 Tagivy 适合你的视频整理方式，可以为[仓库添加 Star](https://github.com/larryisthere/FileFacet)，支持后续开发并方便再次找到它。
+如果 Tagivy 适合你的视频整理方式，可以为[仓库添加 Star](https://github.com/larryisthere/Tagivy)，支持后续开发并方便再次找到它。
 
 ## 使用方式
 
@@ -103,12 +101,16 @@ Tagivy 面向在本地保存视频，并希望灵活整理视频且保持现有�
 
 ### 安装
 
-1. 打开[最新 GitHub Release](https://github.com/larryisthere/FileFacet/releases/latest)。
+1. 打开[最新 GitHub Release](https://github.com/larryisthere/Tagivy/releases/latest)。
 2. 下载 `Tagivy-<版本>-<构建号>-macOS-universal.zip`。
 3. 解压后将 `Tagivy.app` 移入“应用程序”文件夹。
 4. 打开 Tagivy，并导入需要整理的视频或文件夹。
 
 公开发布版本为 Universal App，已经过 Developer ID 签名和 Apple 公证。每个版本同时提供 SHA-256 校验文件。
+
+### 从 FileFacet 迁移
+
+Tagivy 原名 FileFacet，现在使用新的 macOS 应用标识，不会自动导入 FileFacet 的图库、设置、缩略图或文件夹权限。如仍需旧图库，请保留 FileFacet 及其数据。
 
 ## 支持的视频格式
 
