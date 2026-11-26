@@ -13,8 +13,10 @@ enum FilterResultTransition {
 
     static let removalDuration: CFTimeInterval = 0.15
     static let removalScale: CGFloat = 0.9
-    static let insertionDuration: CFTimeInterval = 0.18
-    static let insertionDelay: CFTimeInterval = 0.08
+    static let insertionDuration: CFTimeInterval = 0.16
+    /// Lets the leaving thumbnails mostly clear before new ones show.
+    static let insertionDelay: CFTimeInterval = 0.06
+    static let longestImageWait: CFTimeInterval = 0.3
     static let reducedMotionCrossfadeDuration: CFTimeInterval = 0.15
     static let insertionAnimationKey = "filterResultInsertion"
 
@@ -110,17 +112,31 @@ enum FilterResultTransition {
         CATransaction.commit()
     }
 
-    /// Fades in a thumbnail that joined the result, after the leaving ones have mostly cleared.
+    /// Fades in a thumbnail that joined the result, from fully hidden on the first frame.
     @MainActor
-    static func fadeIn(_ layer: CALayer) {
+    static func fadeIn(_ layer: CALayer, after delay: CFTimeInterval = insertionDelay) {
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
         fade.toValue = 1
-        fade.beginTime = CACurrentMediaTime() + insertionDelay
+        fade.beginTime = CACurrentMediaTime() + delay
         fade.duration = insertionDuration
         fade.fillMode = .backwards
         fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.add(fade, forKey: insertionAnimationKey)
+    }
+
+    /// Keeps a new thumbnail hidden until its image is ready, so it appears in one fade with the
+    /// image instead of fading in as a placeholder and then again as the image. If the image takes
+    /// longer than `longestImageWait`, it fades in anyway.
+    @MainActor
+    static func fadeInAwaitingImage(_ layer: CALayer) {
+        let hold = CAKeyframeAnimation(keyPath: "opacity")
+        let total = longestImageWait + insertionDuration
+        hold.values = [0, 0, 1]
+        hold.keyTimes = [0, NSNumber(value: longestImageWait / total), 1]
+        hold.duration = total
+        hold.timingFunctions = [CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeOut)]
+        layer.add(hold, forKey: insertionAnimationKey)
     }
 
     /// An image of the layer as drawn now, for a thumbnail whose view is about to be reused.

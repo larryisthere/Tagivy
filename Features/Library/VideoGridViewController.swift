@@ -1005,8 +1005,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                 }
             }
         }
-        for id in plan.inserted {
-            arrivingViews[id]?.layer.map(FilterResultTransition.fadeIn)
+        let insertedViews = Set(plan.inserted.compactMap { arrivingViews[$0].map(ObjectIdentifier.init) })
+        for item in collectionView.visibleItems() where insertedViews.contains(ObjectIdentifier(item.view)) {
+            (item as? VideoCollectionViewItem)?.fadeInAsNewResult()
         }
     }
 
@@ -2217,12 +2218,28 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
     private var placeholderWait = ThumbnailWait()
+    /// Set while a new filter result stays hidden waiting for its image; the image then shows
+    /// at once and the whole item fades in, so the placeholder never fades in first.
+    private var awaitsImageToFadeInUntil: CFTimeInterval = 0
+    private var awaitsImageToFadeIn: Bool { CACurrentMediaTime() < awaitsImageToFadeInUntil }
+
+    func fadeInAsNewResult() {
+        guard let layer = view.layer else { return }
+        if thumbnailView.image != nil || imageTask == nil {
+            FilterResultTransition.fadeIn(layer)
+        } else {
+            awaitsImageToFadeInUntil = CACurrentMediaTime() + FilterResultTransition.longestImageWait
+            FilterResultTransition.fadeInAwaitingImage(layer)
+        }
+    }
 
     override func prepareForReuse() {
         super.prepareForReuse()
         view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
         view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+        awaitsImageToFadeInUntil = 0
         imageTask?.cancel()
+        imageTask = nil
         imageRequest = UUID()
         configuredVideo = nil
         configuredURL = nil
@@ -2309,12 +2326,19 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
                 imageTask = Task { [weak self] in
                     let image = await DecodedVideoThumbnailCache.shared.image(at: thumbnailURL)
                     guard !Task.isCancelled, let self, imageRequest == request else { return }
-                    let reveal: ThumbnailReveal = thumbnailView.image == nil ? placeholderWait.reveal : .fade
+                    let reveal: ThumbnailReveal = awaitsImageToFadeIn
+                        ? .immediate
+                        : thumbnailView.image == nil ? placeholderWait.reveal : .fade
                     if let image { ShownThumbnails.remember(image, at: thumbnailURL) }
                     thumbnailView.setImage(image, reveal: reveal)
                     thumbnailView.showsMissingPreview = image == nil && previewMayStillArrive == false
+                    if awaitsImageToFadeIn, let layer = view.layer {
+                        awaitsImageToFadeInUntil = 0
+                        FilterResultTransition.fadeIn(layer, after: 0)
+                    }
                 }
             } else {
+                imageTask = nil
                 thumbnailView.setImage(nil, reveal: .immediate)
                 thumbnailView.showsMissingPreview = previewMayStillArrive == false
             }
