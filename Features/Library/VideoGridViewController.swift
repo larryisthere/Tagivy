@@ -136,6 +136,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var draggedCloudVideoFiles: [URL] = []
     private var draggedExportIndexPaths = Set<IndexPath>()
     private var draggedSkippedIndexPaths = Set<IndexPath>()
+    private var dragExportCaption: DragExportCaption?
     var onDragLeftOutCloudVideoFiles: ([URL]) -> Void = { _ in }
 
     private let emptyState = NSStackView()
@@ -1043,11 +1044,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             draggedItemViews.append(itemView)
         }
         if draggedSkippedIndexPaths.isEmpty == false {
-            DragExportCaption.attach(
+            dragExportCaption = DragExportCaption(
                 exportCount: draggedExportIndexPaths.count,
                 skippedCount: draggedSkippedIndexPaths.count,
-                to: session,
-                in: collectionView
+                session: session,
+                view: collectionView
             )
         }
     }
@@ -1062,6 +1063,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         draggedCloudVideoFiles = []
         draggedExportIndexPaths = []
         draggedSkippedIndexPaths = []
+        dragExportCaption?.stop()
+        dragExportCaption = nil
         if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
             onDragLeftOutCloudVideoFiles(cloudFiles)
         }
@@ -1699,25 +1702,62 @@ private final class ImportStatusView: NSView {
 /// Tells the user, on the image that follows the pointer, how many videos the drag exports and how many
 /// it leaves out because they are not downloaded from iCloud or are offline.
 @MainActor
-enum DragExportCaption {
-    static func attach(exportCount: Int, skippedCount: Int, to session: NSDraggingSession, in view: NSView) {
-        let text = String.localizedStringWithFormat(
+final class DragExportCaption: NSObject {
+    private let text: String
+    private weak var session: NSDraggingSession?
+    private weak var view: NSView?
+    private var original: (frame: NSRect, components: [NSDraggingImageComponent])?
+    private var isShown = false
+    private var timer: Timer?
+
+    /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
+    /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
+    init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
+        text = String.localizedStringWithFormat(
             NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
             exportCount,
             skippedCount
         )
-        let caption = captionImage(text)
-        var isAttached = false
+        self.session = session
+        self.view = view
+        super.init()
+        // Drag tracking runs the main run loop in event tracking mode, so the timer is added to common modes.
+        let timer = Timer(timeInterval: 0.1, target: self, selector: #selector(update), userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    @objc private func update() {
+        let shouldShow = Self.endedOutsideApp(at: NSEvent.mouseLocation)
+        guard shouldShow != isShown, let session, let view else { return }
+        isShown = shouldShow
+        let caption = shouldShow ? Self.captionImage(text) : nil
+        var isUpdated = false
         session.enumerateDraggingItems(
             options: [],
             for: view,
             classes: [NSPasteboardItem.self],
             searchOptions: [:]
         ) { item, _, stop in
-            guard isAttached == false else { return }
-            isAttached = true
+            guard isUpdated == false else { return }
+            isUpdated = true
             stop.pointee = true
-            let frame = item.draggingFrame
+            if original == nil {
+                original = (item.draggingFrame, item.imageComponents ?? [])
+            }
+            guard let original else { return }
+            guard let caption else {
+                item.draggingFrame = original.frame
+                let components = original.components
+                item.imageComponentsProvider = { components }
+                return
+            }
+            let frame = original.frame
             let snapshot = view.bitmapImageRepForCachingDisplay(in: frame)
             if let snapshot { view.cacheDisplay(in: frame, to: snapshot) }
             let gap: CGFloat = 6

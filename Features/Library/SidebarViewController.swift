@@ -53,6 +53,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var leadingDragFileURL: URL?
     /// Videos still in iCloud that the current drag left out; downloaded if the drag ends in another app.
     private var draggedCloudVideoFiles: [URL] = []
+    private var dragExportCaption: DragExportCaption?
 
     init(
         onFilterChanged: @escaping (LibraryFilter) -> Void,
@@ -582,11 +583,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         let files = dragFileURLs.files
         if files.skippedCount > 0 {
-            DragExportCaption.attach(
+            dragExportCaption = DragExportCaption(
                 exportCount: files.ready.count,
                 skippedCount: files.skippedCount,
-                to: session,
-                in: outlineView
+                session: session,
+                view: outlineView
             )
         }
         draggedCloudVideoFiles = files.inCloud
@@ -599,6 +600,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         operation: NSDragOperation
     ) {
         dragFileURLs = nil
+        dragExportCaption?.stop()
+        dragExportCaption = nil
         let cloudFiles = draggedCloudVideoFiles
         draggedCloudVideoFiles = []
         if cloudFiles.isEmpty == false, DragExportCaption.endedOutsideApp(at: screenPoint) {
