@@ -1015,7 +1015,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private func cancelFilterResultTransition() {
         filterResultOverlay.removeSnapshots()
         for item in collectionView.visibleItems() {
-            item.view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+            (item as? VideoCollectionViewItem)?.cancelNewResultFade()
         }
     }
 
@@ -2214,6 +2214,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private let detailLabel = NSTextField(labelWithString: "")
     private var isHovered = false
     private var imageTask: Task<Void, Never>?
+    private var isLoadingImage = false
     private var imageRequest = UUID()
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
@@ -2223,9 +2224,15 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private var awaitsImageToFadeInUntil: CFTimeInterval = 0
     private var awaitsImageToFadeIn: Bool { CACurrentMediaTime() < awaitsImageToFadeInUntil }
 
+    /// Lands a fade-in left by an earlier filter change at full opacity.
+    func cancelNewResultFade() {
+        awaitsImageToFadeInUntil = 0
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+    }
+
     func fadeInAsNewResult() {
         guard let layer = view.layer else { return }
-        if thumbnailView.image != nil || imageTask == nil {
+        if thumbnailView.image != nil || isLoadingImage == false {
             FilterResultTransition.fadeIn(layer)
         } else {
             awaitsImageToFadeInUntil = CACurrentMediaTime() + FilterResultTransition.longestImageWait
@@ -2240,6 +2247,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         awaitsImageToFadeInUntil = 0
         imageTask?.cancel()
         imageTask = nil
+        isLoadingImage = false
         imageRequest = UUID()
         configuredVideo = nil
         configuredURL = nil
@@ -2323,9 +2331,11 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
             }
             if let thumbnailURL {
                 thumbnailView.showsMissingPreview = false
+                isLoadingImage = true
                 imageTask = Task { [weak self] in
                     let image = await DecodedVideoThumbnailCache.shared.image(at: thumbnailURL)
                     guard !Task.isCancelled, let self, imageRequest == request else { return }
+                    isLoadingImage = false
                     let reveal: ThumbnailReveal = awaitsImageToFadeIn
                         ? .immediate
                         : thumbnailView.image == nil ? placeholderWait.reveal : .fade
@@ -2339,6 +2349,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
                 }
             } else {
                 imageTask = nil
+                isLoadingImage = false
                 thumbnailView.setImage(nil, reveal: .immediate)
                 thumbnailView.showsMissingPreview = previewMayStillArrive == false
             }

@@ -128,35 +128,9 @@ final class FilterResultTransitionTests: XCTestCase {
     @MainActor
     func testGridGlidesStayingThumbnailsAndFadesInOnlyNewOnes() throws {
         guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else { return }
-        let suiteName = "FilterResultTransitionTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(180.0, forKey: "VideoGridItemWidth")
-        let grid = VideoGridViewController(
-            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
-            onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
-            onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, resolveVideos: { _ in .empty },
-            onAssignTagID: { _, _ in },
-            onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
-            onUndoLastMutation: {}, onDismissNotification: {},
-            defaults: defaults
-        )
-        let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 1000, height: 800),
-            styleMask: [.titled], backing: .buffered, defer: false
-        )
-        window.contentViewController = grid
-        window.setContentSize(NSSize(width: 1000, height: 800))
-        func video(_ id: String) -> VideoRecord {
-            VideoRecord(
-                id: id, libraryID: "test", relativePath: "\(id).mov", filename: "\(id).mov",
-                fileExtension: "mov", fileSize: 1, creationDate: nil, modificationDate: nil,
-                duration: 1, width: 320, height: 180, thumbnailID: nil, metadataStatus: .completed,
-                thumbnailStatus: .completed, firstIndexedAt: .distantPast, availability: .available
-            )
-        }
+        let (grid, window, collection) = try makeHostedGrid(thumbnailURL: { _ in nil })
+        defer { window.close() }
         grid.setVideos(ids(0...11).map(video))
-        let collection = try XCTUnwrap(grid.view.descendants.compactMap { $0 as? NSCollectionView }.first)
         collection.layoutSubtreeIfNeeded()
 
         grid.setVideos(["v0", "new1", "v2", "v4", "new2", "v5"].map(video), isFilterChange: true)
@@ -164,8 +138,7 @@ final class FilterResultTransitionTests: XCTestCase {
         let staying: Set = ["v0", "v2", "v4", "v5"]
         var seen = Set<String>()
         for item in collection.visibleItems() {
-            let id = try XCTUnwrap(item.view.descendants.compactMap { ($0 as? NSTextField)?.stringValue }
-                .first { $0.hasSuffix(".mov") }).replacingOccurrences(of: ".mov", with: "")
+            let id = try videoID(shownBy: item)
             seen.insert(id)
             let keys = item.view.layer?.animationKeys() ?? []
             if staying.contains(id) {
@@ -177,6 +150,67 @@ final class FilterResultTransitionTests: XCTestCase {
         XCTAssertEqual(seen, staying.union(["new1", "new2"]))
         let overlay = try XCTUnwrap(grid.view.descendants.first { $0 is FilterResultOverlayView })
         XCTAssertEqual(overlay.layer?.sublayers?.count, 8, "one snapshot per removed thumbnail")
+    }
+
+    @MainActor
+    func testQuickSecondChangeLandsAWaitingNewThumbnailAtFullOpacity() throws {
+        guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else { return }
+        // A missing file keeps each new thumbnail waiting for an image that never arrives.
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID().uuidString).jpg")
+        let (grid, window, collection) = try makeHostedGrid(thumbnailURL: { _ in missing })
+        defer { window.close() }
+        grid.setVideos(ids(0...3).map(video))
+        collection.layoutSubtreeIfNeeded()
+
+        grid.setVideos(["v0", "new1", "v1"].map(video), isFilterChange: true)
+        grid.setVideos(["v0", "new1"].map(video), isFilterChange: true)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        let new = try XCTUnwrap(collection.visibleItems().first { try videoID(shownBy: $0) == "new1" })
+        XCTAssertNil(new.view.layer?.animation(forKey: FilterResultTransition.insertionAnimationKey))
+    }
+
+    @MainActor
+    private func makeHostedGrid(
+        thumbnailURL: @escaping (VideoRecord) -> URL?
+    ) throws -> (VideoGridViewController, NSWindow, NSCollectionView) {
+        let suiteName = "FilterResultTransitionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(180.0, forKey: "VideoGridItemWidth")
+        let grid = VideoGridViewController(
+            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
+            onSelectionChanged: { _ in }, thumbnailURL: thumbnailURL, resolveVideos: { _ in .empty },
+            onAssignTagID: { _, _ in },
+            onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
+            onUndoLastMutation: {}, onDismissNotification: {},
+            defaults: defaults
+        )
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentViewController = grid
+        window.setContentSize(NSSize(width: 1000, height: 800))
+        let collection = try XCTUnwrap(grid.view.descendants.compactMap { $0 as? NSCollectionView }.first)
+        return (grid, window, collection)
+    }
+
+    private func video(_ id: String) -> VideoRecord {
+        VideoRecord(
+            id: id, libraryID: "test", relativePath: "\(id).mov", filename: "\(id).mov",
+            fileExtension: "mov", fileSize: 1, creationDate: nil, modificationDate: nil,
+            duration: 1, width: 320, height: 180, thumbnailID: nil, metadataStatus: .completed,
+            thumbnailStatus: .completed, firstIndexedAt: .distantPast, availability: .available
+        )
+    }
+
+    @MainActor
+    private func videoID(shownBy item: NSCollectionViewItem) throws -> String {
+        try XCTUnwrap(item.view.descendants.compactMap { ($0 as? NSTextField)?.stringValue }
+            .first { $0.hasSuffix(".mov") }).replacingOccurrences(of: ".mov", with: "")
     }
 }
 
