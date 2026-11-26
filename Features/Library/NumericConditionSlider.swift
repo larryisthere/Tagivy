@@ -364,16 +364,18 @@ private final class DetentSlider: NSSlider {
         guard let cell = cell as? NSSliderCell, cell.numberOfTickMarks >= 2 else { return }
         let first = cell.rectOfTickMark(at: 0)
         let last = cell.rectOfTickMark(at: cell.numberOfTickMarks - 1)
+        let knob = cell.knobRect(flipped: isFlipped)
         let diameter: CGFloat = 3
         NSColor.tertiaryLabelColor.setFill()
         for position in detentPositions where position > 0.001 && position < 0.999 {
-            let centerX = first.midX + (last.midX - first.midX) * position
-            NSBezierPath(ovalIn: NSRect(
-                x: centerX - diameter / 2,
+            let dot = NSRect(
+                x: first.midX + (last.midX - first.midX) * position - diameter / 2,
                 y: first.midY - diameter / 2,
                 width: diameter,
                 height: diameter
-            )).fill()
+            )
+            guard dot.intersects(knob) == false else { continue }
+            NSBezierPath(ovalIn: dot).fill()
         }
     }
 }
