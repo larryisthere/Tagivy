@@ -45,22 +45,21 @@ def offenders(pattern, allowed: [])
   end.flatten
 end
 
-# Sandbox: user-selected files and app-scoped bookmarks, plus what Sparkle needs to update the app:
-# outgoing connections for the appcast and download, and its installer's two mach services.
+# Sandbox: user-selected files (read-write, for exports the user saves) and app-scoped bookmarks, plus
+# Sparkle's installer mach services. The app process has no network access; Sparkle's own Downloader
+# XPC service fetches the appcast and updates.
 SPARKLE_MACH_SERVICES = %w[$(PRODUCT_BUNDLE_IDENTIFIER)-spks $(PRODUCT_BUNDLE_IDENTIFIER)-spki].freeze
 
-check("App entitlements are only sandbox, user-selected files, app-scoped bookmarks and Sparkle updates") do
+check("App entitlements are only sandbox, user-selected read-write files, app-scoped bookmarks and Sparkle's installer; no network") do
   entitlements = read("Config/VideoTagManager.entitlements")
   mach_lookup = "com.apple.security.temporary-exception.mach-lookup.global-name"
   services = entitlements[%r{<key>#{Regexp.escape(mach_lookup)}</key>\s*<array>(.*?)</array>}m, 1].to_s.scan(%r{<string>([^<]+)</string>}).flatten
   enabled = entitlements.scan(%r{<key>([^<]+)</key>\s*<true/>}).flatten.sort + (services.empty? ? [] : [mach_lookup])
   declared = entitlements.scan(%r{<key>([^<]+)</key>}).flatten.sort
-  base = %w[com.apple.security.app-sandbox com.apple.security.files.bookmarks.app-scope com.apple.security.network.client] + [mach_lookup]
-  user_selected = %w[com.apple.security.files.user-selected.read-only com.apple.security.files.user-selected.read-write]
-  extra = declared - base - user_selected
+  base = %w[com.apple.security.app-sandbox com.apple.security.files.bookmarks.app-scope com.apple.security.files.user-selected.read-write] + [mach_lookup]
+  extra = declared - base
   problems = []
   problems << "missing #{base - enabled}" unless (base - enabled).empty?
-  problems << "needs exactly one of #{user_selected}, found #{enabled & user_selected}" unless (enabled & user_selected).size == 1
   problems << "unexpected entitlements #{extra}" unless extra.empty?
   problems << "declared but not enabled #{declared - enabled}" unless (declared - enabled).empty?
   problems << "mach services #{services}, expected #{SPARKLE_MACH_SERVICES}" unless services == SPARKLE_MACH_SERVICES
@@ -156,7 +155,7 @@ check("Updates come from the appcast the release lane publishes, signed with the
   problems = []
   problems << "SUFeedURL #{value.call('SUFeedURL')}, release lane publishes #{expected_feed}" unless value.call("SUFeedURL") == expected_feed
   problems << "SUPublicEDKey is not a Sparkle EdDSA public key" unless value.call("SUPublicEDKey").to_s.match?(%r{\A[A-Za-z0-9+/]{43}=\z})
-  %w[SUEnableInstallerLauncherService SUEnableAutomaticChecks SUAutomaticallyUpdate].each do |key|
+  %w[SUEnableInstallerLauncherService SUEnableDownloaderService SUVerifyUpdateBeforeExtraction SUEnableAutomaticChecks SUAutomaticallyUpdate].each do |key|
     problems << "#{key} is not true" unless info.match?(%r{<key>#{key}</key>\s*<true/>})
   end
   beta_in_app = read("App/AppUpdateController.swift")[/static let betaChannel = "([^"]+)"/, 1]

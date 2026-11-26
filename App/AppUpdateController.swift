@@ -20,6 +20,7 @@ final class AppUpdateController: NSObject, ObservableObject {
         didSet { publish() }
     }
     private var updateFoundReply: ((SPUUserUpdateChoice) -> Void)?
+    private var offeredChannel: String?
     private var readyToInstallReply: ((SPUUserUpdateChoice) -> Void)?
     private var installOnQuitNow: (() -> Void)?
     private var acknowledgement: (() -> Void)?
@@ -113,12 +114,23 @@ final class AppUpdateController: NSObject, ObservableObject {
         set {
             objectWillChange.send()
             preferences.receivesBetaUpdates = newValue
+            if !newValue { withdrawOfferedBeta() }
             guard let updater, updater.automaticallyChecksForUpdates, newValue else { return }
             updater.checkForUpdatesInBackground()
         }
     }
 
     var isAvailable: Bool { updater != nil }
+
+    /// A beta offered but not yet installing is dropped when the user stops receiving betas.
+    /// One Sparkle already scheduled to install on quit cannot be withdrawn; the setting's help says so.
+    private func withdrawOfferedBeta() {
+        guard offeredChannel == Self.betaChannel, installOnQuitNow == nil else { return }
+        let reply = updateFoundReply ?? readyToInstallReply
+        resetReplies()
+        reply?(.dismiss)
+        flow.dismissed(canStillRelaunch: false)
+    }
 
     private func publish() {
         guard status != flow.status else { return }
@@ -159,6 +171,7 @@ extension AppUpdateController: SPUUpdaterDelegate {
         immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
     ) -> Bool {
         installOnQuitNow = immediateInstallHandler
+        offeredChannel = item.channel
         flow.readyToInstallOnQuit(version: item.displayVersionString)
         return true
     }
@@ -181,6 +194,7 @@ extension AppUpdateController: SPUUserDriver {
         @unknown default: .notDownloaded
         }
         updateFoundReply = reply
+        offeredChannel = appcastItem.channel
         flow.updateFound(version: appcastItem.displayVersionString, stage: stage)
     }
 

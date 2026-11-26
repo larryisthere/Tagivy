@@ -335,16 +335,15 @@ def sparkle_signature(zip_path)
   [signature, Integer(length)]
 end
 
+# [xml, sha] of the published appcast, or [nil, nil] only when it does not exist yet (404).
 def appcast_content(repository)
-  output = sh(
-    "gh api #{shell_escape("repos/#{repository}/contents/#{APPCAST_PATH}?ref=#{APPCAST_BRANCH}")} 2>/dev/null || true",
-    log: false
-  ).strip
-  return [nil, nil] if output.empty?
+  path = "repos/#{repository}/contents/#{APPCAST_PATH}?ref=#{APPCAST_BRANCH}"
+  output = sh("gh api -i #{shell_escape(path)} 2>&1 || true", log: false)
+  status = output[%r{\AHTTP/\S+ (\d{3})}, 1]
+  return [nil, nil] if status == "404"
+  UI.user_error!("读取 appcast 失败：#{output.lines.first.to_s.strip}") unless status == "200"
 
-  payload = JSON.parse(output)
-  return [nil, nil] unless payload["content"]
-
+  payload = JSON.parse(output.split(/\r?\n\r?\n/, 2).last)
   [Base64.decode64(payload["content"]).force_encoding("UTF-8"), payload["sha"]]
 end
 
