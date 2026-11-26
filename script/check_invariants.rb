@@ -68,12 +68,13 @@ end
 # Original videos are never modified. Code that writes, moves or deletes files must be listed here,
 # and only for files the app itself owns or the user explicitly chose as a save destination.
 FILE_WRITERS = [
+  "Core/Database/DatabaseStore.swift", # library database directory
   "Core/Media/MediaProcessingService.swift" # thumbnail cache
 ].freeze
 
 check("Only listed writers touch the file system; nothing writes to original videos or Finder metadata") do
   offenders(
-    /\.(removeItem|moveItem|trashItem|replaceItemAt|copyItem|linkItem|createSymbolicLink)\(|setResourceValues?\(|setExtendedAttribute|setxattr|removexattr|FileHandle\(forWriting|FileHandle\(forUpdating|\.write\(to:|NSWorkspace\.shared\.recycle/,
+    /\.(removeItem|moveItem|trashItem|replaceItemAt|copyItem|linkItem|createSymbolicLink|createFile|createDirectory)\(|setResourceValues?\(|setExtendedAttribute|setxattr|removexattr|FileHandle\(forWriting|FileHandle\(forUpdating|\.write\(to:|NSWorkspace\.shared\.recycle/,
     allowed: FILE_WRITERS
   )
 end
@@ -175,7 +176,7 @@ check("Every localized string is translated in en and zh-Hans with matching plac
   end
   catalog["strings"].each do |key, entry|
     localizations = entry["localizations"] || {}
-    next if localizations.empty? || entry["shouldTranslate"] == false
+    next if entry["shouldTranslate"] == false
     signatures = %w[en zh-Hans].map do |language|
       node = localizations[language] || {}
       units = units_in.call(node)
