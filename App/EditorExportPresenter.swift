@@ -77,6 +77,7 @@ final class EditorExportPresenter {
         var detail = switch format {
         case .fcp7XML: String(localized: .exportEditorDonePremiere)
         case .fcpXML: String(localized: .exportEditorDoneFinalCut)
+        case .capCut: String(localized: .exportEditorDoneCapCut)
         }
         if plan.skippedCount > 0 {
             detail += " " + String(localized: .exportEditorSkipped(plan.skippedCount))

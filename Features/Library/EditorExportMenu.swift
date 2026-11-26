@@ -29,6 +29,7 @@ enum EditorExportMenu {
         switch format {
         case .fcp7XML: String(localized: .exportEditorFormatPremiere)
         case .fcpXML: String(localized: .exportEditorFormatFinalCut)
+        case .capCut: String(localized: .exportEditorFormatCapCut)
         }
     }
 }

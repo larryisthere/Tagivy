@@ -26,11 +26,13 @@ enum NLEExportFormat: String, CaseIterable, Sendable {
     case fcp7XML
     /// FCPXML, which Final Cut Pro and DaVinci Resolve import.
     case fcpXML
+    /// FCPXML with a timeline of every clip end to end, because CapCut imports only timelines.
+    case capCut
 
     var fileExtension: String {
         switch self {
         case .fcp7XML: "xml"
-        case .fcpXML: "fcpxml"
+        case .fcpXML, .capCut: "fcpxml"
         }
     }
 
@@ -42,6 +44,7 @@ enum NLEExportFormat: String, CaseIterable, Sendable {
         switch self {
         case .fcp7XML: Data(FCP7XMLWriter.document(for: plan).utf8)
         case .fcpXML: Data(FCPXMLWriter.document(for: plan).utf8)
+        case .capCut: Data(FCPXMLWriter.document(for: plan, includesTimeline: true).utf8)
         }
     }
 }

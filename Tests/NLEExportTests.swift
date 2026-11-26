@@ -135,6 +135,17 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "//note").first?.stringValue, "海边")
     }
 
+    func testCapCutExportAddsATimelineOfEveryClipEndToEnd() throws {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("waves", "people")])
+        let document = try XMLDocument(xmlString: String(decoding: NLEExportFormat.capCut.data(for: plan), as: UTF8.self))
+
+        XCTAssertEqual(try document.nodes(forXPath: "/fcpxml/library/event/project/@name").first?.stringValue, "导出")
+        XCTAssertEqual(try document.nodes(forXPath: "//spine/asset-clip/@offset").map(\.stringValue), ["0s", "300300/30000s"])
+        XCTAssertEqual(try document.nodes(forXPath: "//sequence/@duration").first?.stringValue, "600600/30000s")
+        XCTAssertEqual(try document.nodes(forXPath: "//keyword-collection").count, 2, "The tag collections stay alongside the timeline")
+        XCTAssertEqual(try XMLDocument(xmlString: FCPXMLWriter.document(for: plan)).nodes(forXPath: "//project").count, 0)
+    }
+
     func testNamesAreEscaped() throws {
         var plan = makePlan(rootTagID: nil, relations: [])
         plan.root.name = "A & B <\"cut\">"

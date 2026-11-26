@@ -86,7 +86,7 @@ enum FCP7XMLWriter {
 
 /// FCPXML 1.9, read by Final Cut Pro 10.5 and later and DaVinci Resolve.
 enum FCPXMLWriter {
-    static func document(for plan: NLEExportPlan) -> String {
+    static func document(for plan: NLEExportPlan, includesTimeline: Bool = false) -> String {
         var xml = XMLText()
         var formatIDs: [String: String] = [:]
         var formatLines: [(id: String, rate: NLEFrameRate, width: Int?, height: Int?)] = []
@@ -153,10 +153,48 @@ enum FCPXMLWriter {
         for bin in plan.tagBins {
             writeCollections(bin, into: &xml)
         }
+        if includesTimeline, let first = plan.clips.first {
+            writeTimeline(plan, rate: first.frameRate, format: formatID(first), assetIDs: assetIDs, into: &xml)
+        }
         xml.close("event")
         xml.close("library")
         xml.close("fcpxml")
         return xml.text
+    }
+
+    /// Every clip once, end to end, timed in the first clip's frame rate.
+    private static func writeTimeline(
+        _ plan: NLEExportPlan,
+        rate: NLEFrameRate,
+        format: String,
+        assetIDs: [String: String],
+        into xml: inout XMLText
+    ) {
+        let lengths = plan.clips.map { clip in
+            Int(((Double(clip.frameCount) / clip.frameRate.framesPerSecond) * rate.framesPerSecond).rounded())
+        }
+        let total = lengths.reduce(0, +)
+        xml.open("project", attributes: [("name", plan.root.name)])
+        xml.open("sequence", attributes: [
+            ("format", format),
+            ("duration", time(frames: total, rate: rate)),
+            ("tcStart", "0s"),
+            ("tcFormat", "NDF"),
+        ])
+        xml.open("spine")
+        var offset = 0
+        for (clip, length) in zip(plan.clips, lengths) where length > 0 {
+            xml.empty("asset-clip", attributes: [
+                ("ref", assetIDs[clip.id] ?? ""),
+                ("offset", time(frames: offset, rate: rate)),
+                ("name", clip.name),
+                ("duration", time(frames: length, rate: rate)),
+            ])
+            offset += length
+        }
+        xml.close("spine")
+        xml.close("sequence")
+        xml.close("project")
     }
 
     /// A tag with child tags becomes a folder holding its own keyword collection and its children's.

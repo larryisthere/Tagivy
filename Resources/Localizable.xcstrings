@@ -5623,6 +5623,23 @@
         }
       }
     },
+    "export.editor.format.capCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For CapCut…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于剪映…"
+          }
+        }
+      }
+    },
     "export.editor.format.finalCut" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5722,6 +5739,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Premiere Pro 或 DaVinci Resolve 中选择“文件 › 导入”，然后选择此文件。"
+          }
+        }
+      }
+    },
+    "export.editor.done.capCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In CapCut, choose More › Import PR or FCP Project and select this file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在剪映首页选择“更多 › 导入PR或FCP工程”，然后选择此文件。"
           }
         }
       }
