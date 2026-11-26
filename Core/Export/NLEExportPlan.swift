@@ -59,6 +59,8 @@ struct NLEExportClip: Equatable, Sendable {
     let width: Int?
     let height: Int?
     let hasAudio: Bool
+    /// Nil when the library has not recorded it.
+    let audioChannels: Int?
     /// Every tag on the video, in tag tree order. Written where editors can search it.
     let tagNames: [String]
     /// Tags inside the exported tag group, in tag tree order. Final Cut Pro keywords.
@@ -213,6 +215,7 @@ enum NLEExportPlanBuilder {
                 width: record.width,
                 height: record.height,
                 hasAudio: record.mediaSourceInfo.map { $0.audioCodec != nil || $0.audioChannels != nil } ?? true,
+                audioChannels: record.mediaSourceInfo?.audioChannels,
                 tagNames: tagIDs.compactMap { tagsByID[$0]?.name },
                 keywords: tagIDs.filter(subtreeIDs.contains).compactMap { tagsByID[$0]?.name }
             )

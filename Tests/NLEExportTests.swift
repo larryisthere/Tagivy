@@ -102,6 +102,7 @@ final class NLEExportTests: XCTestCase {
         )
         XCTAssertEqual(try document.nodes(forXPath: "(//lognote)[1]").first?.stringValue, "海边, 城市")
         XCTAssertEqual(try document.nodes(forXPath: "(//clip/duration)[1]").first?.stringValue, "300")
+        XCTAssertEqual(try document.nodes(forXPath: "//audio/channelcount").first?.stringValue, "1")
     }
 
     func testFCPXMLBuildsKeywordFoldersForTagGroups() throws {
@@ -222,7 +223,7 @@ final class NLEExportTests: XCTestCase {
             thumbnailStatus: .completed,
             firstIndexedAt: Date(timeIntervalSince1970: 0),
             availability: .available,
-            mediaSourceInfo: MediaSourceInfo(frameRate: 29.97, audioCodec: "aac")
+            mediaSourceInfo: MediaSourceInfo(frameRate: 29.97, audioCodec: "aac", audioChannels: 1)
         )
     }
 }
