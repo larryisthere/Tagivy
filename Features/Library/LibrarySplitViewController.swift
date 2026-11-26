@@ -639,20 +639,9 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             tags: tags,
             smartCollection: selectedSmartCollection,
             isDirty: smartCollectionIsDirty,
-            hasPersistableBaseScope: hasPersistableBaseScope,
             canSaveAsSmartCollection: canSaveCurrentContext,
             grouping: currentGrouping
         ))
-    }
-
-    private var hasPersistableBaseScope: Bool {
-        guard selectedSmartCollection == nil else { return false }
-        switch currentBaseFilter {
-        case .tag, .tags, .untagged, .recent:
-            return true
-        case .all, .unavailable:
-            return false
-        }
     }
 
     private var canSaveCurrentContext: Bool {

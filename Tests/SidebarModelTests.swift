@@ -176,6 +176,51 @@ final class SidebarModelTests: XCTestCase {
         )
     }
 
+    func testRuleBarSaveFollowsClearOnTagScope() {
+        var context = makeRuleBarContext(scopeTitle: "标签")
+        XCTAssertFalse(context.hasUserAddedConditions)
+        XCTAssertFalse(context.canSaveRuleAsSmartCollection)
+
+        context.rule.conditions.append(.durationAtLeast(60))
+        XCTAssertTrue(context.hasUserAddedConditions)
+        XCTAssertTrue(context.canSaveRuleAsSmartCollection)
+
+        context.rule = .standard
+        XCTAssertFalse(context.hasUserAddedConditions)
+        XCTAssertFalse(context.canSaveRuleAsSmartCollection)
+    }
+
+    func testRuleBarFilenameSearchCountsAsUserCondition() {
+        let context = makeRuleBarContext(scopeTitle: nil, temporarySearch: "clip")
+        XCTAssertTrue(context.hasUserAddedConditions)
+        XCTAssertTrue(context.canSaveRuleAsSmartCollection)
+    }
+
+    func testRuleBarUnsavableScopeKeepsSaveDisabledWithConditions() {
+        var context = makeRuleBarContext(scopeTitle: "不可用", canSaveAsSmartCollection: false)
+        context.rule.conditions.append(.untagged)
+        XCTAssertTrue(context.hasUserAddedConditions)
+        XCTAssertFalse(context.canSaveRuleAsSmartCollection)
+    }
+
+    private func makeRuleBarContext(
+        scopeTitle: String?,
+        temporarySearch: String = "",
+        canSaveAsSmartCollection: Bool = true
+    ) -> LibraryRuleBarContext {
+        LibraryRuleBarContext(
+            scopeTitle: scopeTitle,
+            temporarySearch: temporarySearch,
+            rule: .standard,
+            presetSort: nil,
+            tags: [makeTag(id: "tag", name: "标签")],
+            smartCollection: nil,
+            isDirty: false,
+            canSaveAsSmartCollection: canSaveAsSmartCollection,
+            grouping: .standard
+        )
+    }
+
     private func makeTag(id: String, name: String, parentID: String? = nil) -> TagRecord {
         TagRecord(
             id: id,

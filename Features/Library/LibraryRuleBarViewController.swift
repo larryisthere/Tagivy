@@ -8,9 +8,16 @@ struct LibraryRuleBarContext {
     let tags: [TagRecord]
     let smartCollection: SmartCollectionRecord?
     let isDirty: Bool
-    let hasPersistableBaseScope: Bool
     let canSaveAsSmartCollection: Bool
     var grouping: VideoGroupingPreference
+
+    var hasUserAddedConditions: Bool {
+        temporarySearch.isEmpty == false || rule.isStandard == false
+    }
+
+    var canSaveRuleAsSmartCollection: Bool {
+        hasUserAddedConditions && canSaveAsSmartCollection
+    }
 }
 
 @MainActor
@@ -31,7 +38,6 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         tags: [],
         smartCollection: nil,
         isDirty: false,
-        hasPersistableBaseScope: false,
         canSaveAsSmartCollection: true,
         grouping: .standard
     )
@@ -272,8 +278,6 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
     }
 
     private func renderActions() {
-        let hasEditableRule = context.temporarySearch.isEmpty == false || context.rule.isStandard == false
-        let hasSavableRule = context.hasPersistableBaseScope || hasEditableRule
         if context.smartCollection != nil, context.isDirty {
             let status = NSTextField(
                 labelWithString: String(localized: "filter.modified", defaultValue: "Rule Modified")
@@ -303,7 +307,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
                 title: clearTitle,
                 action: #selector(clearRules)
             )
-            clear.isEnabled = hasEditableRule
+            clear.isEnabled = context.hasUserAddedConditions
             let saveTitle = String(localized: "action.save", defaultValue: "Save")
             let saveDescription = String(
                 localized: "filter.saveSmartCollection",
@@ -312,7 +316,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             let save = actionButton(saveTitle, action: #selector(saveAs))
             save.toolTip = saveDescription
             save.setAccessibilityLabel(saveDescription)
-            save.isEnabled = hasSavableRule && context.canSaveAsSmartCollection
+            save.isEnabled = context.canSaveRuleAsSmartCollection
             if context.canSaveAsSmartCollection == false {
                 save.toolTip = String(
                     localized: "filter.unavailableCannotSave",
