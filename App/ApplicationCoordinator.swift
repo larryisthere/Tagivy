@@ -543,7 +543,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
 
     private func dismissTagDeletionNoticeIfNoLongerUndoable() {
         guard let pending = tagDeletionNotice,
-              libraryAccessCoordinator?.canUndoTagMutation(pending.undoID) != true else { return }
+              libraryAccessCoordinator?.isLatestUndoableTagMutation(pending.undoID) != true else { return }
         TransientNotice.dismiss(pending.notice)
         tagDeletionNotice = nil
     }
