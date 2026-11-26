@@ -1502,37 +1502,23 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     @objc private func deleteTag() {
         if outlineView.clickedRow >= 0, outlineView.selectedRowIndexes.contains(outlineView.clickedRow) == false {
             guard let tag = clickedTag() else { return }
-            confirmDeletingTags([tag])
+            onDeleteTags([tag])
             return
         }
         if case .tags(let tags) = SidebarDeletion(selectedItems: selectedOutlineItems(), allTags: self.tags) {
-            confirmDeletingTags(tags)
+            onDeleteTags(tags)
         } else if let tag = clickedTag() ?? selectedTag() {
-            confirmDeletingTags([tag])
+            onDeleteTags([tag])
         }
     }
     private func deleteSelectedItems() -> Bool {
         guard inlineRenameTarget == nil, pendingRootTagDraft == nil,
               let deletion = SidebarDeletion(selectedItems: selectedOutlineItems(), allTags: tags) else { return false }
         switch deletion {
-        case .tags(let tags): confirmDeletingTags(tags)
+        case .tags(let tags): onDeleteTags(tags)
         case .smartCollection(let collection): onDeleteSmartCollection(collection)
         }
         return true
-    }
-    private func confirmDeletingTags(_ tags: [TagRecord]) {
-        guard let firstTag = tags.first else { return }
-        let alert = NSAlert()
-        alert.messageText = tags.count == 1
-            ? String(localized: .tagDeleteTitle(firstTag.name))
-            : String(
-                localized: "tag.delete.multipleTitle",
-                defaultValue: "Delete \(tags.count) Tags and All Their Child Tags?"
-            )
-        alert.informativeText = String(localized: .tagDeleteDetail)
-        alert.addButton(withTitle: String(localized: .tagActionDelete))
-        alert.addButton(withTitle: String(localized: .actionCancel))
-        if alert.runModal() == .alertFirstButtonReturn { onDeleteTags(tags) }
     }
     private func selectedOutlineItems() -> [Any] {
         outlineView.selectedRowIndexes.compactMap { outlineView.item(atRow: $0) }

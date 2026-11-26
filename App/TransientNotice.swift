@@ -10,25 +10,43 @@ final class TransientNotice {
         let perform: () -> Void
     }
 
+    /// Identifies one shown notice, so its owner can take it down without touching a newer one.
+    struct ID: Equatable {
+        fileprivate let value = UUID()
+    }
+
     static let visibleDuration: Duration = .seconds(5)
 
     /// A newer notice replaces the one on screen, so there is never more than one.
     private static let current = TransientNotice()
 
     private var view: TransientNoticeView?
+    private var viewID: ID?
     private var dismissTask: Task<Void, Never>?
     private var remaining: Duration = .zero
     private var countingSince: ContinuousClock.Instant?
 
     private init() {}
 
-    static func show(in window: NSWindow, title: String, detail: String? = nil, action: Action? = nil) {
+    @discardableResult
+    static func show(in window: NSWindow, title: String, detail: String? = nil, action: Action? = nil) -> ID {
         current.show(in: window, title: title, detail: detail, action: action)
     }
 
-    private func show(in window: NSWindow, title: String, detail: String?, action: Action?) {
+    /// Takes the notice down at once if it is still the one on screen.
+    static func dismiss(_ id: ID) {
+        guard current.viewID == id else { return }
+        current.dismiss(animated: true)
+    }
+
+    static func isShowing(_ id: ID) -> Bool {
+        current.viewID == id
+    }
+
+    private func show(in window: NSWindow, title: String, detail: String?, action: Action?) -> ID {
         dismiss(animated: false)
-        guard let contentView = window.contentView else { return }
+        let id = ID()
+        guard let contentView = window.contentView else { return id }
         let notice = TransientNoticeView(title: title, detail: detail, actionTitle: action?.title) { [weak self] in
             action?.perform()
             self?.dismiss(animated: true)
@@ -52,6 +70,7 @@ final class TransientNotice {
             notice.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
         ])
         view = notice
+        viewID = id
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             notice.animator().alphaValue = 1
@@ -64,6 +83,7 @@ final class TransientNotice {
         remaining = Self.visibleDuration
         notice.countdown.start(duration: Self.visibleDuration)
         resumeCountdown()
+        return id
     }
 
     /// Hovering stops the clock where it is; leaving runs only the time that was left.
@@ -92,6 +112,7 @@ final class TransientNotice {
         dismissTask?.cancel()
         dismissTask = nil
         countingSince = nil
+        viewID = nil
         guard let notice = view else { return }
         view = nil
         guard animated else {

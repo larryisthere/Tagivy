@@ -4003,13 +4003,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete…"
+            "value" : "Delete"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除…"
+            "value" : "删除"
           }
         }
       }
@@ -4320,53 +4320,36 @@
         }
       }
     },
-    "tag.delete.detail" : {
+    "tag.deleted.multiple" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Video files will remain on your Mac. Related tag assignments will be removed."
+            "value" : "Deleted %lld Tags"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频文件不会被删除，相关标签关系会被移除。"
+            "value" : "已删除 %lld 个标签"
           }
         }
       }
     },
-    "tag.delete.multipleTitle" : {
+    "tag.deleted.single" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete %lld Tags and All Their Child Tags?"
+            "value" : "Deleted “%@”"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除 %lld 个标签及其全部子标签？"
-          }
-        }
-      }
-    },
-    "tag.delete.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete “%@” and All Child Tags?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "删除“%@”及其全部子标签？"
+            "value" : "已删除“%@”"
           }
         }
       }

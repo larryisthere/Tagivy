@@ -24,6 +24,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     private let databaseStore: DatabaseStore?
     private let windowController = MainWindowController()
     private let quickLookCoordinator = QuickLookPreviewCoordinator()
+    private var tagDeletionNotice: (undoID: TagMutationUndoID, notice: TransientNotice.ID)?
     private let folderImportMethodPresenter = FolderImportMethodPresenter()
     private let editorExportPresenter = EditorExportPresenter()
     private var privacyShield: NSView?
@@ -118,7 +119,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         },
         onCreateTag: { [weak self] name, parentID in self?.libraryAccessCoordinator?.createTag(name: name, parentID: parentID) },
         onRenameTag: { [weak self] tag, name in self?.libraryAccessCoordinator?.renameTag(tag, name: name) },
-        onDeleteTags: { [weak self] tags in self?.libraryAccessCoordinator?.deleteTags(tags) },
+        onDeleteTags: { [weak self] tags in self?.deleteTags(tags) },
         onMoveTags: { [weak self] tags, parentID, order in self?.libraryAccessCoordinator?.moveTags(tags, parentID: parentID, sortOrder: order) },
         onSetTagColor: { [weak self] tag, color in self?.libraryAccessCoordinator?.setTagColor(tag, color: color) },
         onMergeTag: { [weak self] source, target in self?.libraryAccessCoordinator?.mergeTag(source, into: target) },
@@ -242,6 +243,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             case .idle, .importing:
                 break
             }
+        }
+        libraryAccessCoordinator?.onUndoHistoryChanged = { [weak self] in
+            self?.dismissTagDeletionNoticeIfNoLongerUndoable()
         }
         libraryAccessCoordinator?.onScanStateChanged = { [weak self] state in
             self?.libraryViewController.setScanState(state)
@@ -516,6 +520,32 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             }
             return decision.method
         }
+    }
+
+    /// Tags are deleted without asking; the notice offers the undo, and goes away once that undo no longer applies.
+    private func deleteTags(_ tags: [TagRecord]) {
+        guard let coordinator = libraryAccessCoordinator, let firstTag = tags.first else { return }
+        coordinator.deleteTags(tags) { [weak self, weak coordinator] undoID in
+            guard let self, let window = windowController.window else { return }
+            let title = tags.count == 1
+                ? String(localized: "tag.deleted.single", defaultValue: "Deleted “\(firstTag.name)”")
+                : String(localized: "tag.deleted.multiple", defaultValue: "Deleted \(tags.count) Tags")
+            let notice = TransientNotice.show(
+                in: window,
+                title: title,
+                action: TransientNotice.Action(title: String(localized: .actionUndo)) {
+                    coordinator?.undoTagMutation(undoID)
+                }
+            )
+            tagDeletionNotice = (undoID, notice)
+        }
+    }
+
+    private func dismissTagDeletionNoticeIfNoLongerUndoable() {
+        guard let pending = tagDeletionNotice,
+              libraryAccessCoordinator?.canUndoTagMutation(pending.undoID) != true else { return }
+        TransientNotice.dismiss(pending.notice)
+        tagDeletionNotice = nil
     }
 
     @objc private func undoLastMutation() {

@@ -98,7 +98,7 @@ ALERT_PRESENTERS = [
   "Core/FileAccess/LibraryAccessCoordinator.swift", # relink confirmation
   "Features/Library/InspectorViewController.swift", # remove unavailable videos
   "Features/Library/LibrarySplitViewController.swift", # smart filter save / leave / delete
-  "Features/Library/SidebarViewController.swift", # delete tag
+  "Features/Library/SidebarViewController.swift", # name a new tag
   "Features/Library/VideoGridViewController.swift" # remove records
 ].freeze
 

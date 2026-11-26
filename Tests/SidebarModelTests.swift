@@ -84,6 +84,28 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertFalse(SidebarDeleteKey.matches(try keyEvent(0)))
     }
 
+    @MainActor
+    func testUndoNoticeIsTakenDownOnlyWhileItIsStillTheOneShown() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: true
+        )
+        let deletion = TransientNotice.show(in: window, title: "已删除“标签”")
+        XCTAssertTrue(TransientNotice.isShowing(deletion))
+
+        TransientNotice.dismiss(deletion)
+        XCTAssertFalse(TransientNotice.isShowing(deletion))
+
+        let earlier = TransientNotice.show(in: window, title: "已删除 2 个标签")
+        let newer = TransientNotice.show(in: window, title: "导出完成")
+        XCTAssertFalse(TransientNotice.isShowing(earlier))
+        TransientNotice.dismiss(earlier)
+        XCTAssertTrue(TransientNotice.isShowing(newer))
+        TransientNotice.dismiss(newer)
+    }
+
     private func keyEvent(_ keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
