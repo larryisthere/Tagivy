@@ -5306,13 +5306,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld video in iCloud is left out and downloads after you drop"
+                  "value" : "%lld video isn’t downloaded yet and is skipped. It downloads when you drop."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld videos in iCloud are left out and download after you drop"
+                  "value" : "%lld videos aren’t downloaded yet and are skipped. They download when you drop."
                 }
               }
             }
@@ -5324,7 +5324,7 @@
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld 个视频在 iCloud 中，不会带出，松手后开始下载"
+                  "value" : "%lld 个视频还没下载，这次先跳过，松手后开始下载"
                 }
               }
             }
