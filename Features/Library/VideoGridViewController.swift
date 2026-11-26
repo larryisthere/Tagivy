@@ -1043,7 +1043,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             itemView.staysVisibleWhileDragged = true
             draggedItemViews.append(itemView)
         }
-        if draggedSkippedIndexPaths.isEmpty == false {
+        if draggedExportIndexPaths.isEmpty == false || draggedSkippedIndexPaths.isEmpty == false {
             dragExportCaption = DragExportCaption(
                 exportCount: draggedExportIndexPaths.count,
                 skippedCount: draggedSkippedIndexPaths.count,
@@ -1699,8 +1699,8 @@ private final class ImportStatusView: NSView {
     }
 }
 
-/// Tells the user, on the image that follows the pointer, how many videos the drag exports and how many
-/// it leaves out because they are not downloaded from iCloud or are offline.
+/// Tells the user, on the image that follows the pointer, how many videos the drag exports and, if any,
+/// how many it leaves out because they are not downloaded from iCloud or are offline.
 @MainActor
 final class DragExportCaption: NSObject {
     private let text: String
@@ -1713,11 +1713,16 @@ final class DragExportCaption: NSObject {
     /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
     /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
     init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
-        text = String.localizedStringWithFormat(
-            NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
-            exportCount,
-            skippedCount
-        )
+        text = skippedCount == 0
+            ? String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption.all", comment: "Caption on a drag out of Tagivy"),
+                exportCount
+            )
+            : String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out some videos"),
+                exportCount,
+                skippedCount
+            )
         self.session = session
         self.view = view
         super.init()

@@ -582,7 +582,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             session.draggingPasteboard.writeObjects(remainingURLs as [NSURL])
         }
         let files = dragFileURLs.files
-        if files.skippedCount > 0 {
+        if files.ready.isEmpty == false || files.skippedCount > 0 {
             dragExportCaption = DragExportCaption(
                 exportCount: files.ready.count,
                 skippedCount: files.skippedCount,

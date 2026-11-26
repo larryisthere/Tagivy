@@ -5297,6 +5297,36 @@
         }
       }
     },
+    "drag.exportCaption.all" : {
+      "comment" : "Caption on a drag out of Tagivy",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exporting %lld video"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exporting %lld videos"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将导出 %lld 个视频"
+          }
+        }
+      }
+    },
     "drag.exportCaption" : {
       "comment" : "Caption on a drag that leaves out some videos",
       "extractionState" : "manual",
