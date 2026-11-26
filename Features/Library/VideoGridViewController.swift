@@ -1719,12 +1719,12 @@ final class DragExportCaption: NSObject {
             )
         } else if exportCount == 0 {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all offline"),
+                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all unavailable"),
                 skippedCount
             )
         } else {
             text = String.localizedStringWithFormat(
-                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out offline videos"),
+                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out unavailable videos"),
                 exportCount,
                 skippedCount
             )

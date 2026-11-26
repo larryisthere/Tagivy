@@ -5022,7 +5022,7 @@
       }
     },
     "drag.exportCaption.none" : {
-      "comment" : "Caption on a drag whose videos are all offline",
+      "comment" : "Caption on a drag whose videos are all unavailable",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
@@ -5031,13 +5031,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "No videos to export (%lld offline)"
+                  "value" : "No videos to export (%lld unavailable)"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "No videos to export (%lld offline)"
+                  "value" : "No videos to export (%lld unavailable)"
                 }
               }
             }
@@ -5046,19 +5046,19 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有可导出的视频（%lld 个离线）"
+            "value" : "没有可导出的视频（%lld 个不可用）"
           }
         }
       }
     },
     "drag.exportCaption" : {
-      "comment" : "Caption on a drag that leaves out offline videos",
+      "comment" : "Caption on a drag that leaves out unavailable videos",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exporting %#@exported@, excluding %#@offline@ offline"
+            "value" : "Exporting %#@exported@, excluding %#@skipped@ unavailable"
           },
           "substitutions" : {
             "exported" : {
@@ -5081,7 +5081,7 @@
                 }
               }
             },
-            "offline" : {
+            "skipped" : {
               "argNum" : 2,
               "formatSpecifier" : "lld",
               "variations" : {
@@ -5106,7 +5106,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "即将导出 %1$lld 个视频，不包含离线的 %2$lld 个视频"
+            "value" : "即将导出 %1$lld 个视频，不包含不可用的 %2$lld 个视频"
           }
         }
       }
