@@ -1550,8 +1550,10 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
               let value = NumericConditionKind.value(of: condition) else { return }
         let slider = NumericConditionSlider(kind: kind, value: value)
         slider.onChange = { [weak self] newValue in
-            self?.setEditedCondition(kind.condition(with: newValue))
-            self?.draftDidChange()
+            // A field still being edited commits when the content is rebuilt for another type.
+            guard let self, let current = editedCondition, NumericConditionKind(current) == kind else { return }
+            setEditedCondition(kind.condition(with: newValue))
+            draftDidChange()
         }
         addLabeledControl(
             slider,

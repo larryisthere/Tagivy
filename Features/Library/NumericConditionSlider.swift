@@ -160,7 +160,7 @@ enum NumericConditionKind: Equatable, Sendable {
             }
             if trimmed == "2k" { return 2560 }
             let digits = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789").inverted)
-            guard let number = Double(digits), number.isFinite, number > 0 else { return nil }
+            guard let number = Double(digits), valueBounds.contains(number) else { return nil }
             let byHeight = Self.resolutionSteps.first { $0.name == "\(Int(number))p" }
             return byHeight.map { Double($0.width) } ?? scale.nearestDetent(to: number)
         }

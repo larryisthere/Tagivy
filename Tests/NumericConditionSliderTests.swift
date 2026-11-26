@@ -89,6 +89,8 @@ final class NumericConditionSliderTests: XCTestCase {
             36_500
         )
         XCTAssertNil(NumericConditionKind.durationAtLeast.parse(String(repeating: "9", count: 400), currentValue: 60))
+        XCTAssertNil(NumericConditionKind.resolutionWidthAtLeast.parse("99999999999999999999", currentValue: 3840))
+        XCTAssertNil(NumericConditionKind.resolutionWidthAtLeast.parse(String(repeating: "9", count: 400), currentValue: 3840))
     }
 
     func testCommaIsAThousandsSeparatorOnlyBeforeThreeDigits() {
