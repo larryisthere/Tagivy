@@ -22,6 +22,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Switching videos no longer reloads the Inspector's tag list; the selection's tags slide to the top.
 - Tag counts in the sidebar update right away and roll to their new value.
 - Thumbnails that load later fade in instead of appearing abruptly.
+- Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
 
 ### Fixed
 

@@ -50,6 +50,8 @@
 		A0E2000000000000000000B4 /* TagCapsules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F4 /* TagCapsules.swift */; };
 		A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F5 /* TagCapsulesTests.swift */; };
 		A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */; };
+		A0F3000000000000000000B1 /* NumericConditionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3000000000000000000F1 /* NumericConditionSlider.swift */; };
+		A0F3000000000000000000B2 /* NumericConditionSliderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */; };
 		A11C0A000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A11C0A000000000000000002 /* Assets.xcassets */; };
 		A11C0A000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A11C0A000000000000000005 /* Localizable.xcstrings */; };
 		A11C0A000000000000000006 /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11C0A000000000000000007 /* AppLocalization.swift */; };
@@ -120,6 +122,8 @@
 		A0E2000000000000000000F4 /* TagCapsules.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagCapsules.swift; path = Library/TagCapsules.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F5 /* TagCapsulesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TagCapsulesTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagStateCacheTests.swift; sourceTree = "<group>"; };
+		A0F3000000000000000000F1 /* NumericConditionSlider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NumericConditionSlider.swift; path = Library/NumericConditionSlider.swift; sourceTree = "<group>"; };
+		A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumericConditionSliderTests.swift; sourceTree = "<group>"; };
 		A11C0A000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A11C0A000000000000000005 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A11C0A000000000000000007 /* AppLocalization.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppLocalization.swift; path = Localization/AppLocalization.swift; sourceTree = "<group>"; };
@@ -225,6 +229,7 @@
 				A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */,
 				A0E2000000000000000000F5 /* TagCapsulesTests.swift */,
 				A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */,
+				A0F3000000000000000000F2 /* NumericConditionSliderTests.swift */,
 				4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */,
 				D0AA92E51624A2CF7E78A87B /* AppUpdateFlowTests.swift */,
 			);
@@ -286,6 +291,7 @@
 				A0E1000000000000000000F5 /* EditorExportMenu.swift */,
 				A0E2000000000000000000F1 /* ThumbnailReveal.swift */,
 				A0E2000000000000000000F4 /* TagCapsules.swift */,
+				A0F3000000000000000000F1 /* NumericConditionSlider.swift */,
 				999DD897E04F33DB96FBAF98 /* SidebarViewController.swift */,
 				A1FF02AA6C391F4A09600494 /* VideoGridViewController.swift */,
 				C2129BA05EEE64F81130DCAB /* LockView.swift */,
@@ -436,6 +442,7 @@
 				A0E1000000000000000000B5 /* EditorExportMenu.swift in Sources */,
 				A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */,
 				A0E2000000000000000000B4 /* TagCapsules.swift in Sources */,
+				A0F3000000000000000000B1 /* NumericConditionSlider.swift in Sources */,
 				1E40E58D5FC7F491D7B2D1D9 /* SidebarViewController.swift in Sources */,
 				9AF05198436650CF3898E5F0 /* VideoGridViewController.swift in Sources */,
 				0EA6CA27889C08E04FAC7081 /* LockView.swift in Sources */,
@@ -463,6 +470,7 @@
 				A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */,
 				A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */,
 				A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */,
+				A0F3000000000000000000B2 /* NumericConditionSliderTests.swift in Sources */,
 				2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */,
 				788BA0C0D9644F01F4E01267 /* AppUpdateFlowTests.swift in Sources */,
 			);
