@@ -75,14 +75,16 @@ struct NLEExportBin: Equatable, Sendable {
 }
 
 struct NLEExportPlan: Equatable, Sendable {
+    /// What the export is called: the saved file's suggested name, and the name of the event, project or timeline.
+    var name: String
     var root: NLEExportBin
     let clips: [NLEExportClip]
     /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive.
     let skippedCount: Int
-    /// Whether the outermost bin is the one exported tag, so it keeps that tag's name
+    /// Whether the outermost bin is an exported tag or one of its parent tags, so it keeps that tag's name
     /// instead of taking the name of the saved file.
     let rootIsTag: Bool
-    /// The bin of each exported tag; Final Cut Pro keyword collections are built from these.
+    /// The bin of each exported tag inside the bins of its parent tags; Final Cut Pro keyword collections are built from these.
     let tagBins: [NLEExportBin]
 
     func clip(id: String) -> NLEExportClip? {
@@ -217,14 +219,39 @@ enum NLEExportPlanBuilder {
             guard direct.isEmpty == false || children.isEmpty == false else { return nil }
             return NLEExportBin(name: tag.name, bins: children, clipIDs: direct)
         }
-        let tagBins = rootIDs.compactMap { tagsByID[$0] }.compactMap(bin(for:))
+        // An exported subtag keeps the path of its parent tags, so the editing app shows it where it sits in the tag tree.
+        let tagPaths: [(path: [String], bin: NLEExportBin)] = rootIDs.compactMap { id in
+            guard let tag = tagsByID[id], let bin = bin(for: tag) else { return nil }
+            var path = [id]
+            var visited: Set<String> = [id]
+            while let parent = tagsByID[path[0]]?.parentID, tagsByID[parent] != nil, visited.insert(parent).inserted {
+                path.insert(parent, at: 0)
+            }
+            return (path, bin)
+        }
+        func nest(_ entries: [(path: [String], bin: NLEExportBin)], depth: Int) -> [NLEExportBin] {
+            var order: [String] = []
+            var groups: [String: [(path: [String], bin: NLEExportBin)]] = [:]
+            for entry in entries {
+                let id = entry.path[depth]
+                if groups[id] == nil { order.append(id) }
+                groups[id, default: []].append(entry)
+            }
+            return order.compactMap { id in
+                let group = groups[id] ?? []
+                if let exported = group.first(where: { $0.path.count == depth + 1 }) {
+                    return exported.bin
+                }
+                guard let tag = tagsByID[id] else { return nil }
+                return NLEExportBin(name: tag.name, bins: nest(group, depth: depth + 1), clipIDs: [])
+            }
+        }
+        let tagBins = nest(tagPaths, depth: 0)
         let root: NLEExportBin
         let rootIsTag: Bool
         switch grouping {
         case .chosenTags where tagBins.count == 1:
-            var tagBin = tagBins[0]
-            tagBin.name = name
-            root = tagBin
+            root = tagBins[0]
             rootIsTag = true
         case .chosenTags:
             root = NLEExportBin(name: name, bins: tagBins, clipIDs: [])
@@ -236,6 +263,7 @@ enum NLEExportPlanBuilder {
             rootIsTag = false
         }
         return NLEExportPlan(
+            name: name,
             root: root,
             clips: clips,
             skippedCount: leftOutCount,

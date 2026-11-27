@@ -25,6 +25,40 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(plan.root.bins[0].clipIDs, ["sunset", "waves"])
     }
 
+    func testExportedSubtagStaysInsideTheBinsOfItsParentTags() throws {
+        let plan = makePlan(rootTagID: "coast", relations: [("sunset", "coast"), ("waves", "coast")])
+
+        XCTAssertEqual(plan.name, "海边")
+        XCTAssertTrue(plan.rootIsTag)
+        XCTAssertEqual(plan.root.name, "旅行")
+        XCTAssertTrue(plan.root.clipIDs.isEmpty)
+        XCTAssertEqual(plan.root.bins.map(\.name), ["海边"])
+        XCTAssertEqual(plan.root.bins[0].clipIDs, ["sunset", "waves"])
+
+        let xmeml = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "海边")
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/name").first?.stringValue, "旅行")
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/bin/name").first?.stringValue, "海边")
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/clip").count, 0)
+
+        let fcpxml = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "/fcpxml/library/event/@name").first?.stringValue, "海边")
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/@name").map(\.stringValue), ["旅行"])
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/keyword-collection/@name").map(\.stringValue), ["海边"])
+    }
+
+    func testSeveralSubtagsShareTheBinsOfTheirParentTags() {
+        let plan = makePlan(rootTagIDs: ["city", "coast", "people"], relations: [
+            ("sunset", "coast"), ("ferry", "city"), ("family", "people"),
+        ])
+
+        XCTAssertFalse(plan.rootIsTag)
+        XCTAssertEqual(plan.root.name, "导出")
+        XCTAssertEqual(plan.root.bins.map(\.name), ["旅行", "人物"])
+        XCTAssertEqual(plan.root.bins[0].bins.map(\.name), ["海边", "城市"])
+        XCTAssertTrue(plan.root.bins[0].clipIDs.isEmpty)
+    }
+
     func testVideoInSeveralChildTagsAppearsInEachBin() {
         let plan = makePlan(rootTagID: "travel", relations: [("ferry", "coast"), ("ferry", "city")])
 
@@ -245,10 +279,12 @@ final class NLEExportTests: XCTestCase {
 
     func testNamesAreEscaped() throws {
         var plan = makePlan(rootTagID: nil, relations: [])
-        plan.root.name = "A & B <\"cut\">"
+        plan.name = "A & B <\"cut\">"
+        plan.root.name = plan.name
         let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
 
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "A & B <\"cut\">")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").first?.stringValue, "A & B <\"cut\">")
     }
 
     /// No root tag exports the way a smart filter or a video selection does.

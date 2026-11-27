@@ -14,7 +14,7 @@ enum FCP7XMLWriter {
         writer.xml.line("<!DOCTYPE xmeml>")
         writer.xml.open("xmeml", attributes: [("version", "4")])
         writer.xml.open("project")
-        writer.xml.element("name", plan.root.name)
+        writer.xml.element("name", plan.name)
         // Premiere Pro places a project's children at the top of its own project, so the outermost bin
         // is written as a bin too; otherwise a single tag's clips arrive loose, without its bin.
         writer.xml.open("children")
@@ -110,7 +110,7 @@ enum FCP7XMLWriter {
             }
 
             xml.open("sequence", attributes: [("id", "sequence-\(xml.nextID())")])
-            xml.element("name", plan.root.name)
+            xml.element("name", plan.name)
             xml.element("duration", String(start))
             FCP7XMLWriter.writeRate(rate, into: &xml)
             xml.open("media")
@@ -301,7 +301,7 @@ enum FCPXMLWriter {
         }
         xml.close("resources")
         xml.open("library")
-        xml.open("event", attributes: [("name", plan.root.name)])
+        xml.open("event", attributes: [("name", plan.name)])
         for clip in plan.clips {
             let duration = time(frames: clip.frameCount, rate: clip.frameRate)
             xml.open("asset-clip", attributes: [
@@ -346,7 +346,7 @@ enum FCPXMLWriter {
             Int(((Double(clip.frameCount) / clip.frameRate.framesPerSecond) * rate.framesPerSecond).rounded())
         }
         let total = lengths.reduce(0, +)
-        xml.open("project", attributes: [("name", plan.root.name)])
+        xml.open("project", attributes: [("name", plan.name)])
         xml.open("sequence", attributes: [
             ("format", format),
             ("duration", time(frames: total, rate: rate)),
