@@ -9,7 +9,7 @@ enum NumericConditionKind: Equatable, Sendable {
     case createdWithinDays
     case duration
     case fileSize
-    case resolutionWidth
+    case resolution
 
     init?(_ condition: LibraryFilterCondition) {
         switch condition {
@@ -17,7 +17,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: self = .createdWithinDays
         case .durationRange: self = .duration
         case .fileSizeRange: self = .fileSize
-        case .resolutionWidthRange: self = .resolutionWidth
+        case .resolutionTierRange: self = .resolution
         case .tags, .untagged: return nil
         }
     }
@@ -25,7 +25,7 @@ enum NumericConditionKind: Equatable, Sendable {
     var isRange: Bool {
         switch self {
         case .addedWithinDays, .createdWithinDays: false
-        case .duration, .fileSize, .resolutionWidth: true
+        case .duration, .fileSize, .resolution: true
         }
     }
 
@@ -33,7 +33,7 @@ enum NumericConditionKind: Equatable, Sendable {
     static func value(of condition: LibraryFilterCondition) -> Double? {
         switch condition {
         case let .addedWithinDays(days), let .createdWithinDays(days): Double(days)
-        case .durationRange, .fileSizeRange, .resolutionWidthRange, .tags, .untagged: nil
+        case .durationRange, .fileSizeRange, .resolutionTierRange, .tags, .untagged: nil
         }
     }
 
@@ -42,7 +42,7 @@ enum NumericConditionKind: Equatable, Sendable {
         switch condition {
         case let .durationRange(low, high): (low, high)
         case let .fileSizeRange(low, high): (low.map(Double.init), high.map(Double.init))
-        case let .resolutionWidthRange(low, high): (low.map(Double.init), high.map(Double.init))
+        case let .resolutionTierRange(low, high): (low.map(Double.init), high.map(Double.init))
         case .addedWithinDays, .createdWithinDays, .tags, .untagged: nil
         }
     }
@@ -51,7 +51,7 @@ enum NumericConditionKind: Equatable, Sendable {
         switch self {
         case .addedWithinDays: .addedWithinDays(Int(value.rounded()))
         case .createdWithinDays: .createdWithinDays(Int(value.rounded()))
-        case .duration, .fileSize, .resolutionWidth: condition(min: value, max: nil)
+        case .duration, .fileSize, .resolution: condition(min: value, max: nil)
         }
     }
 
@@ -61,8 +61,8 @@ enum NumericConditionKind: Equatable, Sendable {
         case .duration: .durationRange(min: low?.rounded(), max: high?.rounded()).normalized()
         case .fileSize:
             .fileSizeRange(min: low.map { Int64($0.rounded()) }, max: high.map { Int64($0.rounded()) }).normalized()
-        case .resolutionWidth:
-            .resolutionWidthRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
+        case .resolution:
+            .resolutionTierRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
         }
     }
 
@@ -72,7 +72,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: .createdWithinDays(30)
         case .duration: .durationRange(min: 60, max: nil)
         case .fileSize: .fileSizeRange(min: 1_000_000_000, max: nil)
-        case .resolutionWidth: .resolutionWidthRange(min: 3840, max: nil)
+        case .resolution: .resolutionTierRange(min: 2160, max: nil)
         }
     }
 
@@ -121,17 +121,18 @@ enum NumericConditionKind: Equatable, Sendable {
                 mapping: .logarithmic(1_000_000...100_000_000_000),
                 detents: [100_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000]
             )
-        case .resolutionWidth:
+        case .resolution:
             NumericConditionScale(
                 mapping: .stepped,
-                detents: Self.resolutionSteps.map { Double($0.width) }
+                detents: Self.resolutionSteps.map { Double($0.tier) }
             )
         }
     }
 
-    static let resolutionSteps: [(width: Int, name: String)] = [
-        (1280, "720p"), (1920, "1080p"), (2560, "1440p"), (3840, "4K"), (7680, "8K"),
-    ]
+    /// Named `ResolutionTier` values.
+    static let resolutionSteps: [(tier: Int, name: String)] = Array(
+        zip(ResolutionTier.named, ["720p", "1080p", "1440p", "4K", "8K"])
+    )
 
     // MARK: Display units
 
@@ -165,7 +166,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .addedWithinDays, .createdWithinDays: [Self.dayUnit]
         case .duration: [Self.secondUnit, Self.minuteUnit, Self.hourUnit]
         case .fileSize: Self.byteUnits
-        case .resolutionWidth: []
+        case .resolution: []
         }
     }
 
@@ -178,7 +179,7 @@ enum NumericConditionKind: Equatable, Sendable {
     /// Rounds to what the field can show, so dragging lands on readable values
     /// (37 min, 1.4 GB) and the field never displays a different value than is saved.
     func rounded(_ value: Double) -> Double {
-        if case .resolutionWidth = self { return scale.nearestDetent(to: value) }
+        if case .resolution = self { return scale.nearestDetent(to: value) }
         let value = min(max(value, valueBounds.lowerBound), valueBounds.upperBound)
         guard let unit = displayUnit(for: value) else { return value }
         let number = value / unit.factor
@@ -193,14 +194,14 @@ enum NumericConditionKind: Equatable, Sendable {
         case .addedWithinDays, .createdWithinDays: 1...36_500
         case .duration: 1...10_000_000
         case .fileSize: 1_000_000...1_000_000_000_000_000
-        case .resolutionWidth: 1...100_000
+        case .resolution: 1...100_000
         }
     }
 
     func formatted(_ value: Double) -> String {
-        if case .resolutionWidth = self {
-            let width = Int(value.rounded())
-            return Self.resolutionSteps.first { $0.width == width }?.name ?? "\(width) px"
+        if case .resolution = self {
+            let tier = Int(value.rounded())
+            return Self.resolutionSteps.first { $0.tier == tier }?.name ?? "\(tier)p"
         }
         guard let unit = displayUnit(for: value) else { return "\(value)" }
         return unit.format(Self.numberText(value / unit.factor))
@@ -220,15 +221,20 @@ enum NumericConditionKind: Equatable, Sendable {
     /// the unit the field currently shows. Returns nil for text that is not a positive value.
     func parse(_ text: String, currentValue: Double) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if case .resolutionWidth = self {
+        if case .resolution = self {
             if let step = Self.resolutionSteps.first(where: { $0.name.lowercased() == trimmed }) {
-                return Double(step.width)
+                return Double(step.tier)
             }
-            if trimmed == "2k" { return 2560 }
+            if trimmed == "2k" { return 1440 }
             let digits = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789").inverted)
             guard let number = Double(digits), valueBounds.contains(number) else { return nil }
-            let byHeight = Self.resolutionSteps.first { $0.name == "\(Int(number))p" }
-            return byHeight.map { Double($0.width) } ?? scale.nearestDetent(to: number)
+            if Self.resolutionSteps.contains(where: { Double($0.tier) == number }) { return number }
+            // A familiar 16:9 width such as 1920 or 3840 means its tier.
+            let byWidth = ResolutionTier.tier(forLegacyWidth: Int(number))
+            if Self.resolutionSteps.contains(where: { $0.tier == byWidth }), Int(number) != byWidth {
+                return Double(byWidth)
+            }
+            return scale.nearestDetent(to: number)
         }
         let numberPart = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
         let unitPart = trimmed.dropFirst(numberPart.count).trimmingCharacters(in: .whitespaces)
@@ -562,15 +568,13 @@ struct NumericRangeBounds: Equatable, Sendable {
 /// An empty field, or a knob pushed to its end of the track, leaves that end open.
 @MainActor
 final class NumericRangeSlider: NSView, NSTextFieldDelegate {
-    private static let valueFieldWidth: CGFloat = 76
+    private static let valueFieldWidth: CGFloat = 96
 
     private let kind: NumericConditionKind
     private let track: NumericRangeTrack
-    private let clearMinButton = NSButton()
-    private let clearMaxButton = NSButton()
     private let trackView = RangeTrackView()
-    private let minField = NSTextField()
-    private let maxField = NSTextField()
+    private let minField = ClearableTextField()
+    private let maxField = ClearableTextField()
     private(set) var rangeBounds: NumericRangeBounds
     private static let openEndSnap = -1.0
     private var lastSnap: [NumericRangeBounds.End: Double] = [:]
@@ -580,14 +584,21 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
 
     var range: (min: Double?, max: Double?) { (rangeBounds.min, rangeBounds.max) }
 
-    init(kind: NumericConditionKind, min: Double?, max: Double?) {
+    init(kind: NumericConditionKind, min: Double?, max: Double?, footnote: String? = nil) {
         self.kind = kind
         self.track = NumericRangeTrack(scale: kind.scale)
         self.rangeBounds = NumericRangeBounds(min: min, max: max)
         super.init(frame: .zero)
 
-        trackView.detentPositions = track.scale.detentPositions.map {
+        let detentPositions = track.scale.detentPositions.map {
             NumericRangeTrack.openZone + $0 * (1 - 2 * NumericRangeTrack.openZone)
+        }
+        if kind == .resolution {
+            trackView.detentMarks = zip(detentPositions, NumericConditionKind.resolutionSteps.map(\.name)).map {
+                RangeTrackView.DetentMark(position: $0, title: $1)
+            }
+        } else {
+            trackView.detentMarks = detentPositions.map { RangeTrackView.DetentMark(position: $0, title: nil) }
         }
         trackView.onDrag = { [weak self] end, position, snapping in
             self?.knobMoved(end, to: position, snapping: snapping)
@@ -598,7 +609,10 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         let minLabel = Self.label(String(localized: "filter.range.min", defaultValue: "Min"))
         let maxLabel = Self.label(String(localized: "filter.range.max", defaultValue: "Max"))
         trackView.knobTitles = [.min: minLabel.stringValue, .max: maxLabel.stringValue]
-        for (field, label) in [(minField, minLabel), (maxField, maxLabel)] {
+        for (field, label, clearTitle) in [
+            (minField, minLabel, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
+            (maxField, maxLabel, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
+        ] {
             field.controlSize = .small
             field.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             field.alignment = .right
@@ -610,35 +624,56 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             field.cell?.sendsActionOnEndEditing = true
             field.cell?.isScrollable = true
             field.setAccessibilityLabel(label.stringValue)
+            field.clearButtonTitle = clearTitle
+            field.onClear = { [weak self, weak field] in
+                guard let self, let field else { return }
+                clearEnd(field === minField ? .min : .max)
+            }
             field.widthAnchor.constraint(equalToConstant: Self.valueFieldWidth).isActive = true
         }
-        for (button, title) in [
-            (clearMinButton, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
-            (clearMaxButton, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
-        ] {
-            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: title)
-            button.isBordered = false
-            button.imagePosition = .imageOnly
-            button.contentTintColor = .tertiaryLabelColor
-            button.toolTip = title
-            button.setAccessibilityLabel(title)
-            button.target = self
-            button.action = #selector(clearEnd(_:))
-            button.widthAnchor.constraint(equalToConstant: 14).isActive = true
-        }
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let fields = NSStackView(views: [minLabel, minField, clearMinButton, spacer, maxLabel, maxField, clearMaxButton])
-        fields.orientation = .horizontal
-        fields.alignment = .centerY
-        fields.spacing = 6
-        fields.setCustomSpacing(3, after: minField)
-        fields.setCustomSpacing(3, after: maxField)
 
-        let column = NSStackView(views: [trackView, fields])
+        let fields = NSView()
+        for view in [minLabel, minField, maxLabel, maxField] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            fields.addSubview(view)
+        }
+        // The fields line up with the ends of the slider bar.
+        let barInset = trackView.barInset
+        NSLayoutConstraint.activate([
+            minLabel.leadingAnchor.constraint(equalTo: fields.leadingAnchor, constant: barInset),
+            minField.leadingAnchor.constraint(equalTo: minLabel.trailingAnchor, constant: 6),
+            maxField.trailingAnchor.constraint(equalTo: fields.trailingAnchor, constant: -barInset),
+            maxLabel.trailingAnchor.constraint(equalTo: maxField.leadingAnchor, constant: -6),
+            maxLabel.leadingAnchor.constraint(greaterThanOrEqualTo: minField.trailingAnchor, constant: 12),
+            minField.topAnchor.constraint(equalTo: fields.topAnchor),
+            minField.bottomAnchor.constraint(equalTo: fields.bottomAnchor),
+            maxField.centerYAnchor.constraint(equalTo: minField.centerYAnchor),
+            minLabel.firstBaselineAnchor.constraint(equalTo: minField.firstBaselineAnchor),
+            maxLabel.firstBaselineAnchor.constraint(equalTo: maxField.firstBaselineAnchor),
+        ])
+
+        var rows: [NSView] = [trackView, fields]
+        if let footnote {
+            let label = NSTextField(wrappingLabelWithString: footnote)
+            label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            label.textColor = .secondaryLabelColor
+            label.isSelectable = false
+            label.translatesAutoresizingMaskIntoConstraints = false
+            let container = NSView()
+            container.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: barInset),
+                label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -barInset),
+                label.topAnchor.constraint(equalTo: container.topAnchor),
+                label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            rows.append(container)
+        }
+        let column = NSStackView(views: rows)
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 6
+        column.spacing = 8
+        column.setCustomSpacing(11, after: trackView)
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         NSLayoutConstraint.activate([
@@ -649,6 +684,7 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             trackView.widthAnchor.constraint(equalTo: column.widthAnchor),
             fields.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
+        rows.dropFirst(2).forEach { $0.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true }
 
         lastSnap = [.min: rangeBounds.min ?? Self.openEndSnap, .max: rangeBounds.max ?? Self.openEndSnap]
         showRange()
@@ -669,12 +705,8 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     private func showRange() {
         trackView.minPosition = track.position(forMin: rangeBounds.min)
         trackView.maxPosition = track.position(forMax: rangeBounds.max)
-        // Hidden by transparency so the fields keep their place.
-        for (button, isSet) in [(clearMinButton, rangeBounds.min != nil), (clearMaxButton, rangeBounds.max != nil)] {
-            button.alphaValue = isSet ? 1 : 0
-            button.isEnabled = isSet
-            button.setAccessibilityElement(isSet)
-        }
+        minField.showsClearButton = rangeBounds.min != nil
+        maxField.showsClearButton = rangeBounds.max != nil
         minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
         maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
         trackView.knobValues = [
@@ -724,9 +756,9 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         showRange()
     }
 
-    @objc private func clearEnd(_ sender: NSButton) {
+    private func clearEnd(_ end: NumericRangeBounds.End) {
         var updated = rangeBounds
-        updated.set(sender === clearMinButton ? .min : .max, to: nil)
+        updated.set(end, to: nil)
         commit(updated)
         showRange()
     }
@@ -772,7 +804,18 @@ private final class RangeTrackView: NSView {
 
     var minPosition: Double = 0 { didSet { needsDisplay = true } }
     var maxPosition: Double = 1 { didSet { needsDisplay = true } }
-    var detentPositions: [Double] = [] { didSet { needsDisplay = true } }
+    struct DetentMark {
+        let position: Double
+        /// Drawn under the track in place of a dot.
+        let title: String?
+    }
+
+    var detentMarks: [DetentMark] = [] {
+        didSet {
+            needsDisplay = true
+            invalidateIntrinsicContentSize()
+        }
+    }
     var knobTitles: [NumericRangeBounds.End: String] = [:]
     var knobValues: [NumericRangeBounds.End: String] = [:]
     var onDrag: ((NumericRangeBounds.End, Double, Bool) -> Void)?
@@ -791,7 +834,15 @@ private final class RangeTrackView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 7) }
+    private static let markFont = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .mini))
+
+    override var intrinsicContentSize: NSSize {
+        let markHeight = detentMarks.contains { $0.title != nil } ? ceil(Self.markFont.boundingRectForFont.height) : 3
+        return NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 3 + markHeight)
+    }
+
+    /// Horizontal distance from the view's edge to the end of the slider bar.
+    var barInset: CGFloat { knobSize / 2 }
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -821,10 +872,20 @@ private final class RangeTrackView: NSView {
         NSBezierPath(roundedRect: selected, xRadius: barHeight / 2, yRadius: barHeight / 2).fill()
 
         let dotDiameter: CGFloat = 3
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: Self.markFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
         NSColor.tertiaryLabelColor.setFill()
-        for position in detentPositions {
-            let dot = NSRect(x: x(for: position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
-            NSBezierPath(ovalIn: dot).fill()
+        for mark in detentMarks {
+            if let title = mark.title {
+                let size = (title as NSString).size(withAttributes: titleAttributes)
+                let origin = NSPoint(x: (x(for: mark.position) - size.width / 2).rounded(), y: knobSize + 2)
+                (title as NSString).draw(at: origin, withAttributes: titleAttributes)
+            } else {
+                let dot = NSRect(x: x(for: mark.position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
+                NSBezierPath(ovalIn: dot).fill()
+            }
         }
 
         cell.drawKnob(knobRect(.min))
@@ -888,5 +949,98 @@ private final class RangeKnobAccessibilityElement: NSAccessibilityElement {
     override func accessibilityPerformDecrement() -> Bool {
         track?.onStep?(end, false)
         return true
+    }
+}
+
+/// A text field with a trailing clear button inside its bezel, like a search field's.
+private final class ClearableTextField: NSTextField {
+    private static let buttonSize: CGFloat = 14
+
+    private let clearButton = NSButton()
+    var onClear: (() -> Void)?
+
+    var clearButtonTitle = "" {
+        didSet {
+            clearButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: clearButtonTitle)
+            clearButton.toolTip = clearButtonTitle
+            clearButton.setAccessibilityLabel(clearButtonTitle)
+        }
+    }
+
+    var showsClearButton = false {
+        didSet {
+            guard showsClearButton != oldValue else { return }
+            clearButton.isHidden = showsClearButton == false
+            (cell as? ClearableTextFieldCell)?.trailingInset = showsClearButton ? Self.buttonSize + 4 : 0
+            needsDisplay = true
+            // The field editor's frame is set when editing starts; restart editing to apply the new inset.
+            if let editor = currentEditor() {
+                let selection = editor.selectedRange
+                abortEditing()
+                selectText(nil)
+                currentEditor()?.selectedRange = selection
+            }
+        }
+    }
+
+    override class var cellClass: AnyClass? {
+        get { ClearableTextFieldCell.self }
+        set {}
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        clearButton.isBordered = false
+        clearButton.imagePosition = .imageOnly
+        clearButton.imageScaling = .scaleProportionallyDown
+        clearButton.contentTintColor = .tertiaryLabelColor
+        clearButton.refusesFirstResponder = true
+        clearButton.isHidden = true
+        clearButton.target = self
+        clearButton.action = #selector(clear(_:))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(clearButton)
+        NSLayoutConstraint.activate([
+            clearButton.widthAnchor.constraint(equalToConstant: Self.buttonSize),
+            clearButton.heightAnchor.constraint(equalToConstant: Self.buttonSize),
+            clearButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            clearButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func clear(_ sender: NSButton) {
+        onClear?()
+    }
+}
+
+private final class ClearableTextFieldCell: NSTextFieldCell {
+    var trailingInset: CGFloat = 0
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        var drawing = super.drawingRect(forBounds: rect)
+        drawing.size.width = max(drawing.width - trailingInset, 0)
+        return drawing
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: insetForEditing(rect), in: controlView, editor: textObj, delegate: delegate, event: event)
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(
+            withFrame: insetForEditing(rect), in: controlView, editor: textObj,
+            delegate: delegate, start: selStart, length: selLength
+        )
+    }
+
+    private func insetForEditing(_ rect: NSRect) -> NSRect {
+        var inset = rect
+        inset.size.width = max(rect.width - trailingInset, 0)
+        return inset
     }
 }

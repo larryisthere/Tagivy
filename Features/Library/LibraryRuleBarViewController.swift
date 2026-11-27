@@ -468,7 +468,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             return String(localized: "filter.addedDays", defaultValue: "Added in last \(days) days")
         case let .createdWithinDays(days):
             return String(localized: "filter.createdDays", defaultValue: "Created in last \(days) days")
-        case .durationRange, .fileSizeRange, .resolutionWidthRange:
+        case .durationRange, .fileSizeRange, .resolutionTierRange:
             return NumericConditionKind.label(for: condition) ?? ""
         }
     }
@@ -737,7 +737,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         case "fileSize":
             condition = NumericConditionKind.fileSize.defaultCondition
         case "resolution":
-            condition = NumericConditionKind.resolutionWidth.defaultCondition
+            condition = NumericConditionKind.resolution.defaultCondition
         default:
             return
         }
@@ -1226,7 +1226,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         stack.alignment = .leading
         stack.distribution = .fill
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 12, right: 14)
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
 
         let title = NSTextField(labelWithString: editorTitle)
         title.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -1296,8 +1296,11 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         }
     }
 
+    /// Editors whose message can appear while typing keep room for it so the popover doesn't jump.
+    /// A range editor shows one only for a duplicate, so it keeps its bottom margin even.
     private var reservesValidationSpace: Bool {
         if case .matchMode = mode { return false }
+        if let editedCondition, NumericConditionKind(editedCondition)?.isRange == true { return false }
         return true
     }
 
@@ -1454,7 +1457,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .untagged:
             break
         case .addedWithinDays, .createdWithinDays, .durationRange, .fileSizeRange,
-             .resolutionWidthRange:
+             .resolutionTierRange:
             addNumericEditor(for: condition, to: stack)
         }
     }
@@ -1466,7 +1469,13 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
             self?.editedCondition.flatMap(NumericConditionKind.init) == kind
         }
         if let bounds = NumericConditionKind.bounds(of: condition) {
-            let slider = NumericRangeSlider(kind: kind, min: bounds.min, max: bounds.max)
+            let footnote = kind == .resolution
+                ? String(
+                    localized: "filter.resolution.hint",
+                    defaultValue: "Portrait 1080×1920 counts as 1080p, and widescreen 3840×1608 as 4K."
+                )
+                : nil
+            let slider = NumericRangeSlider(kind: kind, min: bounds.min, max: bounds.max, footnote: footnote)
             slider.onChange = { [weak self] low, high in
                 guard let self, isStillEdited() else { return }
                 setEditedCondition(kind.condition(min: low, max: high))
@@ -1564,7 +1573,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .createdWithinDays: "created"
         case .durationRange: "duration"
         case .fileSizeRange: "fileSize"
-        case .resolutionWidthRange: "resolution"
+        case .resolutionTierRange: "resolution"
         }
     }
 
@@ -1734,7 +1743,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case "created": condition = NumericConditionKind.createdWithinDays.defaultCondition
         case "duration": condition = NumericConditionKind.duration.defaultCondition
         case "fileSize": condition = NumericConditionKind.fileSize.defaultCondition
-        case "resolution": condition = NumericConditionKind.resolutionWidth.defaultCondition
+        case "resolution": condition = NumericConditionKind.resolution.defaultCondition
         default: return
         }
         setEditedCondition(condition)

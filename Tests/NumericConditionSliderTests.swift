@@ -8,7 +8,7 @@ final class NumericConditionSliderTests: XCTestCase {
             (.createdWithinDays, [7, 30, 90]),
             (.duration, [60, 120, 300]),
             (.fileSize, [500_000_000, 1_000_000_000, 2_000_000_000]),
-            (.resolutionWidth, [1920, 3840]),
+            (.resolution, [1080, 2160]),
         ]
         for (kind, values) in saved {
             for value in values {
@@ -39,10 +39,10 @@ final class NumericConditionSliderTests: XCTestCase {
     }
 
     func testResolutionOnlyStopsAtNamedSteps() {
-        let scale = NumericConditionKind.resolutionWidth.scale
-        XCTAssertEqual(scale.value(at: 0.3, snapping: false).value, 1920)
-        XCTAssertEqual(scale.position(for: 3840), 0.75)
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.formatted(2560), "1440p")
+        let scale = NumericConditionKind.resolution.scale
+        XCTAssertEqual(scale.value(at: 0.3, snapping: false).value, 1080)
+        XCTAssertEqual(scale.position(for: 2160), 0.75)
+        XCTAssertEqual(NumericConditionKind.resolution.formatted(1440), "1440p")
     }
 
     func testDraggedValuesRoundToWhatTheFieldShows() {
@@ -69,8 +69,8 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(duration.parse("12", currentValue: 300), 720)
 
         XCTAssertEqual(NumericConditionKind.addedWithinDays.parse("14 天", currentValue: 30), 14)
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.parse("4k", currentValue: 1920), 3840)
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.parse("1080", currentValue: 3840), 1920)
+        XCTAssertEqual(NumericConditionKind.resolution.parse("4k", currentValue: 1080), 2160)
+        XCTAssertEqual(NumericConditionKind.resolution.parse("1080", currentValue: 2160), 1080)
     }
 
     func testTypedValuesBeyondTheSliderRangeAreKept() {
@@ -89,8 +89,8 @@ final class NumericConditionSliderTests: XCTestCase {
             36_500
         )
         XCTAssertNil(NumericConditionKind.duration.parse(String(repeating: "9", count: 400), currentValue: 60))
-        XCTAssertNil(NumericConditionKind.resolutionWidth.parse("99999999999999999999", currentValue: 3840))
-        XCTAssertNil(NumericConditionKind.resolutionWidth.parse(String(repeating: "9", count: 400), currentValue: 3840))
+        XCTAssertNil(NumericConditionKind.resolution.parse("99999999999999999999", currentValue: 2160))
+        XCTAssertNil(NumericConditionKind.resolution.parse(String(repeating: "9", count: 400), currentValue: 2160))
     }
 
     func testCommaIsAThousandsSeparatorOnlyBeforeThreeDigits() {
@@ -100,7 +100,7 @@ final class NumericConditionSliderTests: XCTestCase {
     }
 
     func testTwoKMeansFourteenForty() {
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.parse("2K", currentValue: 3840), 2560)
+        XCTAssertEqual(NumericConditionKind.resolution.parse("2K", currentValue: 2160), 1440)
     }
 
     func testInvalidTextIsRejected() {
@@ -126,7 +126,7 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(rule.requiredConditions, [.durationRange(min: 60, max: nil)])
         XCTAssertEqual(rule.conditions, [
             .fileSizeRange(min: 1_000_000_000, max: nil),
-            .resolutionWidthRange(min: 3840, max: nil),
+            .resolutionTierRange(min: 2160, max: nil),
             .addedWithinDays(30),
             .untagged,
             .tags(operator: .any, tagIDs: ["t"]),
@@ -137,7 +137,7 @@ final class NumericConditionSliderTests: XCTestCase {
         let conditions: [LibraryFilterCondition] = [
             .durationRange(min: nil, max: 10),
             .fileSizeRange(min: 1_000_000_000, max: 5_000_000_000),
-            .resolutionWidthRange(min: 1920, max: nil),
+            .resolutionTierRange(min: 1080, max: nil),
         ]
         let data = try JSONEncoder().encode(conditions)
         XCTAssertEqual(try JSONDecoder().decode([LibraryFilterCondition].self, from: data), conditions)
@@ -153,15 +153,15 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(swapped, .fileSizeRange(min: 3, max: 9))
         XCTAssertEqual(NumericConditionKind.duration.condition(min: 300, max: 60), .durationRange(min: 60, max: 300))
         XCTAssertEqual(
-            LibraryQueryRule(conditions: [.resolutionWidthRange(min: 3840, max: 1920)]).normalized().conditions,
-            [.resolutionWidthRange(min: 1920, max: 3840)]
+            LibraryQueryRule(conditions: [.resolutionTierRange(min: 2160, max: 1080)]).normalized().conditions,
+            [.resolutionTierRange(min: 1080, max: 2160)]
         )
     }
 
     func testNewRangeConditionsStartAtTheEarlierDefaultWithNoMaximum() {
         XCTAssertEqual(NumericConditionKind.duration.defaultCondition, .durationRange(min: 60, max: nil))
         XCTAssertEqual(NumericConditionKind.fileSize.defaultCondition, .fileSizeRange(min: 1_000_000_000, max: nil))
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.defaultCondition, .resolutionWidthRange(min: 3840, max: nil))
+        XCTAssertEqual(NumericConditionKind.resolution.defaultCondition, .resolutionTierRange(min: 2160, max: nil))
         XCTAssertFalse(NumericConditionKind.addedWithinDays.isRange)
         XCTAssertTrue(NumericConditionKind.duration.isRange)
     }
@@ -178,12 +178,12 @@ final class NumericConditionSliderTests: XCTestCase {
 
         XCTAssertEqual(NumericConditionKind.fileSize.formattedRange(1_000_000_000, 5_000_000_000), "1–5 GB")
         XCTAssertEqual(NumericConditionKind.fileSize.formattedRange(500_000_000, 2_000_000_000), "500 MB–2 GB")
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.formattedRange(1920, 3840), "1080p–4K")
-        XCTAssertEqual(NumericConditionKind.resolutionWidth.formattedRange(3840, 3840), "4K")
+        XCTAssertEqual(NumericConditionKind.resolution.formattedRange(1080, 2160), "1080p–4K")
+        XCTAssertEqual(NumericConditionKind.resolution.formattedRange(2160, 2160), "4K")
         let sizeBoth = try XCTUnwrap(NumericConditionKind.label(for: .fileSizeRange(min: 1_000_000_000, max: 5_000_000_000)))
         let sizeMax = try XCTUnwrap(NumericConditionKind.label(for: .fileSizeRange(min: nil, max: 2_000_000_000)))
-        let resolutionBoth = try XCTUnwrap(NumericConditionKind.label(for: .resolutionWidthRange(min: 1920, max: 3840)))
-        let resolutionMin = try XCTUnwrap(NumericConditionKind.label(for: .resolutionWidthRange(min: 3840, max: nil)))
+        let resolutionBoth = try XCTUnwrap(NumericConditionKind.label(for: .resolutionTierRange(min: 1080, max: 2160)))
+        let resolutionMin = try XCTUnwrap(NumericConditionKind.label(for: .resolutionTierRange(min: 2160, max: nil)))
         XCTAssertTrue(sizeBoth.hasSuffix(" 1–5 GB"), sizeBoth)
         XCTAssertTrue(sizeMax.hasSuffix(" ≤ 2 GB"), sizeMax)
         XCTAssertTrue(resolutionBoth.hasSuffix(" 1080p–4K"), resolutionBoth)
@@ -204,9 +204,9 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(track.maxBound(at: fiveMinutes, snapping: true).detent, 300)
         XCTAssertEqual(track.position(forMin: 300), fiveMinutes)
 
-        let resolution = NumericRangeTrack(scale: NumericConditionKind.resolutionWidth.scale)
-        XCTAssertEqual(resolution.minBound(at: NumericRangeTrack.openZone, snapping: true).value, 1280)
-        XCTAssertEqual(resolution.maxBound(at: 1 - NumericRangeTrack.openZone, snapping: true).value, 7680)
+        let resolution = NumericRangeTrack(scale: NumericConditionKind.resolution.scale)
+        XCTAssertEqual(resolution.minBound(at: NumericRangeTrack.openZone, snapping: true).value, 720)
+        XCTAssertEqual(resolution.maxBound(at: 1 - NumericRangeTrack.openZone, snapping: true).value, 4320)
     }
 
     func testRangeBoundsCannotCrossButBothEndsCanOpen() {
@@ -245,11 +245,11 @@ final class NumericConditionSliderTests: XCTestCase {
     func testRangeOpenAtBothEndsIsDroppedAndNeverSaved() throws {
         let rule = LibraryQueryRule(
             requiredConditions: [.durationRange(min: nil, max: nil)],
-            conditions: [.fileSizeRange(min: nil, max: nil), .resolutionWidthRange(min: 1920, max: nil)]
+            conditions: [.fileSizeRange(min: nil, max: nil), .resolutionTierRange(min: 1080, max: nil)]
         )
         XCTAssertEqual(
             rule.removingUnboundedRanges(),
-            LibraryQueryRule(conditions: [.resolutionWidthRange(min: 1920, max: nil)])
+            LibraryQueryRule(conditions: [.resolutionTierRange(min: 1080, max: nil)])
         )
         let decoded = try JSONDecoder().decode(LibraryQueryRule.self, from: JSONEncoder().encode(rule))
         XCTAssertEqual(decoded, rule.removingUnboundedRanges())
@@ -265,5 +265,58 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(bounds.stepped(.max, up: false, detents: detents), 300)
         XCTAssertNil(NumericRangeBounds(min: nil, max: 300).stepped(.max, up: true, detents: detents))
         XCTAssertEqual(NumericRangeBounds(min: nil, max: 300).stepped(.min, up: true, detents: detents), 30)
+    }
+
+    func testLegacyWidthFiltersReadAsTiers() throws {
+        let tiers = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160), (7680, 4320), (1000, 563)]
+        for (width, tier) in tiers {
+            let condition = try JSONDecoder().decode(
+                LibraryFilterCondition.self,
+                from: Data(#"{"resolutionWidthAtLeast":{"_0":\#(width)}}"#.utf8)
+            )
+            XCTAssertEqual(condition, .resolutionTierRange(min: tier, max: nil), "\(width)")
+        }
+        let range = try JSONDecoder().decode(
+            LibraryFilterCondition.self,
+            from: Data(#"{"resolutionWidthRange":{"max":3840,"min":1920}}"#.utf8)
+        )
+        XCTAssertEqual(range, .resolutionTierRange(min: 1080, max: 2160))
+        let maxOnly = try JSONDecoder().decode(
+            LibraryFilterCondition.self,
+            from: Data(#"{"resolutionWidthRange":{"max":2560}}"#.utf8)
+        )
+        XCTAssertEqual(maxOnly, .resolutionTierRange(min: nil, max: 1440))
+    }
+
+    func testResolutionTierIsTheSmallest169FrameThatHoldsTheVideo() {
+        let cases: [(width: Int, height: Int, tier: Double)] = [
+            (1920, 1080, 1080), (1080, 1920, 1080), (2160, 3840, 2160),
+            (3840, 1608, 2160), (1920, 800, 1080), (4096, 1716, 2304), (1440, 1080, 1080),
+        ]
+        for sample in cases {
+            XCTAssertEqual(ResolutionTier.value(width: sample.width, height: sample.height), sample.tier, "\(sample)")
+        }
+    }
+
+    func testTypedResolutionsLandOnTiers() {
+        let resolution = NumericConditionKind.resolution
+        let typed: [(String, Double)] = [
+            ("720p", 720), ("1080", 1080), ("1080p", 1080), ("1440P", 1440), ("2K", 1440),
+            ("4K", 2160), ("2160", 2160), ("8k", 4320), ("1920", 1080), ("3840", 2160), ("1000", 1080),
+        ]
+        for (text, tier) in typed {
+            XCTAssertEqual(resolution.parse(text, currentValue: 1080), tier, text)
+        }
+    }
+
+    func testResolutionUpperLimitReachesTheNextTier() {
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 1080)?.value, 1440)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 1080)?.isInclusive, false)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 2160)?.value, 4320)
+        XCTAssertNil(ResolutionTier.upperLimit(forMax: 4320))
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 900)?.value, 900)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 900)?.isInclusive, true)
+        XCTAssertEqual(ResolutionTier.value(width: 4096, height: 2160), 2304)
+        XCTAssertEqual(ResolutionTier.value(width: 2048, height: 1080), 1152)
     }
 }

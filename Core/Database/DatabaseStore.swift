@@ -1378,7 +1378,7 @@ actor DatabaseStore {
         case .modified: sortColumn = "videos.modification_date"
         case .duration: sortColumn = "videos.duration"
         case .fileSize: sortColumn = "videos.file_size"
-        case .resolution: sortColumn = "videos.width"
+        case .resolution: sortColumn = ResolutionTier.sql
         }
         let sortDirection = effectiveSort.direction == .ascending ? "ASC" : "DESC"
         let nullOrdering = effectiveSort.key == .filename ? "" : "\(sortColumn) IS NULL, "
@@ -1490,13 +1490,17 @@ actor DatabaseStore {
                 max: high.map { .integer(max(0, $0)) },
                 bindings: &bindings
             )
-        case let .resolutionWidthRange(low, high):
-            return rangePredicate(
-                column: "videos.width",
+        case let .resolutionTierRange(low, high):
+            let upper = high.flatMap(ResolutionTier.upperLimit(forMax:))
+            let predicate = rangePredicate(
+                column: ResolutionTier.sql,
                 min: low.map { .integer(Int64(max(0, $0))) },
-                max: high.map { .integer(Int64(max(0, $0))) },
+                max: upper.map { .double($0.value) },
+                maxIsInclusive: upper?.isInclusive ?? true,
                 bindings: &bindings
             )
+            // "≤ 8K" has no upper limit but still leaves out videos whose resolution is unknown.
+            return predicate == "1" ? "\(ResolutionTier.sql) IS NOT NULL" : predicate
         }
     }
 

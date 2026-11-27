@@ -477,13 +477,14 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                 isUnknown: false
             )
         case .resolution:
-            guard let width = video.width, width > 0 else {
+            guard let width = video.width, let height = video.height, width > 0, height > 0 else {
                 return unknownBucket(
                     id: "resolution-unknown",
                     title: String(localized: "grouping.section.resolutionUnknown", defaultValue: "Resolution Unknown")
                 )
             }
-            if width >= 3840 {
+            let tier = ResolutionTier.value(width: width, height: height)
+            if tier >= 2160 {
                 return GroupBucket(
                     id: "resolution-4k",
                     title: String(localized: "grouping.section.resolution4K", defaultValue: "4K or Higher"),
@@ -491,7 +492,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                     isUnknown: false
                 )
             }
-            if width >= 1920 {
+            if tier >= 1080 {
                 return GroupBucket(
                     id: "resolution-full-hd",
                     title: String(localized: "grouping.section.resolutionFullHD", defaultValue: "Full HD"),
