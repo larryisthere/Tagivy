@@ -125,11 +125,13 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(Set(ids).count, ids.count, "Every master clip and clip item has its own id")
         for clip in clips {
             let masterID = try XCTUnwrap(clip.nodes(forXPath: "@id").first?.stringValue)
-            let inClip = "//clip[@id='\(masterID)']"
-            let masterIDs = Set<String>(try document.nodes(forXPath: "\(inClip)//masterclipid").compactMap(\.stringValue))
-            XCTAssertEqual(masterIDs, [masterID])
-            let itemIDs = Set<String>(try document.nodes(forXPath: "\(inClip)//clipitem/@id").compactMap(\.stringValue))
-            let linkedIDs = Set<String>(try document.nodes(forXPath: "\(inClip)//linkclipref").compactMap(\.stringValue))
+            func values(_ path: String) throws -> Set<String> {
+                Set(try clip.nodes(forXPath: path).compactMap(\.stringValue))
+            }
+            XCTAssertEqual(try values("masterclipid | media//masterclipid"), [masterID])
+            let itemIDs = try values("media//clipitem/@id")
+            XCTAssertEqual(itemIDs.count, 2)
+            let linkedIDs = try values("media//linkclipref")
             XCTAssertEqual(linkedIDs, itemIDs)
         }
     }
