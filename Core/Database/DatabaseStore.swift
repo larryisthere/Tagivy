@@ -1474,10 +1474,13 @@ actor DatabaseStore {
             ))
             return "videos.creation_date >= ?"
         case let .durationRange(low, high):
+            // Durations are shown rounded to whole seconds, so 300.4 s reads 5:00 and matches
+            // "≤ 5 min". Comparing against the rounding boundaries keeps the duration index usable.
             return rangePredicate(
                 column: "videos.duration",
-                min: low.map { .double(max(0, $0)) },
-                max: high.map { .double(max(0, $0)) },
+                min: low.map { .double(max(0, $0) - 0.5) },
+                max: high.map { .double(max(0, $0) + 0.5) },
+                maxIsInclusive: false,
                 bindings: &bindings
             )
         case let .fileSizeRange(low, high):
@@ -1497,11 +1500,12 @@ actor DatabaseStore {
         }
     }
 
-    /// Both bounds are inclusive; a missing bound leaves that end open.
+    /// A missing bound leaves that end open.
     private func rangePredicate(
         column: String,
         min: LibraryQueryBinding?,
         max: LibraryQueryBinding?,
+        maxIsInclusive: Bool = true,
         bindings: inout [LibraryQueryBinding]
     ) -> String {
         var clauses: [String] = []
@@ -1511,7 +1515,7 @@ actor DatabaseStore {
         }
         if let max {
             bindings.append(max)
-            clauses.append("\(column) <= ?")
+            clauses.append("\(column) \(maxIsInclusive ? "<=" : "<") ?")
         }
         return clauses.isEmpty ? "1" : "(\(clauses.joined(separator: " AND ")))"
     }

@@ -453,6 +453,49 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(open, ["Short.mp4", "Mid.mp4", "Long.mp4", "Epic.mp4"])
     }
 
+    func testDurationRangeMatchesDurationsAsTheyAreShownInWholeSeconds() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, duration: Double)] = [
+            ("Below.mp4", 59.4),
+            ("RoundsUpToMin.mp4", 59.5),
+            ("RoundsDownToMax.mp4", 300.4),
+            ("RoundsUpPastMax.mp4", 300.5),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: 10) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: "UPDATE videos SET duration = \(sample.duration) WHERE filename = '\(sample.name)'"
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let between = try await matches(.durationRange(min: 60, max: 300))
+        let atMost = try await matches(.durationRange(min: nil, max: 300))
+        let atLeast = try await matches(.durationRange(min: 60, max: nil))
+
+        XCTAssertEqual(between, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
+        XCTAssertEqual(atMost, ["Below.mp4", "RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
+        XCTAssertEqual(atLeast, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4", "RoundsUpPastMax.mp4"])
+    }
+
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
