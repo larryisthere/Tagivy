@@ -19,6 +19,7 @@ final class NLEExportTests: XCTestCase {
         ])
 
         XCTAssertTrue(plan.rootIsTag)
+        XCTAssertEqual(plan.name, "旅行", "A top-level tag's path is just its own name")
         XCTAssertEqual(plan.root.name, "旅行")
         XCTAssertEqual(plan.root.clipIDs, ["sunset"])
         XCTAssertEqual(plan.root.bins.map(\.name), ["海边"], "城市 has no videos, so it has no bin")
@@ -28,7 +29,7 @@ final class NLEExportTests: XCTestCase {
     func testExportedSubtagStaysInsideTheBinsOfItsParentTags() throws {
         let plan = makePlan(rootTagID: "coast", relations: [("sunset", "coast"), ("waves", "coast")])
 
-        XCTAssertEqual(plan.name, "海边")
+        XCTAssertEqual(plan.name, "旅行_海边")
         XCTAssertTrue(plan.rootIsTag)
         XCTAssertEqual(plan.root.name, "旅行")
         XCTAssertTrue(plan.root.clipIDs.isEmpty)
@@ -36,13 +37,13 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(plan.root.bins[0].clipIDs, ["sunset", "waves"])
 
         let xmeml = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
-        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "海边")
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "旅行_海边")
         XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/name").first?.stringValue, "旅行")
         XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/bin/name").first?.stringValue, "海边")
         XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/clip").count, 0)
 
         let fcpxml = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
-        XCTAssertEqual(try fcpxml.nodes(forXPath: "/fcpxml/library/event/@name").first?.stringValue, "海边")
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "/fcpxml/library/event/@name").first?.stringValue, "旅行_海边")
         XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/@name").map(\.stringValue), ["旅行"])
         XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/keyword-collection/@name").map(\.stringValue), ["海边"])
     }

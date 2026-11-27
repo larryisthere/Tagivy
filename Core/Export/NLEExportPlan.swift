@@ -134,7 +134,9 @@ enum NLEExportGrouping: Equatable, Sendable {
 }
 
 enum NLEExportPlanBuilder {
-    /// - Parameter name: Name of the outermost bin.
+    static let tagPathSeparator = "_"
+
+    /// - Parameter name: What the export is called. An export of a single chosen tag is called after that tag's path instead.
     static func plan(
         name: String,
         grouping: NLEExportGrouping,
@@ -262,8 +264,14 @@ enum NLEExportPlanBuilder {
             root = NLEExportBin(name: name, bins: tagBins + untaggedBins, clipIDs: [])
             rootIsTag = false
         }
+        let exportName = switch grouping {
+        case .chosenTags where tagPaths.count == 1:
+            tagPaths[0].path.compactMap { tagsByID[$0]?.name }.joined(separator: tagPathSeparator)
+        case .chosenTags, .videoTags:
+            name
+        }
         return NLEExportPlan(
-            name: name,
+            name: exportName,
             root: root,
             clips: clips,
             skippedCount: leftOutCount,
