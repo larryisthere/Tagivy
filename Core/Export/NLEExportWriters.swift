@@ -6,111 +6,200 @@ import Foundation
 /// master clips, each master clip holding its file in one video track and one audio track per channel.
 /// Premiere Pro refuses master clips that hold their `file` directly.
 enum FCP7XMLWriter {
-    static func document(for plan: NLEExportPlan) -> String {
-        var xml = XMLText()
-        var describedFiles: Set<String> = []
-        xml.line("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-        xml.line("<!DOCTYPE xmeml>")
-        xml.open("xmeml", attributes: [("version", "4")])
-        xml.open("project")
-        xml.element("name", plan.root.name)
+    /// - Parameter includesTimeline: Adds a sequence of every clip end to end after the bins,
+    ///   because DaVinci Resolve imports an XML file only as a timeline.
+    static func document(for plan: NLEExportPlan, includesTimeline: Bool = false) -> String {
+        var writer = Writer()
+        writer.xml.line("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+        writer.xml.line("<!DOCTYPE xmeml>")
+        writer.xml.open("xmeml", attributes: [("version", "4")])
+        writer.xml.open("project")
+        writer.xml.element("name", plan.root.name)
         // The editing app puts what it imports in a bin named after the file, so the outermost bin's
         // contents go straight into the project instead of nesting a second bin of the same name.
-        writeChildren(of: plan.root, plan: plan, into: &xml, describedFiles: &describedFiles)
-        xml.close("project")
-        xml.close("xmeml")
-        return xml.text
+        writer.xml.open("children")
+        writer.writeContents(of: plan.root, plan: plan)
+        if includesTimeline, let first = plan.clips.first {
+            writer.writeSequence(plan, rate: first.frameRate, width: first.width, height: first.height)
+        }
+        writer.xml.close("children")
+        writer.xml.close("project")
+        writer.xml.close("xmeml")
+        return writer.xml.text
     }
 
-    private static func writeChildren(
-        of bin: NLEExportBin,
-        plan: NLEExportPlan,
-        into xml: inout XMLText,
-        describedFiles: inout Set<String>
-    ) {
-        xml.open("children")
-        for child in bin.bins {
-            xml.open("bin")
-            xml.element("name", child.name)
-            writeChildren(of: child, plan: plan, into: &xml, describedFiles: &describedFiles)
-            xml.close("bin")
-        }
-        for clip in bin.clipIDs.compactMap(plan.clip(id:)) {
-            write(clip, into: &xml, describedFiles: &describedFiles)
-        }
-        xml.close("children")
-    }
+    private struct Writer {
+        var xml = XMLText()
+        var describedFiles: Set<String> = []
+        /// The first master clip written for each video, which timeline clip items point back to.
+        var masterIDs: [String: String] = [:]
 
-    private static func write(_ clip: NLEExportClip, into xml: inout XMLText, describedFiles: inout Set<String>) {
-        let masterID = "masterclip-\(xml.nextID())"
-        let fileID = "file-\(clip.id)"
-        let audioTracks = clip.hasAudio ? max(clip.audioChannels ?? 2, 1) : 0
-        let itemIDs = (0...audioTracks).map { _ in "clipitem-\(xml.nextID())" }
-
-        func writeLinks() {
-            // Apple's xmeml reference warns a track index on video-only media may fail the import.
-            guard audioTracks > 0 else { return }
-            for (index, itemID) in itemIDs.enumerated() {
-                xml.open("link")
-                xml.element("linkclipref", itemID)
-                xml.element("mediatype", index == 0 ? "video" : "audio")
-                xml.element("trackindex", String(max(index, 1)))
-                xml.element("clipindex", "1")
-                if index > 0 { xml.element("groupindex", "1") }
-                xml.close("link")
+        mutating func writeContents(of bin: NLEExportBin, plan: NLEExportPlan) {
+            for child in bin.bins {
+                xml.open("bin")
+                xml.element("name", child.name)
+                xml.open("children")
+                writeContents(of: child, plan: plan)
+                xml.close("children")
+                xml.close("bin")
+            }
+            for clip in bin.clipIDs.compactMap(plan.clip(id:)) {
+                writeMasterClip(clip)
             }
         }
-        func openItem(_ index: Int) {
-            xml.open("clipitem", attributes: [("id", itemIDs[index])])
+
+        mutating func writeMasterClip(_ clip: NLEExportClip) {
+            let masterID = "masterclip-\(xml.nextID())"
+            if masterIDs[clip.id] == nil { masterIDs[clip.id] = masterID }
+            xml.open("clip", attributes: [("id", masterID), ("explodedTracks", "true")])
             xml.element("masterclipid", masterID)
-            xml.element("name", clip.name)
+            xml.element("ismasterclip", "TRUE")
             xml.element("duration", String(clip.frameCount))
-            writeRate(clip.frameRate, into: &xml)
-            // Required on every clip item by Apple's xmeml reference; spans the whole file.
-            xml.element("start", "0")
-            xml.element("end", String(clip.frameCount))
-            xml.element("in", "0")
-            xml.element("out", String(clip.frameCount))
+            FCP7XMLWriter.writeRate(clip.frameRate, into: &xml)
+            xml.element("name", clip.name)
+            xml.open("media")
+            let items = Placement(clip: clip, masterID: masterID, rate: clip.frameRate, start: 0, length: clip.frameCount)
+                .items(ids: &xml)
+            xml.open("video")
+            xml.open("track")
+            writeItem(items, at: 0)
+            xml.close("track")
+            xml.close("video")
+            if items.count > 1 {
+                xml.open("audio")
+                for index in 1..<items.count {
+                    xml.open("track")
+                    writeItem(items, at: index)
+                    xml.close("track")
+                }
+                xml.close("audio")
+            }
+            xml.close("media")
+            if clip.tagNames.isEmpty == false {
+                xml.open("logginginfo")
+                xml.element("lognote", clip.tagNames.joined(separator: ", "))
+                xml.close("logginginfo")
+            }
+            xml.close("clip")
         }
 
-        xml.open("clip", attributes: [("id", masterID), ("explodedTracks", "true")])
-        xml.element("masterclipid", masterID)
-        xml.element("ismasterclip", "TRUE")
-        xml.element("duration", String(clip.frameCount))
-        writeRate(clip.frameRate, into: &xml)
-        xml.element("name", clip.name)
-        xml.open("media")
-        xml.open("video")
-        xml.open("track")
-        openItem(0)
-        writeFile(clip, id: fileID, audioTracks: audioTracks, into: &xml, describedFiles: &describedFiles)
-        writeLinks()
-        xml.close("clipitem")
-        xml.close("track")
-        xml.close("video")
-        if audioTracks > 0 {
-            xml.open("audio")
-            for track in 1...audioTracks {
-                xml.open("track")
-                openItem(track)
+        /// Every clip once, end to end, timed in the first clip's frame rate.
+        mutating func writeSequence(_ plan: NLEExportPlan, rate: NLEFrameRate, width: Int?, height: Int?) {
+            var start = 0
+            var placed: [[Item]] = []
+            for clip in plan.clips {
+                let length = Int(((Double(clip.frameCount) / clip.frameRate.framesPerSecond) * rate.framesPerSecond).rounded())
+                guard length > 0 else { continue }
+                let placement = Placement(clip: clip, masterID: masterIDs[clip.id], rate: rate, start: start, length: length)
+                placed.append(placement.items(ids: &xml))
+                start += length
+            }
+            // Each clip item's link names its position among the clip items in its track.
+            let audioTrackCount = placed.map { $0.count - 1 }.max() ?? 0
+            var positions = Array(repeating: 0, count: audioTrackCount + 1)
+            for index in placed.indices {
+                for track in placed[index].indices {
+                    positions[track] += 1
+                    placed[index][track].clipIndex = positions[track]
+                }
+            }
+
+            xml.open("sequence", attributes: [("id", "sequence-\(xml.nextID())")])
+            xml.element("name", plan.root.name)
+            xml.element("duration", String(start))
+            FCP7XMLWriter.writeRate(rate, into: &xml)
+            xml.open("media")
+            xml.open("video")
+            xml.open("format")
+            xml.open("samplecharacteristics")
+            FCP7XMLWriter.writeRate(rate, into: &xml)
+            if let width { xml.element("width", String(width)) }
+            if let height { xml.element("height", String(height)) }
+            xml.close("samplecharacteristics")
+            xml.close("format")
+            xml.open("track")
+            for items in placed { writeItem(items, at: 0) }
+            xml.close("track")
+            xml.close("video")
+            if audioTrackCount > 0 {
+                xml.open("audio")
+                for track in 1...audioTrackCount {
+                    xml.open("track")
+                    for items in placed where items.count > track { writeItem(items, at: track) }
+                    xml.close("track")
+                }
+                xml.close("audio")
+            }
+            xml.close("media")
+            xml.open("timecode")
+            FCP7XMLWriter.writeRate(rate, into: &xml)
+            xml.element("string", "00:00:00:00")
+            xml.element("frame", "0")
+            xml.element("displayformat", "NDF")
+            xml.close("timecode")
+            xml.close("sequence")
+        }
+
+        /// The video clip item at index 0 holds the file; audio clip items reference it by id.
+        mutating func writeItem(_ items: [Item], at index: Int) {
+            let item = items[index]
+            let placement = item.placement
+            let clip = placement.clip
+            let fileID = "file-\(clip.id)"
+            xml.open("clipitem", attributes: [("id", item.id)])
+            if let masterID = placement.masterID { xml.element("masterclipid", masterID) }
+            xml.element("name", clip.name)
+            xml.element("duration", String(placement.length))
+            FCP7XMLWriter.writeRate(placement.rate, into: &xml)
+            // Required on every clip item by Apple's xmeml reference.
+            xml.element("start", String(placement.start))
+            xml.element("end", String(placement.start + placement.length))
+            xml.element("in", "0")
+            xml.element("out", String(placement.length))
+            if index == 0 {
+                FCP7XMLWriter.writeFile(clip, id: fileID, audioTracks: items.count - 1, into: &xml, describedFiles: &describedFiles)
+            } else {
                 xml.empty("file", attributes: [("id", fileID)])
                 xml.open("sourcetrack")
                 xml.element("mediatype", "audio")
-                xml.element("trackindex", String(track))
+                xml.element("trackindex", String(index))
                 xml.close("sourcetrack")
-                writeLinks()
-                xml.close("clipitem")
-                xml.close("track")
             }
-            xml.close("audio")
+            // Apple's xmeml reference warns a track index on video-only media may fail the import.
+            if items.count > 1 {
+                for (track, linked) in items.enumerated() {
+                    xml.open("link")
+                    xml.element("linkclipref", linked.id)
+                    xml.element("mediatype", track == 0 ? "video" : "audio")
+                    xml.element("trackindex", String(max(track, 1)))
+                    xml.element("clipindex", String(linked.clipIndex))
+                    if track > 0 { xml.element("groupindex", "1") }
+                    xml.close("link")
+                }
+            }
+            xml.close("clipitem")
         }
-        xml.close("media")
-        if clip.tagNames.isEmpty == false {
-            xml.open("logginginfo")
-            xml.element("lognote", clip.tagNames.joined(separator: ", "))
-            xml.close("logginginfo")
+    }
+
+    /// Where one clip sits: its whole file, from `start` for `length` frames at `rate`.
+    private struct Placement {
+        let clip: NLEExportClip
+        let masterID: String?
+        let rate: NLEFrameRate
+        let start: Int
+        let length: Int
+
+        /// One video clip item plus one audio clip item per channel.
+        func items(ids xml: inout XMLText) -> [Item] {
+            let audioTracks = clip.hasAudio ? max(clip.audioChannels ?? 2, 1) : 0
+            return (0...audioTracks).map { _ in Item(id: "clipitem-\(xml.nextID())", placement: self) }
         }
-        xml.close("clip")
+    }
+
+    private struct Item {
+        let id: String
+        let placement: Placement
+        var clipIndex = 1
     }
 
     /// A file is described in full where it first appears and referenced by id after that.
