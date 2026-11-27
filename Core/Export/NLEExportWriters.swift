@@ -48,6 +48,8 @@ enum FCP7XMLWriter {
         let itemIDs = (0...audioTracks).map { _ in "clipitem-\(xml.nextID())" }
 
         func writeLinks() {
+            // Apple's xmeml reference warns a track index on video-only media may fail the import.
+            guard audioTracks > 0 else { return }
             for (index, itemID) in itemIDs.enumerated() {
                 xml.open("link")
                 xml.element("linkclipref", itemID)
@@ -62,7 +64,13 @@ enum FCP7XMLWriter {
             xml.open("clipitem", attributes: [("id", itemIDs[index])])
             xml.element("masterclipid", masterID)
             xml.element("name", clip.name)
+            xml.element("duration", String(clip.frameCount))
             writeRate(clip.frameRate, into: &xml)
+            // Required on every clip item by Apple's xmeml reference; spans the whole file.
+            xml.element("start", "0")
+            xml.element("end", String(clip.frameCount))
+            xml.element("in", "0")
+            xml.element("out", String(clip.frameCount))
         }
 
         xml.open("clip", attributes: [("id", masterID), ("explodedTracks", "true")])
