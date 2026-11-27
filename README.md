@@ -94,6 +94,20 @@ Repeated imports are safe: the same file keeps a single library record, includin
 - Authorized external-drive locations restore automatically after reconnection
 - Missing and deleted files are reconciled without changing the originals
 
+## Use with editing apps
+
+Export a tag, a smart filter, or selected videos straight into your editing app, with your tags as bins or keywords. For any other app, drag videos out of Tagivy.
+
+| App | How |
+|---|---|
+| Final Cut Pro | Export FCPXML: tags become keywords |
+| Adobe Premiere Pro | Export XML: tags become bins |
+| DaVinci Resolve | Export XML: tags become bins, plus a timeline |
+| JianYing (剪映, the China edition of CapCut) | Export a timeline |
+| iMovie, CapCut and other apps | Drag and drop |
+
+See [Use Tagivy videos in editing apps](docs/editing-apps.md) for step-by-step instructions.
+
 ## Download and install
 
 ### Requirements
