@@ -1,116 +1,129 @@
 import AppKit
 import SwiftUI
 
-enum SettingsSection: String, CaseIterable, Identifiable {
+/// Settings panes, in toolbar order.
+enum SettingsPane: String, CaseIterable {
     case importOptions
     case privacy
     case updates
-    case about
 
-    var id: String { rawValue }
     var title: String {
         switch self {
         case .importOptions: String(localized: .settingsImport)
         case .privacy: String(localized: .settingsPrivacy)
         case .updates: String(localized: .settingsUpdates)
-        case .about: String(localized: .settingsAbout)
         }
     }
+
     var systemImage: String {
         switch self {
         case .importOptions: "tray.and.arrow.down"
         case .privacy: "lock"
         case .updates: "arrow.triangle.2.circlepath"
-        case .about: "info.circle"
+        }
+    }
+
+    /// The pane the window opens on: the one last viewed, or the first.
+    static func initial(saved: String?, in panes: [SettingsPane]) -> SettingsPane {
+        saved.flatMap(SettingsPane.init(rawValue:)).flatMap { panes.contains($0) ? $0 : nil } ?? panes[0]
+    }
+}
+
+/// A standard Mac settings window: one toolbar button per pane, the window titled after the pane,
+/// sized to the pane, not resizable, and reopening on the pane last viewed.
+@MainActor
+final class SettingsTabViewController: NSTabViewController {
+    static let selectedPaneDefaultsKey = "SettingsSelectedPane"
+    private let defaults: UserDefaults
+
+    init(panes: [(SettingsPane, NSViewController)], defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        super.init(nibName: nil, bundle: nil)
+        tabStyle = .toolbar
+        canPropagateSelectedChildViewControllerTitle = true
+        for (pane, controller) in panes {
+            controller.title = pane.title
+            let item = NSTabViewItem(viewController: controller)
+            item.identifier = pane.rawValue
+            item.label = pane.title
+            item.image = NSImage(systemSymbolName: pane.systemImage, accessibilityDescription: pane.title)
+            addTabViewItem(item)
+        }
+        let initial = SettingsPane.initial(
+            saved: defaults.string(forKey: Self.selectedPaneDefaultsKey),
+            in: panes.map(\.0)
+        )
+        selectedTabViewItemIndex = panes.firstIndex { $0.0 == initial } ?? 0
+    }
+
+    var selectedPane: SettingsPane? {
+        guard tabViewItems.indices.contains(selectedTabViewItemIndex) else { return nil }
+        return (tabViewItems[selectedTabViewItemIndex].identifier as? String).flatMap(SettingsPane.init(rawValue:))
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        if let pane = tabViewItem?.identifier as? String {
+            defaults.set(pane, forKey: Self.selectedPaneDefaultsKey)
         }
     }
 }
 
-@MainActor
-final class SettingsNavigationModel: ObservableObject {
-    @Published var selection: SettingsSection? = .privacy
-}
-
-struct SettingsView: View {
-    @ObservedObject var preferences: PreferencesStore
-    @ObservedObject var navigation: SettingsNavigationModel
-    @ObservedObject var updates: AppUpdateController
-    let setAuthenticationEnabled: (Bool) -> Void
+/// Every pane has the same width, so only the height changes when switching panes.
+private struct SettingsPaneForm<Content: View>: View {
+    @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(spacing: 0) {
-            List(SettingsSection.allCases, selection: $navigation.selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-            }
-            .listStyle(.sidebar)
-            .frame(width: 188)
-
-            Divider()
-
-            Group {
-                switch navigation.selection ?? .privacy {
-                case .importOptions:
-                    importView
-                case .privacy:
-                    privacyView
-                case .updates:
-                    updatesView
-                case .about:
-                    aboutView
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .navigationTitle((navigation.selection ?? .privacy).title)
+        Form { content }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .frame(width: 500)
+            .fixedSize(horizontal: false, vertical: true)
     }
+}
 
-    private var importView: some View {
-        Form {
+struct ImportSettingsView: View {
+    @ObservedObject var preferences: PreferencesStore
+
+    var body: some View {
+        SettingsPaneForm {
             Section {
-                Picker(
-                    String(localized: .settingsFolderImportMethod),
-                    selection: $preferences.folderImportPreference
-                ) {
+                Picker(selection: $preferences.folderImportPreference) {
                     ForEach(FolderImportPreference.allCases) { preference in
                         Text(preference.title).tag(preference)
                     }
+                } label: {
+                    Text(String(localized: .settingsFolderImportMethod))
+                    Text(String(localized: .settingsFolderImportMethodHelp))
                 }
 
-                Text(String(localized: .settingsFolderImportMethodHelp))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section {
-                Toggle(
-                    String(localized: .folderImportIncludeRoot),
-                    isOn: $preferences.includeSelectedFolderAsRootTag
-                )
+                Toggle(isOn: $preferences.includeSelectedFolderAsRootTag) {
+                    Text(String(localized: .folderImportIncludeRoot))
+                    Text(String(localized: .settingsIncludeSelectedFolderHelp))
+                }
                 .disabled(preferences.folderImportPreference == .direct)
-
-                Text(String(localized: .settingsIncludeSelectedFolderHelp))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 24)
     }
+}
 
-    private var privacyView: some View {
-        Form {
+struct PrivacySettingsView: View {
+    @ObservedObject var preferences: PreferencesStore
+    let setAuthenticationEnabled: (Bool) -> Void
+
+    var body: some View {
+        SettingsPaneForm {
             Section {
-                Toggle(
-                    String(localized: .settingsEnableLock),
-                    isOn: Binding(
-                        get: { preferences.authenticationEnabled },
-                        set: { enabled in setAuthenticationEnabled(enabled) }
-                    )
-                )
+                Toggle(isOn: Binding(
+                    get: { preferences.authenticationEnabled },
+                    set: { enabled in setAuthenticationEnabled(enabled) }
+                )) {
+                    Text(String(localized: .settingsEnableLock))
+                    Text(String(localized: .settingsLockNote))
+                }
 
                 Picker(String(localized: .settingsIdleLock), selection: $preferences.idleLockInterval) {
                     ForEach(IdleLockInterval.allCases) { interval in
@@ -118,90 +131,45 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(preferences.authenticationEnabled == false)
-
-                Text(String(localized: .settingsLockNote))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 24)
     }
+}
 
-    private var updatesView: some View {
-        Form {
+struct UpdatesSettingsView: View {
+    @ObservedObject var updates: AppUpdateController
+
+    var body: some View {
+        SettingsPaneForm {
             Section {
                 Toggle(String(localized: .settingsUpdatesCheckAutomatically), isOn: $updates.automaticallyChecksForUpdates)
-                Toggle(String(localized: .settingsUpdatesDownloadAutomatically), isOn: $updates.automaticallyDownloadsUpdates)
-                    .disabled(!updates.automaticallyChecksForUpdates)
-
-                Text(
-                    updates.automaticallyDownloadsUpdates && updates.automaticallyChecksForUpdates
-                        ? String(localized: .settingsUpdatesDownloadAutomaticallyHelp)
-                        : String(localized: .settingsUpdatesPromptHelp)
-                )
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $updates.automaticallyDownloadsUpdates) {
+                    Text(String(localized: .settingsUpdatesDownloadAutomatically))
+                    Text(
+                        updates.automaticallyDownloadsUpdates && updates.automaticallyChecksForUpdates
+                            ? String(localized: .settingsUpdatesDownloadAutomaticallyHelp)
+                            : String(localized: .settingsUpdatesPromptHelp)
+                    )
+                }
+                .disabled(!updates.automaticallyChecksForUpdates)
+                Toggle(isOn: $updates.receivesBetaUpdates) {
+                    Text(String(localized: .settingsUpdatesBeta))
+                    Text(String(localized: .settingsUpdatesBetaHelp))
+                }
             }
+            .disabled(!updates.isAvailable)
 
             Section {
-                Toggle(String(localized: .settingsUpdatesBeta), isOn: $updates.receivesBetaUpdates)
-
-                Text(String(localized: .settingsUpdatesBetaHelp))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section {
-                HStack {
-                    Text(AppConfiguration.versionDescription)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                LabeledContent {
                     Button(String(localized: .menuCheckForUpdates)) {
                         updates.checkForUpdates()
                     }
                     .disabled(!updates.canCheckForUpdates)
+                } label: {
+                    Text(AppConfiguration.displayName)
+                    Text(AppConfiguration.versionDescription)
                 }
             }
-        }
-        .formStyle(.grouped)
-        .disabled(!updates.isAvailable)
-        .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 24)
-    }
-
-    private var aboutView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack(spacing: 18) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 64, height: 64)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(AppConfiguration.displayName)
-                            .font(.title2.weight(.semibold))
-                        Text(AppConfiguration.versionDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 14) {
-                    GridRow {
-                        Text(String(localized: .aboutMinimumSystem)).foregroundStyle(.secondary)
-                        Text("macOS \(AppConfiguration.minimumSystemVersion)")
-                    }
-                    GridRow {
-                        Text(String(localized: .aboutDataAndVideos)).foregroundStyle(.secondary)
-                        Text(String(localized: .aboutLocalReadOnly))
-                    }
-                }
-            }
-            .frame(maxWidth: 680, alignment: .leading)
-            .padding(32)
         }
     }
 }

@@ -148,27 +148,13 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         )
     }()
 
-    private lazy var settingsNavigation = SettingsNavigationModel()
-
-    private lazy var settingsViewController = NSHostingController(
-        rootView: SettingsView(
-            preferences: preferencesStore,
-            navigation: settingsNavigation,
-            updates: updateController,
-            setAuthenticationEnabled: { [weak self] enabled in
-                self?.setAuthenticationEnabled(enabled)
-            }
-        )
-    )
-
     private lazy var settingsWindowController: NSWindowController = {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                              backing: .buffered, defer: false)
-        window.title = String(localized: .toolbarSettings)
-        window.contentViewController = settingsViewController
-        window.setContentSize(NSSize(width: 720, height: 480))
-        window.contentMinSize = NSSize(width: 560, height: 380)
+        let tabs = SettingsTabViewController(panes: SettingsPane.allCases.map { pane in
+            (pane, settingsPaneController(pane))
+        })
+        let window = NSWindow(contentViewController: tabs)
+        window.styleMask = [.titled, .closable]
+        window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.center()
@@ -180,6 +166,29 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         )
         return NSWindowController(window: window)
     }()
+
+    private func settingsPaneController(_ pane: SettingsPane) -> NSViewController {
+        switch pane {
+        case .importOptions:
+            settingsHostingController(ImportSettingsView(preferences: preferencesStore))
+        case .privacy:
+            settingsHostingController(PrivacySettingsView(
+                preferences: preferencesStore,
+                setAuthenticationEnabled: { [weak self] enabled in
+                    self?.setAuthenticationEnabled(enabled)
+                }
+            ))
+        case .updates:
+            settingsHostingController(UpdatesSettingsView(updates: updateController))
+        }
+    }
+
+    private func settingsHostingController<Content: View>(_ view: Content) -> NSViewController {
+        let controller = NSHostingController(rootView: view)
+        controller.sizingOptions = .preferredContentSize
+        return controller
+    }
+
     private weak var presentedSettingsWindow: NSWindow?
     private var settingsWasKeyBeforePrivacyHide: Bool?
 
@@ -473,21 +482,33 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     }
 
     @objc private func showSettings() {
-        presentSettings(section: .privacy)
-    }
-
-    @objc private func showAbout() {
-        presentSettings(section: .about)
-    }
-
-    private func presentSettings(section: SettingsSection) {
         guard lockCoordinator.state == .unlocked else { return }
         settingsWasKeyBeforePrivacyHide = nil
-        settingsNavigation.selection = section
         let controller = settingsWindowController
         presentedSettingsWindow = controller.window
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showAbout() {
+        let version = AppConfiguration.version
+        let credits = NSAttributedString(
+            string: String(localized: .aboutLocalReadOnly),
+            attributes: [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: { () -> NSParagraphStyle in
+                    let style = NSMutableParagraphStyle()
+                    style.alignment = .center
+                    return style
+                }(),
+            ]
+        )
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [.credits: credits]
+        if let displayVersion = version.displayVersion { options[.applicationVersion] = displayVersion }
+        if let build = version.build { options[.version] = build }
+        NSApp.orderFrontStandardAboutPanel(options: options)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -708,7 +729,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         if menuItem.action == #selector(checkForUpdates) {
             return lockCoordinator.state == .unlocked && updateController.canCheckForUpdates
         }
-        if menuItem.action == #selector(showSettings) || menuItem.action == #selector(showAbout) {
+        if menuItem.action == #selector(showSettings) {
             return lockCoordinator.state == .unlocked
         }
         return true

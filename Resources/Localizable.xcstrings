@@ -492,23 +492,6 @@
         }
       }
     },
-    "about.dataAndVideos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Data and Videos"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "数据与视频"
-          }
-        }
-      }
-    },
     "about.localReadOnly" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -522,23 +505,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地保存 · 原视频只读"
-          }
-        }
-      }
-    },
-    "about.minimumSystem" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Minimum System Requirement"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最低系统要求"
           }
         }
       }
@@ -3762,23 +3728,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "settings.about" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "About"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于"
           }
         }
       }
