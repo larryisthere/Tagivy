@@ -103,6 +103,11 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         activePopover = nil
+        let rule = context.rule.removingUnboundedRanges()
+        if rule != context.rule {
+            context.rule = rule
+            onRuleChanged?(rule)
+        }
         render()
     }
 

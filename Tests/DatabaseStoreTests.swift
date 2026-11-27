@@ -440,6 +440,7 @@ final class DatabaseStoreTests: XCTestCase {
         let resolutionBetween = try await matches(.resolutionWidthRange(min: 1920, max: 3840))
         let resolutionAtLeast = try await matches(.resolutionWidthRange(min: 3840, max: nil))
         let exact = try await matches(.resolutionWidthRange(min: 7680, max: 7680))
+        let open = try await matches(.durationRange(min: nil, max: nil))
 
         XCTAssertEqual(between, ["Mid.mp4", "Long.mp4"])
         XCTAssertEqual(atMost, ["Short.mp4", "Mid.mp4"])
@@ -449,6 +450,7 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(resolutionBetween, ["Mid.mp4", "Long.mp4"])
         XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4"])
         XCTAssertEqual(exact, ["Epic.mp4"])
+        XCTAssertEqual(open, ["Short.mp4", "Mid.mp4", "Long.mp4", "Epic.mp4"])
     }
 
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {

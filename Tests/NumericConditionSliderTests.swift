@@ -197,9 +197,9 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(track.position(forMax: nil), 1)
         XCTAssertNil(track.minBound(at: 0, snapping: true).value)
         XCTAssertNil(track.maxBound(at: 1, snapping: true).value)
-        XCTAssertEqual(track.minBound(at: NumericRangeTrack.openZone, snapping: false).value, track.lowestValue)
+        XCTAssertEqual(track.minBound(at: NumericRangeTrack.openZone, snapping: false).value ?? 0, 5, accuracy: 1e-6)
         XCTAssertEqual(track.maxBound(at: 1 - NumericRangeTrack.openZone, snapping: false).value ?? 0,
-                       track.highestValue, accuracy: 1e-6)
+                       14_400, accuracy: 1e-6)
         let fiveMinutes = track.position(forMax: 300)
         XCTAssertEqual(track.maxBound(at: fiveMinutes, snapping: true).detent, 300)
         XCTAssertEqual(track.position(forMin: 300), fiveMinutes)
@@ -209,17 +209,52 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(resolution.maxBound(at: 1 - NumericRangeTrack.openZone, snapping: true).value, 7680)
     }
 
-    func testRangeBoundsCannotCrossOrOpenBothEnds() {
+    func testRangeBoundsCannotCrossButBothEndsCanOpen() {
         var bounds = NumericRangeBounds(min: 60, max: 300)
-        XCTAssertTrue(bounds.set(.min, to: 600))
+        bounds.set(.min, to: 600)
         XCTAssertEqual(bounds, NumericRangeBounds(min: 300, max: 300))
-        XCTAssertTrue(bounds.set(.max, to: 30))
+        bounds.set(.max, to: 30)
         XCTAssertEqual(bounds, NumericRangeBounds(min: 300, max: 300))
-        XCTAssertTrue(bounds.set(.max, to: nil))
-        XCTAssertFalse(bounds.set(.min, to: nil))
-        XCTAssertEqual(bounds, NumericRangeBounds(min: 300, max: nil))
-        XCTAssertFalse(bounds.canOpenAnEnd)
-        XCTAssertTrue(NumericRangeBounds(min: 60, max: 300).canOpenAnEnd)
+        bounds.set(.max, to: nil)
+        bounds.set(.min, to: nil)
+        XCTAssertEqual(bounds, NumericRangeBounds(min: nil, max: nil))
+        bounds.set(.max, to: 90)
+        XCTAssertEqual(bounds, NumericRangeBounds(min: nil, max: 90))
+    }
+
+    func testEmptyAnyOrZeroLeavesARangeEndOpen() {
+        let size = NumericConditionKind.fileSize
+        for text in ["", "  ", "Any", "any", "不限", "0", "0 MB", "0.0", "0,0 GB"] {
+            XCTAssertEqual(size.parseRangeBound(text, anyText: "Any", currentValue: 1_000_000_000), .any, text)
+        }
+        XCTAssertEqual(size.parseRangeBound("2 GB", anyText: "Any", currentValue: 1_000_000_000), .value(2_000_000_000))
+        XCTAssertNil(size.parseRangeBound("big", anyText: "Any", currentValue: 1_000_000_000))
+        XCTAssertEqual(
+            NumericConditionKind.duration.parseRangeBound("0 s", anyText: "不限", currentValue: 60),
+            .any
+        )
+    }
+
+    func testFileSizeSliderStartsAtOneMegabyte() {
+        let track = NumericRangeTrack(scale: NumericConditionKind.fileSize.scale)
+        let lowest = track.minBound(at: NumericRangeTrack.openZone, snapping: false).value
+        XCTAssertEqual(lowest ?? 0, 1_000_000, accuracy: 1e-3)
+        XCTAssertEqual(NumericConditionKind.fileSize.rounded(lowest ?? 0), 1_000_000)
+    }
+
+    func testRangeOpenAtBothEndsIsDroppedAndNeverSaved() throws {
+        let rule = LibraryQueryRule(
+            requiredConditions: [.durationRange(min: nil, max: nil)],
+            conditions: [.fileSizeRange(min: nil, max: nil), .resolutionWidthRange(min: 1920, max: nil)]
+        )
+        XCTAssertEqual(
+            rule.removingUnboundedRanges(),
+            LibraryQueryRule(conditions: [.resolutionWidthRange(min: 1920, max: nil)])
+        )
+        let decoded = try JSONDecoder().decode(LibraryQueryRule.self, from: JSONEncoder().encode(rule))
+        XCTAssertEqual(decoded, rule.removingUnboundedRanges())
+        XCTAssertTrue(LibraryFilterCondition.fileSizeRange(min: nil, max: nil).isUnboundedRange)
+        XCTAssertFalse(LibraryFilterCondition.fileSizeRange(min: nil, max: 1).isUnboundedRange)
     }
 
     func testArrowKeysStepThroughDetentsWithAnyPastTheEnds() {

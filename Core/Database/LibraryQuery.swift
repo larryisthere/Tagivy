@@ -21,6 +21,15 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
     case fileSizeRange(min: Int64?, max: Int64?)
     case resolutionWidthRange(min: Int?, max: Int?)
 
+    /// A range with both ends open, possible only while its editor is open; it filters nothing
+    /// and is dropped when the editor closes.
+    var isUnboundedRange: Bool {
+        switch self {
+        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionWidthRange(nil, nil): true
+        default: false
+        }
+    }
+
     /// The same condition with range bounds in order (min ≤ max).
     func normalized() -> LibraryFilterCondition {
         switch self {
@@ -71,14 +80,12 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .fileSizeAtLeast(bytes): self = .fileSizeRange(min: bytes, max: nil)
         case let .resolutionWidthAtLeast(width): self = .resolutionWidthRange(min: width, max: nil)
         }
-        switch self {
-        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionWidthRange(nil, nil):
+        if isUnboundedRange {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Range without bounds")
             )
-        default:
-            self = normalized()
         }
+        self = normalized()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -170,6 +177,13 @@ struct LibraryQueryRule: Codable, Equatable, Sendable {
         return copy
     }
 
+    func removingUnboundedRanges() -> LibraryQueryRule {
+        var copy = self
+        copy.requiredConditions.removeAll(where: \.isUnboundedRange)
+        copy.conditions.removeAll(where: \.isUnboundedRange)
+        return copy
+    }
+
     var referencedTagIDs: [String] {
         requiredTagIDs + (requiredConditions + conditions).flatMap { condition in
             guard case let .tags(_, tagIDs) = condition else { return [String]() }
@@ -222,12 +236,13 @@ struct LibraryQueryRule: Codable, Equatable, Sendable {
     }
 
     func encode(to encoder: Encoder) throws {
+        let rule = removingUnboundedRanges()
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(requiredTagIDs, forKey: .requiredTagIDs)
-        try container.encode(requiredConditions, forKey: .requiredConditions)
+        try container.encode(rule.requiredConditions, forKey: .requiredConditions)
         try container.encode(filenameContains, forKey: .filenameContains)
         try container.encode(matchMode, forKey: .matchMode)
-        try container.encode(conditions, forKey: .conditions)
+        try container.encode(rule.conditions, forKey: .conditions)
         try container.encode(sort, forKey: .sort)
     }
 }

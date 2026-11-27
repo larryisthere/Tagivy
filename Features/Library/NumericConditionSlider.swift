@@ -118,7 +118,7 @@ enum NumericConditionKind: Equatable, Sendable {
             )
         case .fileSize:
             NumericConditionScale(
-                mapping: .logarithmic(10_000_000...100_000_000_000),
+                mapping: .logarithmic(1_000_000...100_000_000_000),
                 detents: [100_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000]
             )
         case .resolutionWidth:
@@ -243,6 +243,26 @@ enum NumericConditionKind: Equatable, Sendable {
             unit = match
         }
         return rounded(number * (unit?.factor ?? 1))
+    }
+
+    enum RangeBoundInput: Equatable, Sendable {
+        case any
+        case value(Double)
+
+        var value: Double? {
+            if case let .value(value) = self { value } else { nil }
+        }
+    }
+
+    /// Reads a range field: empty, "Any" or 0 leaves that end open; otherwise as `parse`.
+    func parseRangeBound(_ text: String, anyText: String, currentValue: Double) -> RangeBoundInput? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.isEmpty || [anyText.lowercased(), "any", "不限"].contains(trimmed) {
+            return .any
+        }
+        let numberPart = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
+        if Self.number(from: String(numberPart)) == 0 { return .any }
+        return parse(text, currentValue: currentValue).map { .value($0) }
     }
 
     /// "1,000" is a thousands separator; any other comma ("1,5") is a decimal comma.
@@ -494,17 +514,12 @@ struct NumericRangeTrack: Equatable, Sendable {
         return scale.value(at: scalePosition(position), snapping: snapping)
     }
 
-    /// The lowest and highest values the scale offers, used when the other end is already open.
-    var lowestValue: Double { scale.value(at: 0, snapping: false).value }
-    var highestValue: Double { scale.value(at: 1, snapping: false).value }
-
     private func scalePosition(_ position: Double) -> Double {
         min(max((position - Self.openZone) / (1 - 2 * Self.openZone), 0), 1)
     }
 }
 
-/// Bounds of a range being edited. Keeps at least one end set and min ≤ max:
-/// an end that would pass the other stops on it.
+/// Bounds of a range being edited. Keeps min ≤ max: an end that would pass the other stops on it.
 struct NumericRangeBounds: Equatable, Sendable {
     enum End: Sendable { case min, max }
 
@@ -516,21 +531,11 @@ struct NumericRangeBounds: Equatable, Sendable {
         self.max = max
     }
 
-    /// An end can be cleared only while the other end stays set.
-    var canOpenAnEnd: Bool { min != nil && max != nil }
-
-    /// Returns false, leaving the bounds unchanged, when the change would open both ends.
-    @discardableResult
-    mutating func set(_ end: End, to value: Double?) -> Bool {
+    mutating func set(_ end: End, to value: Double?) {
         switch end {
-        case .min:
-            guard value != nil || max != nil else { return false }
-            min = value.map { value in max.map { Swift.min(value, $0) } ?? value }
-        case .max:
-            guard value != nil || min != nil else { return false }
-            max = value.map { value in min.map { Swift.max(value, $0) } ?? value }
+        case .min: min = value.map { value in max.map { Swift.min(value, $0) } ?? value }
+        case .max: max = value.map { value in min.map { Swift.max(value, $0) } ?? value }
         }
-        return true
     }
 
     /// The bound one detent further in a direction, with "Any" past the outermost detent.
@@ -665,11 +670,10 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         trackView.minPosition = track.position(forMin: rangeBounds.min)
         trackView.maxPosition = track.position(forMax: rangeBounds.max)
         // Hidden by transparency so the fields keep their place.
-        for button in [clearMinButton, clearMaxButton] {
-            let canOpen = rangeBounds.canOpenAnEnd
-            button.alphaValue = canOpen ? 1 : 0
-            button.isEnabled = canOpen
-            button.setAccessibilityElement(canOpen)
+        for (button, isSet) in [(clearMinButton, rangeBounds.min != nil), (clearMaxButton, rangeBounds.max != nil)] {
+            button.alphaValue = isSet ? 1 : 0
+            button.isEnabled = isSet
+            button.setAccessibilityElement(isSet)
         }
         minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
         maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
@@ -683,21 +687,17 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         let result = end == .min
             ? track.minBound(at: position, snapping: snapping)
             : track.maxBound(at: position, snapping: snapping)
-        var value = result.value.map { result.detent ?? kind.rounded($0) }
+        let value = result.value.map { result.detent ?? kind.rounded($0) }
         var updated = rangeBounds
-        let keptOtherEndOpen = updated.set(end, to: value) == false
-        if keptOtherEndOpen {
-            value = end == .min ? track.lowestValue : track.highestValue
-            updated.set(end, to: value)
-        }
+        updated.set(end, to: value)
         let snapped: Double? = value == nil ? Self.openEndSnap : result.detent
         if let snapped, lastSnap[end] != snapped {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         }
         lastSnap[end] = snapped
         // The knob follows the pointer except where it is held: on a detent, on the other knob,
-        // at its open end, or at the scale's end while the other end is open.
-        let held = value == nil || keptOtherEndOpen || result.detent != nil
+        // or at its open end.
+        let held = value == nil || result.detent != nil
             || (end == .min ? updated.min : updated.max) != value
         let shownPosition = end == .min
             ? (held ? track.position(forMin: updated.min) : min(position, trackView.maxPosition))
@@ -710,18 +710,16 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     @objc private func valueFieldCommitted(_ sender: NSTextField) {
         let end: NumericRangeBounds.End = sender === minField ? .min : .max
         let current = end == .min ? rangeBounds.min : rangeBounds.max
-        let text = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value: Double?
-        if text.isEmpty || [Self.anyText.lowercased(), "any", "不限"].contains(text.lowercased()) {
-            value = nil
-        } else if let parsed = kind.parse(text, currentValue: current ?? rangeBounds.min ?? rangeBounds.max ?? 1) {
-            value = parsed
-        } else {
+        guard let input = kind.parseRangeBound(
+            sender.stringValue,
+            anyText: Self.anyText,
+            currentValue: current ?? rangeBounds.min ?? rangeBounds.max ?? 1
+        ) else {
             showRange()
             return
         }
         var updated = rangeBounds
-        updated.set(end, to: value)
+        updated.set(end, to: input.value)
         commit(updated)
         showRange()
     }

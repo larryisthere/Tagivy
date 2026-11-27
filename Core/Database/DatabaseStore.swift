@@ -1309,7 +1309,7 @@ actor DatabaseStore {
         now: Date = Date()
     ) throws -> [VideoRecord] {
         try prepareIfNeeded()
-        let rule = query.rule.normalized()
+        let rule = query.rule.normalized().removingUnboundedRanges()
         var conditions = ["videos.library_id = ?"]
         var bindings: [LibraryQueryBinding] = [.text(libraryID)]
 
