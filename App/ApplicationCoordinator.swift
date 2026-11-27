@@ -799,8 +799,10 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
             return libraryCommandsAvailable && databaseStore != nil
                 && libraryViewController.canSaveAsSmartCollection
         case #selector(openSelectedVideos), #selector(revealSelectedVideos),
-             #selector(copySelectedVideoPaths), #selector(exportSelectedVideosToEditor(_:)):
+             #selector(copySelectedVideoPaths):
             return libraryCommandsAvailable && libraryViewController.selectedVideosThatCanBeOpened.isEmpty == false
+        case #selector(exportSelectedVideosToEditor(_:)):
+            return libraryCommandsAvailable && libraryViewController.selectedVideosThatCanBeExported.isEmpty == false
         case #selector(quickLookSelectedVideos):
             guard lockCoordinator.state == .unlocked else { return false }
             return quickLookCoordinator.isVisible

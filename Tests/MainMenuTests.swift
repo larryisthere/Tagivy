@@ -122,6 +122,12 @@ final class MainMenuTests: XCTestCase {
         XCTAssertFalse(VideoGridOpenKey.matches(try keyEvent(code, modifiers: [.command, .shift])))
     }
 
+    func testOpeningMoreThanTenVideosAsksFirst() {
+        XCTAssertFalse(OpenVideosConfirmation.isNeeded(count: 1))
+        XCTAssertFalse(OpenVideosConfirmation.isNeeded(count: 10))
+        XCTAssertTrue(OpenVideosConfirmation.isNeeded(count: 11))
+    }
+
     private func allItems() -> [NSMenuItem] {
         func flatten(_ menu: NSMenu) -> [NSMenuItem] {
             menu.items.flatMap { item in [item] + (item.submenu.map(flatten) ?? []) }

@@ -1322,8 +1322,30 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         return window.firstResponder === collectionView
     }
 
+    /// Selected videos that Export to Editing App includes: on this Mac or in iCloud.
+    var selectedVideosThatCanBeExported: [VideoRecord] {
+        selectedVideos().filter(ResolvedVideos.canHandOut)
+    }
+
+    /// Opening many videos at once asks first, as Finder does.
     func openSelectedVideos() {
-        selectedVideosThatCanBeOpened.forEach(onOpenVideo)
+        let videos = selectedVideosThatCanBeOpened
+        guard videos.isEmpty == false else { return }
+        guard OpenVideosConfirmation.isNeeded(count: videos.count), let window = view.window else {
+            videos.forEach(onOpenVideo)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = String(
+            format: String(localized: "video.open.confirm.title", defaultValue: "Open %lld videos?"),
+            videos.count
+        )
+        alert.addButton(withTitle: String(localized: "video.open.confirm.action", defaultValue: "Open"))
+        alert.addButton(withTitle: String(localized: .actionCancel))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            videos.forEach { self?.onOpenVideo($0) }
+        }
     }
 
     func previewSelection() {
@@ -2683,5 +2705,14 @@ private actor DecodedVideoThumbnailCache {
               ] as CFDictionary), !Task.isCancelled else { return nil }
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
         return image
+    }
+}
+
+/// How many videos Open sends to the player without asking first.
+enum OpenVideosConfirmation {
+    static let threshold = 10
+
+    static func isNeeded(count: Int) -> Bool {
+        count > threshold
     }
 }

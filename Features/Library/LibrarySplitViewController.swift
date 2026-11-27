@@ -537,6 +537,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         showsLibraryGrid ? videoGridViewController.selectedVideosThatCanBeOpened : []
     }
 
+    var selectedVideosThatCanBeExported: [VideoRecord] {
+        showsLibraryGrid ? videoGridViewController.selectedVideosThatCanBeExported : []
+    }
+
     var canQuickLookSelectedVideos: Bool {
         selectedVideosThatCanBeOpened.isEmpty == false
     }
