@@ -218,6 +218,8 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertTrue(bounds.set(.max, to: nil))
         XCTAssertFalse(bounds.set(.min, to: nil))
         XCTAssertEqual(bounds, NumericRangeBounds(min: 300, max: nil))
+        XCTAssertFalse(bounds.canOpenAnEnd)
+        XCTAssertTrue(NumericRangeBounds(min: 60, max: 300).canOpenAnEnd)
     }
 
     func testArrowKeysStepThroughDetentsWithAnyPastTheEnds() {

@@ -516,6 +516,9 @@ struct NumericRangeBounds: Equatable, Sendable {
         self.max = max
     }
 
+    /// An end can be cleared only while the other end stays set.
+    var canOpenAnEnd: Bool { min != nil && max != nil }
+
     /// Returns false, leaving the bounds unchanged, when the change would open both ends.
     @discardableResult
     mutating func set(_ end: End, to value: Double?) -> Bool {
@@ -554,10 +557,12 @@ struct NumericRangeBounds: Equatable, Sendable {
 /// An empty field, or a knob pushed to its end of the track, leaves that end open.
 @MainActor
 final class NumericRangeSlider: NSView, NSTextFieldDelegate {
-    private static let valueFieldWidth: CGFloat = 86
+    private static let valueFieldWidth: CGFloat = 76
 
     private let kind: NumericConditionKind
     private let track: NumericRangeTrack
+    private let clearMinButton = NSButton()
+    private let clearMaxButton = NSButton()
     private let trackView = RangeTrackView()
     private let minField = NSTextField()
     private let maxField = NSTextField()
@@ -600,12 +605,28 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             field.setAccessibilityLabel(label.stringValue)
             field.widthAnchor.constraint(equalToConstant: Self.valueFieldWidth).isActive = true
         }
+        for (button, title) in [
+            (clearMinButton, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
+            (clearMaxButton, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
+        ] {
+            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: title)
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .tertiaryLabelColor
+            button.toolTip = title
+            button.setAccessibilityLabel(title)
+            button.target = self
+            button.action = #selector(clearEnd(_:))
+            button.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let fields = NSStackView(views: [minLabel, minField, spacer, maxLabel, maxField])
+        let fields = NSStackView(views: [minLabel, minField, clearMinButton, spacer, maxLabel, maxField, clearMaxButton])
         fields.orientation = .horizontal
         fields.alignment = .centerY
         fields.spacing = 6
+        fields.setCustomSpacing(3, after: minField)
+        fields.setCustomSpacing(3, after: maxField)
 
         let column = NSStackView(views: [trackView, fields])
         column.orientation = .vertical
@@ -641,6 +662,13 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     private func showRange() {
         trackView.minPosition = track.position(forMin: rangeBounds.min)
         trackView.maxPosition = track.position(forMax: rangeBounds.max)
+        // Hidden by transparency so the fields keep their place.
+        for button in [clearMinButton, clearMaxButton] {
+            let canOpen = rangeBounds.canOpenAnEnd
+            button.alphaValue = canOpen ? 1 : 0
+            button.isEnabled = canOpen
+            button.setAccessibilityElement(canOpen)
+        }
         minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
         maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
         trackView.setAccessibilityValueDescription(
@@ -691,6 +719,13 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         }
         var updated = rangeBounds
         updated.set(end, to: value)
+        commit(updated)
+        showRange()
+    }
+
+    @objc private func clearEnd(_ sender: NSButton) {
+        var updated = rangeBounds
+        updated.set(sender === clearMinButton ? .min : .max, to: nil)
         commit(updated)
         showRange()
     }
