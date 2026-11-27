@@ -1,72 +1,142 @@
 import Foundation
 
 /// Final Cut Pro 7 XML (xmeml), read by Premiere Pro and DaVinci Resolve.
+///
+/// Laid out the way Premiere Pro writes a project: a `project` whose children are bins and
+/// master clips, each master clip holding its file in one video track and one audio track per channel.
+/// Premiere Pro refuses master clips that hold their `file` directly.
 enum FCP7XMLWriter {
     static func document(for plan: NLEExportPlan) -> String {
         var xml = XMLText()
         var describedFiles: Set<String> = []
         xml.line("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
         xml.line("<!DOCTYPE xmeml>")
-        xml.open("xmeml", attributes: [("version", "5")])
-        write(plan.root, plan: plan, into: &xml, describedFiles: &describedFiles)
+        xml.open("xmeml", attributes: [("version", "4")])
+        xml.open("project")
+        xml.element("name", plan.root.name)
+        // The editing app puts what it imports in a bin named after the file, so the outermost bin's
+        // contents go straight into the project instead of nesting a second bin of the same name.
+        writeChildren(of: plan.root, plan: plan, into: &xml, describedFiles: &describedFiles)
+        xml.close("project")
         xml.close("xmeml")
         return xml.text
     }
 
-    private static func write(
-        _ bin: NLEExportBin,
+    private static func writeChildren(
+        of bin: NLEExportBin,
         plan: NLEExportPlan,
         into xml: inout XMLText,
         describedFiles: inout Set<String>
     ) {
-        xml.open("bin")
-        xml.element("name", bin.name)
         xml.open("children")
         for child in bin.bins {
-            write(child, plan: plan, into: &xml, describedFiles: &describedFiles)
+            xml.open("bin")
+            xml.element("name", child.name)
+            writeChildren(of: child, plan: plan, into: &xml, describedFiles: &describedFiles)
+            xml.close("bin")
         }
         for clip in bin.clipIDs.compactMap(plan.clip(id:)) {
             write(clip, into: &xml, describedFiles: &describedFiles)
         }
         xml.close("children")
-        xml.close("bin")
     }
 
     private static func write(_ clip: NLEExportClip, into xml: inout XMLText, describedFiles: inout Set<String>) {
-        xml.open("clip", attributes: [("id", "clip-\(xml.nextID())")])
-        xml.element("name", clip.name)
+        let masterID = "masterclip-\(xml.nextID())"
+        let fileID = "file-\(clip.id)"
+        let audioTracks = clip.hasAudio ? max(clip.audioChannels ?? 2, 1) : 0
+        let itemIDs = (0...audioTracks).map { _ in "clipitem-\(xml.nextID())" }
+
+        func writeLinks() {
+            for (index, itemID) in itemIDs.enumerated() {
+                xml.open("link")
+                xml.element("linkclipref", itemID)
+                xml.element("mediatype", index == 0 ? "video" : "audio")
+                xml.element("trackindex", String(max(index, 1)))
+                xml.element("clipindex", "1")
+                if index > 0 { xml.element("groupindex", "1") }
+                xml.close("link")
+            }
+        }
+        func openItem(_ index: Int) {
+            xml.open("clipitem", attributes: [("id", itemIDs[index])])
+            xml.element("masterclipid", masterID)
+            xml.element("name", clip.name)
+            writeRate(clip.frameRate, into: &xml)
+        }
+
+        xml.open("clip", attributes: [("id", masterID)])
+        xml.element("masterclipid", masterID)
+        xml.element("ismasterclip", "TRUE")
         xml.element("duration", String(clip.frameCount))
         writeRate(clip.frameRate, into: &xml)
-        let fileID = "file-\(clip.id)"
-        if describedFiles.insert(fileID).inserted {
-            xml.open("file", attributes: [("id", fileID)])
-            xml.element("name", clip.name)
-            xml.element("pathurl", pathURL(clip.url))
-            writeRate(clip.frameRate, into: &xml)
-            xml.element("duration", String(clip.frameCount))
-            xml.open("media")
-            xml.open("video")
-            xml.open("samplecharacteristics")
-            if let width = clip.width { xml.element("width", String(width)) }
-            if let height = clip.height { xml.element("height", String(height)) }
-            xml.close("samplecharacteristics")
-            xml.close("video")
-            if clip.hasAudio {
-                xml.open("audio")
-                xml.element("channelcount", String(clip.audioChannels ?? 2))
-                xml.close("audio")
+        xml.element("name", clip.name)
+        xml.open("media")
+        xml.open("video")
+        xml.open("track")
+        openItem(0)
+        writeFile(clip, id: fileID, audioTracks: audioTracks, into: &xml, describedFiles: &describedFiles)
+        writeLinks()
+        xml.close("clipitem")
+        xml.close("track")
+        xml.close("video")
+        if audioTracks > 0 {
+            xml.open("audio")
+            for track in 1...audioTracks {
+                xml.open("track")
+                openItem(track)
+                xml.empty("file", attributes: [("id", fileID)])
+                xml.open("sourcetrack")
+                xml.element("mediatype", "audio")
+                xml.element("trackindex", String(track))
+                xml.close("sourcetrack")
+                writeLinks()
+                xml.close("clipitem")
+                xml.close("track")
             }
-            xml.close("media")
-            xml.close("file")
-        } else {
-            xml.empty("file", attributes: [("id", fileID)])
+            xml.close("audio")
         }
+        xml.close("media")
         if clip.tagNames.isEmpty == false {
             xml.open("logginginfo")
             xml.element("lognote", clip.tagNames.joined(separator: ", "))
             xml.close("logginginfo")
         }
         xml.close("clip")
+    }
+
+    /// A file is described in full where it first appears and referenced by id after that.
+    private static func writeFile(
+        _ clip: NLEExportClip,
+        id fileID: String,
+        audioTracks: Int,
+        into xml: inout XMLText,
+        describedFiles: inout Set<String>
+    ) {
+        guard describedFiles.insert(fileID).inserted else {
+            xml.empty("file", attributes: [("id", fileID)])
+            return
+        }
+        xml.open("file", attributes: [("id", fileID)])
+        xml.element("name", clip.name)
+        xml.element("pathurl", pathURL(clip.url))
+        writeRate(clip.frameRate, into: &xml)
+        xml.element("duration", String(clip.frameCount))
+        xml.open("media")
+        xml.open("video")
+        xml.open("samplecharacteristics")
+        writeRate(clip.frameRate, into: &xml)
+        if let width = clip.width { xml.element("width", String(width)) }
+        if let height = clip.height { xml.element("height", String(height)) }
+        xml.close("samplecharacteristics")
+        xml.close("video")
+        if audioTracks > 0 {
+            xml.open("audio")
+            xml.element("channelcount", String(audioTracks))
+            xml.close("audio")
+        }
+        xml.close("media")
+        xml.close("file")
     }
 
     private static func writeRate(_ rate: NLEFrameRate, into xml: inout XMLText) {

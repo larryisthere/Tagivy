@@ -92,17 +92,43 @@ final class NLEExportTests: XCTestCase {
         let text = FCP7XMLWriter.document(for: plan)
         let document = try XMLDocument(xmlString: text)
 
-        let bins = try document.nodes(forXPath: "/xmeml/bin/children/bin/name").map(\.stringValue)
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "旅行")
+        let bins = try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue)
         XCTAssertEqual(bins, ["海边", "城市"])
         XCTAssertEqual(try document.nodes(forXPath: "//file[pathurl]").count, 1)
-        XCTAssertEqual(try document.nodes(forXPath: "//file[not(*)]").count, 1)
+        XCTAssertEqual(try document.nodes(forXPath: "//file[not(*)]").count, 3)
         XCTAssertEqual(
             try document.nodes(forXPath: "//pathurl").first?.stringValue,
             "file://localhost/Volumes/Footage/A%20%E6%B5%B7/ferry.mov"
         )
-        XCTAssertEqual(try document.nodes(forXPath: "(//lognote)[1]").first?.stringValue, "海边, 城市")
+        XCTAssertEqual(try document.nodes(forXPath: "(//clip/logginginfo/lognote)[1]").first?.stringValue, "海边, 城市")
         XCTAssertEqual(try document.nodes(forXPath: "(//clip/duration)[1]").first?.stringValue, "300")
-        XCTAssertEqual(try document.nodes(forXPath: "//audio/channelcount").first?.stringValue, "1")
+        XCTAssertEqual(try document.nodes(forXPath: "//file/media/audio/channelcount").first?.stringValue, "1")
+    }
+
+    /// Premiere Pro refuses master clips that hold their file directly instead of in tracks.
+    func testFCP7XMLWritesMasterClipsTheWayPremiereDoes() throws {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("ferry", "coast"), ("ferry", "city"), ("plain", nil)])
+        let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
+
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/@version").first?.stringValue, "4")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["旅行", "未打标签"])
+        XCTAssertEqual(try document.nodes(forXPath: "//bin/children/bin/name").map(\.stringValue), ["海边", "城市"])
+        let clips = try document.nodes(forXPath: "//clip")
+        XCTAssertEqual(clips.count, 4)
+        XCTAssertEqual(try document.nodes(forXPath: "//clip/file").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "//clip[ismasterclip='TRUE']").count, 4)
+        XCTAssertEqual(try document.nodes(forXPath: "//clip/media/video/track/clipitem/file").count, 4)
+        XCTAssertEqual(try document.nodes(forXPath: "//clip/media/audio/track/clipitem/sourcetrack").count, 4)
+
+        let ids = try document.nodes(forXPath: "//clip/@id | //clipitem/@id").map(\.stringValue)
+        XCTAssertEqual(Set(ids).count, ids.count, "Every master clip and clip item has its own id")
+        for clip in clips {
+            let masterID = try clip.nodes(forXPath: "@id").first?.stringValue
+            XCTAssertEqual(Set(try clip.nodes(forXPath: ".//masterclipid").map(\.stringValue)), [masterID].compactMap { $0 })
+            let itemIDs = Set(try clip.nodes(forXPath: ".//clipitem/@id").map(\.stringValue))
+            XCTAssertEqual(Set(try clip.nodes(forXPath: ".//linkclipref").map(\.stringValue)), itemIDs)
+        }
     }
 
     func testFCPXMLBuildsKeywordFoldersForTagGroups() throws {
@@ -159,7 +185,7 @@ final class NLEExportTests: XCTestCase {
         plan.root.name = "A & B <\"cut\">"
         let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
 
-        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/bin/name").first?.stringValue, "A & B <\"cut\">")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "A & B <\"cut\">")
     }
 
     /// No root tag exports the way a smart filter or a video selection does.
