@@ -102,8 +102,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let scrollViewport = NSView()
     private var scrollView = NSScrollView()
     private let onOpenVideo: (VideoRecord) -> Void
-    private let onRevealVideo: (VideoRecord) -> Void
-    private let onCopyPath: (VideoRecord) -> Void
+    private let onRevealVideos: ([VideoRecord]) -> Void
+    private let onCopyPaths: ([VideoRecord]) -> Void
     private let onRelinkVideo: (VideoRecord) -> Void
     private let onRetryRelinkVideo: (String) -> Void
     private let onPreviewVideos: ([VideoRecord]) -> Void
@@ -146,8 +146,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let emptyDetailLabel = NSTextField(wrappingLabelWithString: String(localized: .importEmptyDetail))
     init(
         onOpenVideo: @escaping (VideoRecord) -> Void,
-        onRevealVideo: @escaping (VideoRecord) -> Void,
-        onCopyPath: @escaping (VideoRecord) -> Void,
+        onRevealVideos: @escaping ([VideoRecord]) -> Void,
+        onCopyPaths: @escaping ([VideoRecord]) -> Void,
         onRelinkVideo: @escaping (VideoRecord) -> Void,
         onRetryRelinkVideo: @escaping (String) -> Void,
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
@@ -164,8 +164,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     ) {
         self.defaults = defaults
         self.onOpenVideo = onOpenVideo
-        self.onRevealVideo = onRevealVideo
-        self.onCopyPath = onCopyPath
+        self.onRevealVideos = onRevealVideos
+        self.onCopyPaths = onCopyPaths
         self.onRelinkVideo = onRelinkVideo
         self.onRetryRelinkVideo = onRetryRelinkVideo
         self.onPreviewVideos = onPreviewVideos
@@ -226,6 +226,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
         collectionView.onRemoveSelection = { [weak self] in
             self?.requestRemoveSelectedVideos()
+        }
+        collectionView.onOpenSelection = { [weak self] in
+            self?.openSelectedVideos()
         }
         collectionView.onSelectAll = { [weak self] in
             self?.selectAllVisibleVideos()
@@ -1306,10 +1309,94 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onOpenVideo(video)
     }
 
-    private func previewSelection() {
-        let selectedVideos = selectedVideos().filter { $0.availability == .available }
+    // MARK: Commands on the selection, shared by the shortcut menu, the Video menu, and keys in the grid
+
+    /// Selected videos whose files are on hand; open, Quick Look, Show in Finder, and Copy Pathname use these.
+    var selectedVideosThatCanBeOpened: [VideoRecord] {
+        selectedVideos().filter { $0.availability == .available }
+    }
+
+    /// The grid has keyboard focus, so Command-Delete in the menu means removing the selected videos.
+    var hasKeyboardFocus: Bool {
+        guard isViewLoaded, let window = view.window else { return false }
+        return window.firstResponder === collectionView
+    }
+
+    /// Selected videos that Export to Editing App includes: on this Mac or in iCloud.
+    var selectedVideosThatCanBeExported: [VideoRecord] {
+        selectedVideos().filter(ResolvedVideos.canHandOut)
+    }
+
+    /// Opening many videos at once asks first, as Finder does.
+    func openSelectedVideos() {
+        let videos = selectedVideosThatCanBeOpened
+        guard videos.isEmpty == false else { return }
+        guard OpenVideosConfirmation.isNeeded(count: videos.count), let window = view.window else {
+            videos.forEach(onOpenVideo)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = String(
+            format: String(localized: "video.open.confirm.title", defaultValue: "Open %lld videos?"),
+            videos.count
+        )
+        alert.addButton(withTitle: String(localized: "video.open.confirm.action", defaultValue: "Open"))
+        alert.addButton(withTitle: String(localized: .actionCancel))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            videos.forEach { self?.onOpenVideo($0) }
+        }
+    }
+
+    func previewSelection() {
+        let selectedVideos = selectedVideosThatCanBeOpened
         guard selectedVideos.isEmpty == false else { return }
         onPreviewVideos(selectedVideos)
+    }
+
+    func revealSelectedVideos() {
+        let selectedVideos = selectedVideosThatCanBeOpened
+        guard selectedVideos.isEmpty == false else { return }
+        onRevealVideos(selectedVideos)
+    }
+
+    func copySelectedVideoPaths() {
+        let selectedVideos = selectedVideosThatCanBeOpened
+        guard selectedVideos.isEmpty == false else { return }
+        onCopyPaths(selectedVideos)
+    }
+
+    func exportSelectedVideos(format: NLEExportFormat) {
+        let selected = selectedVideos()
+        guard selected.isEmpty == false else { return }
+        onExportToEditor(.videos(selected), format)
+    }
+
+    /// The remove command's title for the current selection, matching the shortcut menu.
+    var removeSelectedVideosTitle: String? {
+        let selected = selectedVideos()
+        guard selected.isEmpty == false else { return nil }
+        return Self.removeTitle(
+            count: selected.count,
+            unavailable: selected.contains(where: ResolvedVideos.canHandOut) == false
+        )
+    }
+
+    private static func removeTitle(count: Int, unavailable: Bool) -> String {
+        if unavailable {
+            return count > 1
+                ? String(
+                    format: String(
+                        localized: "unavailable.remove.action.multiple",
+                        defaultValue: "Remove %lld Videos from Tagivy…"
+                    ),
+                    count
+                )
+                : String(localized: "unavailable.remove.action", defaultValue: "Remove from Tagivy…")
+        }
+        return count > 1
+            ? String(localized: .videoRemoveMenuMultiple(count))
+            : String(localized: .videoRemoveMenuSingle)
     }
 
     private func contextMenu(for indexPath: IndexPath) -> NSMenu? {
@@ -1328,20 +1415,21 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
         let menu = NSMenu()
         menu.autoenablesItems = false
+        let canOpen = selectedVideosThatCanBeOpened.isEmpty == false
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionOpen),
             action: #selector(openVideoFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
         ))
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionReveal),
             action: #selector(revealVideoFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
         ))
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionCopyPath),
             action: #selector(copyPathFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
         ))
         menu.addItem(.separator())
         menu.addItem(EditorExportMenu.item(
@@ -1353,9 +1441,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         menu.addItem(.separator())
         let selectedCount = selectedVideoIDs.count
         let removeItem = NSMenuItem(
-            title: selectedCount > 1
-                ? String(localized: .videoRemoveMenuMultiple(selectedCount))
-                : String(localized: .videoRemoveMenuSingle),
+            title: Self.removeTitle(count: selectedCount, unavailable: false),
             action: #selector(removeVideosFromContextMenu(_:)),
             keyEquivalent: "\u{8}"
         )
@@ -1367,9 +1453,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     @objc private func exportToEditorFromContextMenu(_ sender: NSMenuItem) {
-        let selected = selectedVideos()
-        guard selected.isEmpty == false, let choice = sender.representedObject as? NLEExportMenuChoice else { return }
-        onExportToEditor(.videos(selected), choice.format)
+        guard let choice = sender.representedObject as? NLEExportMenuChoice else { return }
+        exportSelectedVideos(format: choice.format)
     }
 
     private func unavailableContextMenu(for selected: [VideoRecord]) -> NSMenu {
@@ -1394,20 +1479,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             menu.addItem(.separator())
         }
 
-        let removeTitle = selected.count > 1
-            ? String(
-                format: String(
-                    localized: "unavailable.remove.action.multiple",
-                    defaultValue: "Remove %lld Videos from Tagivy…"
-                ),
-                selected.count
-            )
-            : String(
-                localized: "unavailable.remove.action",
-                defaultValue: "Remove from Tagivy…"
-            )
         let removeItem = NSMenuItem(
-            title: removeTitle,
+            title: Self.removeTitle(count: selected.count, unavailable: true),
             action: #selector(removeVideosFromContextMenu(_:)),
             keyEquivalent: "\u{8}"
         )
@@ -1418,7 +1491,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         return menu
     }
 
-    private func requestRemoveSelectedVideos() {
+    func requestRemoveSelectedVideos() {
         let selected = selectedVideos()
         guard selected.isEmpty == false, let window = view.window else { return }
         let isUnavailableSelection = selected.allSatisfy { $0.availability != .available }
@@ -1523,11 +1596,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         return true
     }
 
-    private func makeContextMenuItem(title: String, action: Selector, video: VideoRecord) -> NSMenuItem {
+    private func makeContextMenuItem(title: String, action: Selector, isEnabled: Bool) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
-        item.representedObject = video.id
-        item.isEnabled = video.availability == .available
+        item.isEnabled = isEnabled
         return item
     }
 
@@ -1537,15 +1609,15 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     @objc private func openVideoFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onOpenVideo(video) }
+        openSelectedVideos()
     }
 
     @objc private func revealVideoFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onRevealVideo(video) }
+        revealSelectedVideos()
     }
 
     @objc private func copyPathFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onCopyPath(video) }
+        copySelectedVideoPaths()
     }
 
     @objc private func relinkVideoFromContextMenu(_ sender: NSMenuItem) {
@@ -2181,6 +2253,7 @@ private final class VideoCollectionView: NSCollectionView {
     var onPreviewSelection: (() -> Void)?
     var onSelectionGesture: ((IndexPath?, NSEvent.ModifierFlags) -> Bool)?
     var onRemoveSelection: (() -> Void)?
+    var onOpenSelection: (() -> Void)?
     var onSelectAll: (() -> Void)?
 
     override func selectAll(_ sender: Any?) {
@@ -2212,6 +2285,10 @@ private final class VideoCollectionView: NSCollectionView {
         let modifiers = event.modifierFlags.intersection(relevantModifiers)
         if event.keyCode == 51, modifiers == [.command] {
             onRemoveSelection?()
+            return
+        }
+        if VideoGridOpenKey.matches(event) {
+            onOpenSelection?()
             return
         }
         let disallowedModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
@@ -2628,5 +2705,14 @@ private actor DecodedVideoThumbnailCache {
               ] as CFDictionary), !Task.isCancelled else { return nil }
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
         return image
+    }
+}
+
+/// How many videos Open sends to the player without asking first.
+enum OpenVideosConfirmation {
+    static let threshold = 10
+
+    static func isNeeded(count: Int) -> Bool {
+        count > threshold
     }
 }

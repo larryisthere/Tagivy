@@ -5,7 +5,7 @@ import QuickLookUI
 import SwiftUI
 
 @MainActor
-final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
+final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActions {
     private static let userActivityEventTypes: [CGEventType] = [
         .keyDown,
         .flagsChanged,
@@ -64,8 +64,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             self?.libraryAccessCoordinator?.discardVideoRemovalUndo()
         },
         onOpenVideo: { [weak self] video in self?.openVideo(video) },
-        onRevealVideo: { [weak self] video in self?.revealVideo(video) },
-        onCopyPath: { [weak self] video in self?.copyPath(video) },
+        onRevealVideos: { [weak self] videos in self?.revealVideos(videos) },
+        onCopyPaths: { [weak self] videos in self?.copyPaths(videos) },
         onPreviewVideos: { [weak self] videos in self?.previewVideos(videos) },
         thumbnailURL: { [weak self] video in self?.libraryAccessCoordinator?.thumbnailURL(for: video) },
         resolveVideos: { [weak self] videos in
@@ -477,7 +477,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     }
 
     /// The app menu's update item, which installs instead once an update is ready to relaunch.
-    @objc private func checkForUpdates() {
+    @objc func checkForUpdates() {
         guard lockCoordinator.state == .unlocked else { return }
         switch updateController.status.menuCommand {
         case .checkForUpdates: updateController.checkForUpdates()
@@ -485,7 +485,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         }
     }
 
-    @objc private func showSettings() {
+    @objc func showSettings() {
         guard lockCoordinator.state == .unlocked else { return }
         settingsWasKeyBeforePrivacyHide = nil
         let controller = settingsWindowController
@@ -495,7 +495,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func showAbout() {
+    @objc func showAbout() {
         let version = AppConfiguration.version
         let credits = NSAttributedString(
             string: String(localized: .aboutLocalReadOnly),
@@ -516,14 +516,14 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func showLibraryWindow() {
+    @objc func showLibraryWindow() {
         windowController.showWindow(nil)
         guard let window = windowController.window else { return }
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
     }
 
-    @objc private func importVideos() {
+    @objc func importVideos() {
         guard lockCoordinator.state == .unlocked else { return }
         guard let libraryAccessCoordinator else {
             libraryViewController.setLibraryError(String(localized: .errorDatabaseUnavailable))
@@ -532,7 +532,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         libraryAccessCoordinator.importVideos()
     }
 
-    @objc private func scanForNewVideos() {
+    @objc func scanForNewVideos() {
         guard lockCoordinator.state == .unlocked,
               libraryViewController.canScanForNewVideos else { return }
         libraryAccessCoordinator?.scanForNewVideos()
@@ -593,7 +593,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         tagDeletionNotice = nil
     }
 
-    @objc private func undoLastMutation() {
+    @objc func undoLastMutation() {
         guard lockCoordinator.state == .unlocked else { return }
         LibraryUndoRouting.perform(
             editingText: activeTextEditor != nil,
@@ -610,39 +610,112 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         return editor
     }
 
-    @objc private func toggleLibrarySidebar() { libraryViewController.toggleSidebar() }
-    @objc private func toggleLibraryInspector() { libraryViewController.toggleInspector() }
-    @objc private func increaseThumbnailSize() { libraryViewController.adjustZoom(by: 10) }
-    @objc private func decreaseThumbnailSize() { libraryViewController.adjustZoom(by: -10) }
+    /// The library window is in front, unlocked, and its library loaded.
+    private var libraryCommandsAvailable: Bool {
+        lockCoordinator.state == .unlocked
+            && NSApp.keyWindow === windowController.window
+            && libraryViewController.canNavigateLibraryPresets
+    }
 
-    @objc private func createRootTag() {
+    @objc func toggleLibrarySidebar() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.toggleSidebar()
+    }
+
+    @objc func toggleLibraryInspector() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.toggleInspector()
+    }
+
+    @objc func zoomInThumbnails() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.adjustZoom(by: 10)
+    }
+
+    @objc func zoomOutThumbnails() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.adjustZoom(by: -10)
+    }
+
+    @objc func resetThumbnailSize() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.resetZoom()
+    }
+
+    @objc func saveAsSmartCollection() {
+        guard libraryCommandsAvailable, databaseStore != nil else { return }
+        libraryViewController.saveAsSmartCollection()
+    }
+
+    @objc func openSelectedVideos() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.openSelectedVideos()
+    }
+
+    @objc func quickLookSelectedVideos() {
+        guard lockCoordinator.state == .unlocked else { return }
+        if quickLookCoordinator.isVisible {
+            quickLookCoordinator.close()
+            return
+        }
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.quickLookSelectedVideos()
+    }
+
+    @objc func revealSelectedVideos() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.revealSelectedVideos()
+    }
+
+    @objc func copySelectedVideoPaths() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.copySelectedVideoPaths()
+    }
+
+    @objc func addTagsToSelectedVideos() {
+        guard libraryCommandsAvailable else { return }
+        libraryViewController.focusTagInputForSelection()
+    }
+
+    @objc func exportSelectedVideosToEditor(_ sender: NSMenuItem) {
+        guard libraryCommandsAvailable,
+              let choice = sender.representedObject as? NLEExportMenuChoice else { return }
+        libraryViewController.exportSelectedVideos(format: choice.format)
+    }
+
+    @objc func removeSelectedVideos() {
+        guard libraryCommandsAvailable, activeTextEditor == nil else { return }
+        libraryViewController.removeSelectedVideos()
+    }
+
+    @objc func createRootTag() {
         guard lockCoordinator.state == .unlocked else { return }
         libraryViewController.beginCreatingRootTag()
     }
 
-    @objc private func focusFilenameSearch() {
+    @objc func focusFilenameSearch() {
         guard lockCoordinator.state == .unlocked else { return }
         libraryViewController.focusFilenameSearch()
     }
 
-    @objc private func presentAddFilterMenu() {
+    @objc func presentAddFilterMenu() {
         guard lockCoordinator.state == .unlocked else { return }
         libraryViewController.presentAddFilterMenu()
     }
 
-    @objc private func showAllVideos() {
+    @objc func showAllVideos() {
         libraryViewController.navigateToPreset(.all)
     }
 
-    @objc private func showUntaggedVideos() {
+    @objc func showUntaggedVideos() {
         libraryViewController.navigateToPreset(.untagged)
     }
 
-    @objc private func showRecentVideos() {
+    @objc func showRecentVideos() {
         libraryViewController.navigateToPreset(.recent)
     }
 
-    @objc private func showUnavailableVideos() {
+    @objc func showUnavailableVideos() {
         libraryViewController.navigateToPreset(.unavailable)
     }
 
@@ -651,9 +724,10 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         NSWorkspace.shared.open(url)
     }
 
-    private func revealVideo(_ video: VideoRecord) {
-        guard let url = libraryAccessCoordinator?.fileURL(for: video) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+    private func revealVideos(_ videos: [VideoRecord]) {
+        let urls = videos.compactMap { libraryAccessCoordinator?.fileURL(for: $0) }
+        guard urls.isEmpty == false else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     private func exportToEditor(_ scope: VideoScope, format: NLEExportFormat) {
@@ -671,10 +745,12 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         }
     }
 
-    private func copyPath(_ video: VideoRecord) {
-        guard let path = libraryAccessCoordinator?.fileURL(for: video)?.path else { return }
+    /// One path per line when several videos are selected, as Finder copies them.
+    private func copyPaths(_ videos: [VideoRecord]) {
+        let paths = videos.compactMap { libraryAccessCoordinator?.fileURL(for: $0)?.path }
+        guard paths.isEmpty == false else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
     }
 
     private func previewVideos(_ videos: [VideoRecord]) {
@@ -702,10 +778,46 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
             return NSApp.keyWindow === windowController.window
                 && libraryAccessCoordinator?.canUndoLastMutation == true
         }
-        if menuItem.action == #selector(toggleLibrarySidebar) || menuItem.action == #selector(toggleLibraryInspector)
-            || menuItem.action == #selector(increaseThumbnailSize) || menuItem.action == #selector(decreaseThumbnailSize) {
-            return lockCoordinator.state == .unlocked && NSApp.keyWindow === windowController.window
-                && libraryViewController.canNavigateLibraryPresets
+        switch menuItem.action {
+        case #selector(toggleLibrarySidebar):
+            menuItem.title = libraryViewController.isSidebarCollapsed
+                ? String(localized: "menu.view.showSidebar", defaultValue: "Show Sidebar")
+                : String(localized: "menu.view.hideSidebar", defaultValue: "Hide Sidebar")
+            return libraryCommandsAvailable
+        case #selector(toggleLibraryInspector):
+            menuItem.title = libraryViewController.isInspectorCollapsed
+                ? String(localized: "menu.view.showInspector", defaultValue: "Show Inspector")
+                : String(localized: "menu.view.hideInspector", defaultValue: "Hide Inspector")
+            return libraryCommandsAvailable
+        case #selector(zoomInThumbnails):
+            return libraryCommandsAvailable && libraryViewController.canZoomIn
+        case #selector(zoomOutThumbnails):
+            return libraryCommandsAvailable && libraryViewController.canZoomOut
+        case #selector(resetThumbnailSize):
+            return libraryCommandsAvailable && libraryViewController.canResetZoom
+        case #selector(saveAsSmartCollection):
+            return libraryCommandsAvailable && databaseStore != nil
+                && libraryViewController.canSaveAsSmartCollection
+        case #selector(openSelectedVideos), #selector(revealSelectedVideos),
+             #selector(copySelectedVideoPaths):
+            return libraryCommandsAvailable && libraryViewController.selectedVideosThatCanBeOpened.isEmpty == false
+        case #selector(exportSelectedVideosToEditor(_:)):
+            return libraryCommandsAvailable && libraryViewController.selectedVideosThatCanBeExported.isEmpty == false
+        case #selector(quickLookSelectedVideos):
+            guard lockCoordinator.state == .unlocked else { return false }
+            return quickLookCoordinator.isVisible
+                || (libraryCommandsAvailable && libraryViewController.canQuickLookSelectedVideos)
+        case #selector(addTagsToSelectedVideos):
+            return libraryCommandsAvailable && libraryViewController.canFocusTagInputForSelection
+        case #selector(removeSelectedVideos):
+            if let title = libraryViewController.removeSelectedVideosTitle {
+                menuItem.title = title
+            }
+            // Command-Delete edits text in a text field, and deletes tags when the sidebar has focus.
+            return libraryCommandsAvailable && activeTextEditor == nil
+                && libraryViewController.canRemoveSelectedVideos
+        default:
+            break
         }
         if menuItem.action == #selector(createRootTag) {
             return lockCoordinator.state == .unlocked && libraryIsKey
@@ -722,13 +834,16 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
                 && databaseStore != nil
                 && libraryViewController.canUseRuleCommands
         }
-        if menuItem.action == #selector(showAllVideos)
-            || menuItem.action == #selector(showUntaggedVideos)
-            || menuItem.action == #selector(showRecentVideos)
-            || menuItem.action == #selector(showUnavailableVideos) {
+        let presets: [Selector: LibraryFilter] = [
+            #selector(showAllVideos): .all,
+            #selector(showRecentVideos): .recent,
+            #selector(showUntaggedVideos): .untagged,
+            #selector(showUnavailableVideos): .unavailable,
+        ]
+        if let action = menuItem.action, let preset = presets[action] {
             return lockCoordinator.state == .unlocked && libraryIsKey
                 && databaseStore != nil
-                && libraryViewController.canNavigateLibraryPresets
+                && libraryViewController.canNavigateToPreset(preset)
         }
         if menuItem.action == #selector(checkForUpdates) {
             let unlocked = lockCoordinator.state == .unlocked
@@ -758,168 +873,11 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     }
 
     private func installMainMenu() {
-        let mainMenu = NSMenu()
-
-        let appMenuItem = NSMenuItem()
-        let appMenu = NSMenu(title: AppConfiguration.displayName)
-        let aboutItem = NSMenuItem(
-            title: String(localized: .menuAbout(AppConfiguration.displayName)),
-            action: #selector(showAbout),
-            keyEquivalent: ""
+        let mainMenu = MainMenu.make(
+            target: self,
+            includesCheckForUpdates: AppUpdateController.isEnabledInThisBuild
         )
-        aboutItem.target = self
-        appMenu.addItem(aboutItem)
-        if AppUpdateController.isEnabledInThisBuild {
-            let checkForUpdatesItem = NSMenuItem(
-                title: String(localized: .menuCheckForUpdates),
-                action: #selector(checkForUpdates),
-                keyEquivalent: ""
-            )
-            checkForUpdatesItem.target = self
-            appMenu.addItem(checkForUpdatesItem)
-        }
-        appMenu.addItem(.separator())
-        let settingsItem = NSMenuItem(
-            title: String(localized: .menuSettings),
-            action: #selector(showSettings),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        appMenu.addItem(settingsItem)
-        appMenu.addItem(.separator())
-        appMenu.addItem(
-            withTitle: String(localized: .menuQuit(AppConfiguration.displayName)),
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        appMenuItem.submenu = appMenu
-        mainMenu.addItem(appMenuItem)
-
-        let fileMenuItem = NSMenuItem()
-        let fileMenu = NSMenu(title: String(localized: .menuFile))
-        let importItem = NSMenuItem(
-            title: String(localized: .menuFileImport),
-            action: #selector(importVideos),
-            keyEquivalent: "i"
-        )
-        importItem.keyEquivalentModifierMask = [.command, .shift]
-        importItem.target = self
-        fileMenu.addItem(importItem)
-        let scanItem = NSMenuItem(
-            title: String(
-                localized: "scan.action",
-                defaultValue: "Scan for New Videos"
-            ),
-            action: #selector(scanForNewVideos),
-            keyEquivalent: ""
-        )
-        scanItem.target = self
-        fileMenu.addItem(scanItem)
-        fileMenu.addItem(.separator())
-        let createTagItem = NSMenuItem(
-            title: String(localized: .menuFileNewTag),
-            action: #selector(createRootTag),
-            keyEquivalent: "n"
-        )
-        createTagItem.keyEquivalentModifierMask = [.command, .shift]
-        createTagItem.target = self
-        fileMenu.addItem(createTagItem)
-        fileMenu.addItem(.separator())
-        let closeWindowItem = NSMenuItem(
-            title: String(localized: .menuFileCloseWindow),
-            action: #selector(NSWindow.performClose(_:)),
-            keyEquivalent: "w"
-        )
-        closeWindowItem.keyEquivalentModifierMask = [.command]
-        fileMenu.addItem(closeWindowItem)
-        fileMenuItem.submenu = fileMenu
-        mainMenu.addItem(fileMenuItem)
-
-        let editMenuItem = NSMenuItem()
-        let editMenu = NSMenu(title: String(localized: .menuEdit))
-        let undoItem = NSMenuItem(
-            title: String(localized: .menuUndoLastAction),
-            action: #selector(undoLastMutation),
-            keyEquivalent: "z"
-        )
-        undoItem.target = self
-        editMenu.addItem(undoItem)
-        editMenu.addItem(.separator())
-        StandardEditMenu.items().forEach(editMenu.addItem)
-        editMenu.addItem(.separator())
-        let searchItem = NSMenuItem(
-            title: String(
-                localized: "menu.searchFilenames",
-                defaultValue: "Search Filenames"
-            ),
-            action: #selector(focusFilenameSearch),
-            keyEquivalent: "f"
-        )
-        searchItem.keyEquivalentModifierMask = [.command]
-        searchItem.target = self
-        editMenu.addItem(searchItem)
-        let addFilterItem = NSMenuItem(
-            title: String(
-                localized: "menu.addFilterCondition",
-                defaultValue: "Add Filter Condition"
-            ),
-            action: #selector(presentAddFilterMenu),
-            keyEquivalent: "f"
-        )
-        addFilterItem.keyEquivalentModifierMask = [.command, .shift]
-        addFilterItem.target = self
-        editMenu.addItem(addFilterItem)
-        editMenuItem.submenu = editMenu
-        mainMenu.addItem(editMenuItem)
-
-        let viewMenuItem = NSMenuItem()
-        let viewMenu = NSMenu(title: String(localized: "menu.view", defaultValue: "View"))
-        let presetItems: [(String, Selector, String)] = [
-            (String(localized: .libraryAllVideos), #selector(showAllVideos), "1"),
-            (String(localized: .libraryRecent), #selector(showRecentVideos), "2"),
-            (String(localized: .libraryUntagged), #selector(showUntaggedVideos), ""),
-            (String(localized: "library.unavailable", defaultValue: "Unavailable Videos"),
-             #selector(showUnavailableVideos), ""),
-        ]
-        for (title, action, keyEquivalent) in presetItems {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
-            item.keyEquivalentModifierMask = [.command]
-            item.target = self
-            viewMenu.addItem(item)
-        }
-        viewMenu.addItem(.separator())
-        for (title, action) in [
-            (String(localized: .toolbarHideShowSidebar), #selector(toggleLibrarySidebar)),
-            (String(localized: .toolbarHideShowInspector), #selector(toggleLibraryInspector)),
-            (String(localized: .toolbarThumbnailIncrease), #selector(increaseThumbnailSize)),
-            (String(localized: .toolbarThumbnailDecrease), #selector(decreaseThumbnailSize))
-        ] {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            viewMenu.addItem(item)
-        }
-        viewMenuItem.submenu = viewMenu
-        mainMenu.addItem(viewMenuItem)
-
-        let windowMenuItem = NSMenuItem()
-        let windowMenu = NSMenu(title: String(localized: .menuWindow))
-        windowMenu.addItem(
-            withTitle: String(localized: .menuMinimize),
-            action: #selector(NSWindow.performMiniaturize(_:)),
-            keyEquivalent: "m"
-        )
-        windowMenu.addItem(.separator())
-        let libraryWindowItem = NSMenuItem(
-            title: String(localized: .menuWindowShowLibrary),
-            action: #selector(showLibraryWindow),
-            keyEquivalent: ""
-        )
-        libraryWindowItem.target = self
-        windowMenu.addItem(libraryWindowItem)
-        windowMenuItem.submenu = windowMenu
-        mainMenu.addItem(windowMenuItem)
-        NSApp.windowsMenu = windowMenu
-
+        NSApp.windowsMenu = MainMenu.windowMenu(in: mainMenu)
         NSApp.mainMenu = mainMenu
     }
 
@@ -1008,6 +966,8 @@ private final class QuickLookPreviewCoordinator: NSResponder,
             }
         }
     }
+
+    var isVisible: Bool { activePanel?.isVisible == true }
 
     func toggle(urls: [URL]) {
         guard urls.isEmpty == false, let panel = QLPreviewPanel.shared() else { return }

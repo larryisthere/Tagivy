@@ -7,7 +7,7 @@ enum EditorExportMenu {
     static func item(
         scope: VideoScope?,
         isEnabled: Bool,
-        target: AnyObject,
+        target: AnyObject?,
         action: Selector
     ) -> NSMenuItem {
         let submenu = NSMenu()

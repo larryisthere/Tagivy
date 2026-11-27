@@ -408,6 +408,22 @@
     "filter.searchShortcutTooltip" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search filenames (⌘F)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索文件名（⌘F）" } } } },
     "menu.addFilterCondition" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Filter Condition" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加筛选条件" } } } },
     "menu.searchFilenames" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search Filenames" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索文件名" } } } },
+    "menu.video" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Video" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "视频" } } } },
+    "menu.video.quickLook" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick Look" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快速查看" } } } },
+    "menu.video.addTags" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Tags" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加标签" } } } },
+    "menu.view.zoomIn" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom In" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "放大" } } } },
+    "menu.view.zoomOut" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom Out" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缩小" } } } },
+    "menu.view.actualSize" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Actual Size" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实际大小" } } } },
+    "menu.view.showSidebar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Sidebar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示边栏" } } } },
+    "menu.view.hideSidebar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Sidebar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏边栏" } } } },
+    "menu.view.showInspector" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Inspector" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示检查器" } } } },
+    "menu.view.hideInspector" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Inspector" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏检查器" } } } },
+    "menu.view.hideToolbar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Toolbar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏工具栏" } } } },
+    "menu.view.enterFullScreen" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter Full Screen" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入全屏幕" } } } },
+    "menu.window.zoom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缩放" } } } },
+    "menu.window.bringAllToFront" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bring All to Front" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "前置全部窗口" } } } },
+    "video.open.confirm.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open %lld videos?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确定要打开 %lld 个视频吗？" } } } },
+    "video.open.confirm.action" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开" } } } },
     "filter.scope" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scope: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "范围：%@" } } } },
     "filter.sort.added" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Date Added" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "加入日期" } } } },
     "filter.sort.az" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A to Z" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "A 到 Z" } } } },
@@ -4847,13 +4863,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy Full Path"
+            "value" : "Copy Pathname"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制完整路径"
+            "value" : "拷贝路径名称"
           }
         }
       }
@@ -4887,7 +4903,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Finder 中显示"
+            "value" : "在访达中显示"
           }
         }
       }
@@ -5563,7 +5579,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Finder 中显示"
+            "value" : "在访达中显示"
           }
         }
       }
