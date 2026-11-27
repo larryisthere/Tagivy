@@ -37,7 +37,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 ### Fixed
 
 - Thumbnails that were already on screen no longer flash blank when a filter change reloads the grid.
-- Libraries carried over from earlier versions no longer keep folders that can never be opened again. When every video in such a folder is also found through another folder, Tagivy removes the folder at launch, so scanning no longer counts it as a folder it could not scan; the videos and their tags stay. Videos found only through such a folder stay listed as needing access, and are not retried in the background.
+- Libraries carried over from earlier versions no longer keep folders that can never be opened again. When every video in such a folder is also found through another folder, or the folder has no videos, Tagivy removes the folder at launch, so scanning no longer counts it as a folder it could not scan; the videos and their tags stay. To scan a removed folder again, add it again. Videos found only through such a folder stay listed as needing access, and are not retried in the background.
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
 - Premiere Pro imports the XML file from Export to Editing App instead of refusing it, and DaVinci Resolve has its own item in that menu, because Resolve imports XML files only as timelines.
