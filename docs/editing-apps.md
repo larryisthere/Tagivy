@@ -16,7 +16,7 @@ Tagivy never moves or copies your videos. It tells an editing app which videos t
 | Final Cut Pro | Final Cut Pro (.fcpxml)… | An event with one keyword collection per tag |
 | Adobe Premiere Pro | Premiere Pro (.xml)… | Bins nested by tag |
 | DaVinci Resolve | DaVinci Resolve (.xml)… | Bins nested by tag, plus a timeline with every video |
-| JianYing (剪映) | CapCut (.fcpxml)… | A timeline with every video (JianYing has no bins) |
+| JianYing (剪映) | JianYing (.fcpxml)… | A timeline with every video (JianYing has no bins) |
 | iMovie, CapCut and other apps | Drag and drop | The video files |
 
 ## Export
