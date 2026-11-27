@@ -181,7 +181,7 @@ final class SidebarModelTests: XCTestCase {
         XCTAssertFalse(context.hasUserAddedConditions)
         XCTAssertFalse(context.canSaveRuleAsSmartCollection)
 
-        context.rule.conditions.append(.durationAtLeast(60))
+        context.rule.conditions.append(.durationRange(min: 60, max: nil))
         XCTAssertTrue(context.hasUserAddedConditions)
         XCTAssertTrue(context.canSaveRuleAsSmartCollection)
 

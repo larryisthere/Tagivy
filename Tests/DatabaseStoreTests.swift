@@ -398,6 +398,59 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(intersection.map(\.filename), ["Gamma.mkv"])
     }
 
+    func testNumericRangesIncludeBothEdgesAndLeaveAMissingBoundOpen() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, size: Int64, duration: Double, width: Int)] = [
+            ("Short.mp4", 100, 10, 1280),
+            ("Mid.mp4", 200, 60, 1920),
+            ("Long.mp4", 300, 300, 3840),
+            ("Epic.mp4", 400, 3600, 7680),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: $0.size) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: "UPDATE videos SET duration = \(sample.duration), width = \(sample.width) WHERE filename = '\(sample.name)'"
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let between = try await matches(.durationRange(min: 60, max: 300))
+        let atMost = try await matches(.durationRange(min: nil, max: 60))
+        let atLeast = try await matches(.durationRange(min: 300, max: nil))
+        let sizeBetween = try await matches(.fileSizeRange(min: 200, max: 300))
+        let sizeAtMost = try await matches(.fileSizeRange(min: nil, max: 100))
+        let resolutionBetween = try await matches(.resolutionWidthRange(min: 1920, max: 3840))
+        let resolutionAtLeast = try await matches(.resolutionWidthRange(min: 3840, max: nil))
+        let exact = try await matches(.resolutionWidthRange(min: 7680, max: 7680))
+
+        XCTAssertEqual(between, ["Mid.mp4", "Long.mp4"])
+        XCTAssertEqual(atMost, ["Short.mp4", "Mid.mp4"])
+        XCTAssertEqual(atLeast, ["Long.mp4", "Epic.mp4"])
+        XCTAssertEqual(sizeBetween, ["Mid.mp4", "Long.mp4"])
+        XCTAssertEqual(sizeAtMost, ["Short.mp4"])
+        XCTAssertEqual(resolutionBetween, ["Mid.mp4", "Long.mp4"])
+        XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4"])
+        XCTAssertEqual(exact, ["Epic.mp4"])
+    }
+
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }

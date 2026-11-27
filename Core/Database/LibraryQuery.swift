@@ -11,14 +11,88 @@ enum LibraryTagConditionOperator: String, Codable, CaseIterable, Sendable {
     case exclude
 }
 
+/// Range cases hold inclusive bounds; a nil bound is open. At least one bound is set.
 enum LibraryFilterCondition: Codable, Equatable, Sendable {
     case tags(operator: LibraryTagConditionOperator, tagIDs: [String])
     case untagged
     case addedWithinDays(Int)
     case createdWithinDays(Int)
-    case durationAtLeast(Double)
-    case fileSizeAtLeast(Int64)
-    case resolutionWidthAtLeast(Int)
+    case durationRange(min: Double?, max: Double?)
+    case fileSizeRange(min: Int64?, max: Int64?)
+    case resolutionWidthRange(min: Int?, max: Int?)
+
+    /// The same condition with range bounds in order (min ≤ max).
+    func normalized() -> LibraryFilterCondition {
+        switch self {
+        case let .durationRange(low, high):
+            let bounds = Self.ordered(low, high)
+            return .durationRange(min: bounds.min, max: bounds.max)
+        case let .fileSizeRange(low, high):
+            let bounds = Self.ordered(low, high)
+            return .fileSizeRange(min: bounds.min, max: bounds.max)
+        case let .resolutionWidthRange(low, high):
+            let bounds = Self.ordered(low, high)
+            return .resolutionWidthRange(min: bounds.min, max: bounds.max)
+        case .tags, .untagged, .addedWithinDays, .createdWithinDays:
+            return self
+        }
+    }
+
+    private static func ordered<Value: Comparable>(_ low: Value?, _ high: Value?) -> (min: Value?, max: Value?) {
+        guard let low, let high, low > high else { return (low, high) }
+        return (high, low)
+    }
+
+    /// Mirrors the synthesized coding of every case this enum has had, so the stored JSON
+    /// keeps its shape and smart filters saved with a single lower bound still load.
+    private enum Stored: Codable {
+        case tags(operator: LibraryTagConditionOperator, tagIDs: [String])
+        case untagged
+        case addedWithinDays(Int)
+        case createdWithinDays(Int)
+        case durationRange(min: Double?, max: Double?)
+        case fileSizeRange(min: Int64?, max: Int64?)
+        case resolutionWidthRange(min: Int?, max: Int?)
+        case durationAtLeast(Double)
+        case fileSizeAtLeast(Int64)
+        case resolutionWidthAtLeast(Int)
+    }
+
+    init(from decoder: Decoder) throws {
+        switch try Stored(from: decoder) {
+        case let .tags(tagOperator, tagIDs): self = .tags(operator: tagOperator, tagIDs: tagIDs)
+        case .untagged: self = .untagged
+        case let .addedWithinDays(days): self = .addedWithinDays(days)
+        case let .createdWithinDays(days): self = .createdWithinDays(days)
+        case let .durationRange(low, high): self = .durationRange(min: low, max: high)
+        case let .fileSizeRange(low, high): self = .fileSizeRange(min: low, max: high)
+        case let .resolutionWidthRange(low, high): self = .resolutionWidthRange(min: low, max: high)
+        case let .durationAtLeast(seconds): self = .durationRange(min: seconds, max: nil)
+        case let .fileSizeAtLeast(bytes): self = .fileSizeRange(min: bytes, max: nil)
+        case let .resolutionWidthAtLeast(width): self = .resolutionWidthRange(min: width, max: nil)
+        }
+        switch self {
+        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionWidthRange(nil, nil):
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Range without bounds")
+            )
+        default:
+            self = normalized()
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        let stored: Stored = switch self {
+        case let .tags(tagOperator, tagIDs): .tags(operator: tagOperator, tagIDs: tagIDs)
+        case .untagged: .untagged
+        case let .addedWithinDays(days): .addedWithinDays(days)
+        case let .createdWithinDays(days): .createdWithinDays(days)
+        case let .durationRange(low, high): .durationRange(min: low, max: high)
+        case let .fileSizeRange(low, high): .fileSizeRange(min: low, max: high)
+        case let .resolutionWidthRange(low, high): .resolutionWidthRange(min: low, max: high)
+        }
+        try stored.encode(to: encoder)
+    }
 }
 
 enum LibraryVideoSortKey: String, Codable, CaseIterable, Sendable {
@@ -107,7 +181,7 @@ struct LibraryQueryRule: Codable, Equatable, Sendable {
         _ conditions: [LibraryFilterCondition]
     ) -> [LibraryFilterCondition] {
         conditions.map { condition in
-            guard case let .tags(tagOperator, tagIDs) = condition else { return condition }
+            guard case let .tags(tagOperator, tagIDs) = condition else { return condition.normalized() }
             return .tags(operator: tagOperator, tagIDs: uniqueNonempty(tagIDs))
         }
     }
