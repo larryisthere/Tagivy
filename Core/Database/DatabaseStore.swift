@@ -1309,7 +1309,7 @@ actor DatabaseStore {
         now: Date = Date()
     ) throws -> [VideoRecord] {
         try prepareIfNeeded()
-        let rule = query.rule.normalized()
+        let rule = query.rule.normalized().removingUnboundedRanges()
         var conditions = ["videos.library_id = ?"]
         var bindings: [LibraryQueryBinding] = [.text(libraryID)]
 
@@ -1473,16 +1473,51 @@ actor DatabaseStore {
                 now.addingTimeInterval(-Double(max(1, days)) * 24 * 60 * 60).timeIntervalSince1970
             ))
             return "videos.creation_date >= ?"
-        case let .durationAtLeast(seconds):
-            bindings.append(.double(max(0, seconds)))
-            return "videos.duration >= ?"
-        case let .fileSizeAtLeast(bytes):
-            bindings.append(.integer(max(0, bytes)))
-            return "videos.file_size >= ?"
-        case let .resolutionWidthAtLeast(width):
-            bindings.append(.integer(Int64(max(0, width))))
-            return "videos.width >= ?"
+        case let .durationRange(low, high):
+            // Durations are shown rounded to whole seconds, so 300.4 s reads 5:00 and matches
+            // "≤ 5 min". Comparing against the rounding boundaries keeps the duration index usable.
+            return rangePredicate(
+                column: "videos.duration",
+                min: low.map { .double(max(0, $0) - 0.5) },
+                max: high.map { .double(max(0, $0) + 0.5) },
+                maxIsInclusive: false,
+                bindings: &bindings
+            )
+        case let .fileSizeRange(low, high):
+            return rangePredicate(
+                column: "videos.file_size",
+                min: low.map { .integer(max(0, $0)) },
+                max: high.map { .integer(max(0, $0)) },
+                bindings: &bindings
+            )
+        case let .resolutionWidthRange(low, high):
+            return rangePredicate(
+                column: "videos.width",
+                min: low.map { .integer(Int64(max(0, $0))) },
+                max: high.map { .integer(Int64(max(0, $0))) },
+                bindings: &bindings
+            )
         }
+    }
+
+    /// A missing bound leaves that end open.
+    private func rangePredicate(
+        column: String,
+        min: LibraryQueryBinding?,
+        max: LibraryQueryBinding?,
+        maxIsInclusive: Bool = true,
+        bindings: inout [LibraryQueryBinding]
+    ) -> String {
+        var clauses: [String] = []
+        if let min {
+            bindings.append(min)
+            clauses.append("\(column) >= ?")
+        }
+        if let max {
+            bindings.append(max)
+            clauses.append("\(column) \(maxIsInclusive ? "<=" : "<") ?")
+        }
+        return clauses.isEmpty ? "1" : "(\(clauses.joined(separator: " AND ")))"
     }
 
     func fetchSidebarFilterCounts(

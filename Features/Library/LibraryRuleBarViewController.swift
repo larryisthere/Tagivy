@@ -103,6 +103,11 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         activePopover = nil
+        let rule = context.rule.removingUnboundedRanges()
+        if rule != context.rule {
+            context.rule = rule
+            onRuleChanged?(rule)
+        }
         render()
     }
 
@@ -463,15 +468,8 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             return String(localized: "filter.addedDays", defaultValue: "Added in last \(days) days")
         case let .createdWithinDays(days):
             return String(localized: "filter.createdDays", defaultValue: "Created in last \(days) days")
-        case let .durationAtLeast(seconds):
-            let duration = NumericConditionKind.durationAtLeast.formatted(seconds)
-            return String(localized: "filter.durationAtLeast", defaultValue: "Duration ≥ \(duration)")
-        case let .fileSizeAtLeast(bytes):
-            let size = NumericConditionKind.fileSizeAtLeast.formatted(Double(bytes))
-            return String(localized: "filter.fileSize", defaultValue: "Size ≥ \(size)")
-        case let .resolutionWidthAtLeast(width):
-            let resolution = NumericConditionKind.resolutionWidthAtLeast.formatted(Double(width))
-            return String(localized: "filter.resolutionAtLeast", defaultValue: "Resolution ≥ \(resolution)")
+        case .durationRange, .fileSizeRange, .resolutionWidthRange:
+            return NumericConditionKind.label(for: condition) ?? ""
         }
     }
 
@@ -735,11 +733,11 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         case "created":
             condition = NumericConditionKind.createdWithinDays.defaultCondition
         case "duration":
-            condition = NumericConditionKind.durationAtLeast.defaultCondition
+            condition = NumericConditionKind.duration.defaultCondition
         case "fileSize":
-            condition = NumericConditionKind.fileSizeAtLeast.defaultCondition
+            condition = NumericConditionKind.fileSize.defaultCondition
         case "resolution":
-            condition = NumericConditionKind.resolutionWidthAtLeast.defaultCondition
+            condition = NumericConditionKind.resolutionWidth.defaultCondition
         default:
             return
         }
@@ -1455,27 +1453,43 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
             )
         case .untagged:
             break
-        case .addedWithinDays, .createdWithinDays, .durationAtLeast, .fileSizeAtLeast,
-             .resolutionWidthAtLeast:
+        case .addedWithinDays, .createdWithinDays, .durationRange, .fileSizeRange,
+             .resolutionWidthRange:
             addNumericEditor(for: condition, to: stack)
         }
     }
 
     private func addNumericEditor(for condition: LibraryFilterCondition, to stack: NSStackView) {
-        guard let kind = NumericConditionKind(condition),
-              let value = NumericConditionKind.value(of: condition) else { return }
-        let slider = NumericConditionSlider(kind: kind, value: value)
-        slider.onChange = { [weak self] newValue in
-            // A field still being edited commits when the content is rebuilt for another type.
-            guard let self, let current = editedCondition, NumericConditionKind(current) == kind else { return }
-            setEditedCondition(kind.condition(with: newValue))
-            draftDidChange()
+        guard let kind = NumericConditionKind(condition) else { return }
+        // A field still being edited commits when the content is rebuilt for another type.
+        let isStillEdited = { [weak self] in
+            self?.editedCondition.flatMap(NumericConditionKind.init) == kind
         }
-        addLabeledControl(
-            slider,
-            title: String(localized: "filter.field.range", defaultValue: "Range"),
-            to: stack
-        )
+        if let bounds = NumericConditionKind.bounds(of: condition) {
+            let slider = NumericRangeSlider(kind: kind, min: bounds.min, max: bounds.max)
+            slider.onChange = { [weak self] low, high in
+                guard let self, isStillEdited() else { return }
+                setEditedCondition(kind.condition(min: low, max: high))
+                draftDidChange()
+            }
+            addLabeledControl(
+                slider,
+                title: String(localized: "filter.field.range", defaultValue: "Range"),
+                to: stack
+            )
+        } else if let value = NumericConditionKind.value(of: condition) {
+            let slider = NumericConditionSlider(kind: kind, value: value)
+            slider.onChange = { [weak self] newValue in
+                guard let self, isStillEdited() else { return }
+                setEditedCondition(kind.condition(with: newValue))
+                draftDidChange()
+            }
+            addLabeledControl(
+                slider,
+                title: String(localized: "filter.field.withinLast", defaultValue: "Within last"),
+                to: stack
+            )
+        }
     }
 
     private func addSortEditor(to stack: NSStackView) {
@@ -1548,9 +1562,9 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .untagged: "untagged"
         case .addedWithinDays: "added"
         case .createdWithinDays: "created"
-        case .durationAtLeast: "duration"
-        case .fileSizeAtLeast: "fileSize"
-        case .resolutionWidthAtLeast: "resolution"
+        case .durationRange: "duration"
+        case .fileSizeRange: "fileSize"
+        case .resolutionWidthRange: "resolution"
         }
     }
 
@@ -1718,9 +1732,9 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case "untagged": condition = .untagged
         case "added": condition = NumericConditionKind.addedWithinDays.defaultCondition
         case "created": condition = NumericConditionKind.createdWithinDays.defaultCondition
-        case "duration": condition = NumericConditionKind.durationAtLeast.defaultCondition
-        case "fileSize": condition = NumericConditionKind.fileSizeAtLeast.defaultCondition
-        case "resolution": condition = NumericConditionKind.resolutionWidthAtLeast.defaultCondition
+        case "duration": condition = NumericConditionKind.duration.defaultCondition
+        case "fileSize": condition = NumericConditionKind.fileSize.defaultCondition
+        case "resolution": condition = NumericConditionKind.resolutionWidth.defaultCondition
         default: return
         }
         setEditedCondition(condition)

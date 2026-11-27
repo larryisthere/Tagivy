@@ -1,33 +1,49 @@
 import AppKit
 import Foundation
 
-/// A numeric filter condition, edited as a value in the condition's stored unit
+/// A numeric filter condition, edited as values in the condition's stored unit
 /// (days, seconds, bytes or pixel width) so saved smart filters keep their exact values.
+/// Dates take a single "within last" value; the others take a min/max range.
 enum NumericConditionKind: Equatable, Sendable {
     case addedWithinDays
     case createdWithinDays
-    case durationAtLeast
-    case fileSizeAtLeast
-    case resolutionWidthAtLeast
+    case duration
+    case fileSize
+    case resolutionWidth
 
     init?(_ condition: LibraryFilterCondition) {
         switch condition {
         case .addedWithinDays: self = .addedWithinDays
         case .createdWithinDays: self = .createdWithinDays
-        case .durationAtLeast: self = .durationAtLeast
-        case .fileSizeAtLeast: self = .fileSizeAtLeast
-        case .resolutionWidthAtLeast: self = .resolutionWidthAtLeast
+        case .durationRange: self = .duration
+        case .fileSizeRange: self = .fileSize
+        case .resolutionWidthRange: self = .resolutionWidth
         case .tags, .untagged: return nil
         }
     }
 
+    var isRange: Bool {
+        switch self {
+        case .addedWithinDays, .createdWithinDays: false
+        case .duration, .fileSize, .resolutionWidth: true
+        }
+    }
+
+    /// The value of a single-value (date) condition.
     static func value(of condition: LibraryFilterCondition) -> Double? {
         switch condition {
         case let .addedWithinDays(days), let .createdWithinDays(days): Double(days)
-        case let .durationAtLeast(seconds): seconds
-        case let .fileSizeAtLeast(bytes): Double(bytes)
-        case let .resolutionWidthAtLeast(width): Double(width)
-        case .tags, .untagged: nil
+        case .durationRange, .fileSizeRange, .resolutionWidthRange, .tags, .untagged: nil
+        }
+    }
+
+    /// The bounds of a range condition; nil marks an open end.
+    static func bounds(of condition: LibraryFilterCondition) -> (min: Double?, max: Double?)? {
+        switch condition {
+        case let .durationRange(low, high): (low, high)
+        case let .fileSizeRange(low, high): (low.map(Double.init), high.map(Double.init))
+        case let .resolutionWidthRange(low, high): (low.map(Double.init), high.map(Double.init))
+        case .addedWithinDays, .createdWithinDays, .tags, .untagged: nil
         }
     }
 
@@ -35,9 +51,18 @@ enum NumericConditionKind: Equatable, Sendable {
         switch self {
         case .addedWithinDays: .addedWithinDays(Int(value.rounded()))
         case .createdWithinDays: .createdWithinDays(Int(value.rounded()))
-        case .durationAtLeast: .durationAtLeast(value.rounded())
-        case .fileSizeAtLeast: .fileSizeAtLeast(Int64(value.rounded()))
-        case .resolutionWidthAtLeast: .resolutionWidthAtLeast(Int(value.rounded()))
+        case .duration, .fileSize, .resolutionWidth: condition(min: value, max: nil)
+        }
+    }
+
+    func condition(min low: Double?, max high: Double?) -> LibraryFilterCondition {
+        switch self {
+        case .addedWithinDays, .createdWithinDays: condition(with: low ?? high ?? 1)
+        case .duration: .durationRange(min: low?.rounded(), max: high?.rounded()).normalized()
+        case .fileSize:
+            .fileSizeRange(min: low.map { Int64($0.rounded()) }, max: high.map { Int64($0.rounded()) }).normalized()
+        case .resolutionWidth:
+            .resolutionWidthRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
         }
     }
 
@@ -45,9 +70,40 @@ enum NumericConditionKind: Equatable, Sendable {
         switch self {
         case .addedWithinDays: .addedWithinDays(30)
         case .createdWithinDays: .createdWithinDays(30)
-        case .durationAtLeast: .durationAtLeast(60)
-        case .fileSizeAtLeast: .fileSizeAtLeast(1_000_000_000)
-        case .resolutionWidthAtLeast: .resolutionWidthAtLeast(3840)
+        case .duration: .durationRange(min: 60, max: nil)
+        case .fileSize: .fileSizeRange(min: 1_000_000_000, max: nil)
+        case .resolutionWidth: .resolutionWidthRange(min: 3840, max: nil)
+        }
+    }
+
+    /// Chip text for a range condition: "Duration 1–5 min", "Size ≤ 2 GB", "Resolution ≥ 4K".
+    static func label(for condition: LibraryFilterCondition) -> String? {
+        guard let kind = NumericConditionKind(condition), kind.isRange,
+              let bounds = bounds(of: condition) else { return nil }
+        switch (bounds.min, bounds.max) {
+        case let (low?, high?):
+            let range = kind.formattedRange(low, high)
+            return switch kind {
+            case .duration: String(localized: "filter.durationRange", defaultValue: "Duration \(range)")
+            case .fileSize: String(localized: "filter.fileSizeRange", defaultValue: "Size \(range)")
+            default: String(localized: "filter.resolutionRange", defaultValue: "Resolution \(range)")
+            }
+        case let (low?, nil):
+            let value = kind.formatted(low)
+            return switch kind {
+            case .duration: String(localized: "filter.durationAtLeast", defaultValue: "Duration ≥ \(value)")
+            case .fileSize: String(localized: "filter.fileSize", defaultValue: "Size ≥ \(value)")
+            default: String(localized: "filter.resolutionAtLeast", defaultValue: "Resolution ≥ \(value)")
+            }
+        case let (nil, high?):
+            let value = kind.formatted(high)
+            return switch kind {
+            case .duration: String(localized: "filter.durationAtMost", defaultValue: "Duration ≤ \(value)")
+            case .fileSize: String(localized: "filter.fileSizeAtMost", defaultValue: "Size ≤ \(value)")
+            default: String(localized: "filter.resolutionAtMost", defaultValue: "Resolution ≤ \(value)")
+            }
+        case (nil, nil):
+            return nil
         }
     }
 
@@ -55,17 +111,17 @@ enum NumericConditionKind: Equatable, Sendable {
         switch self {
         case .addedWithinDays, .createdWithinDays:
             NumericConditionScale(mapping: .logarithmic(1...3650), detents: [1, 7, 30, 90, 180, 365])
-        case .durationAtLeast:
+        case .duration:
             NumericConditionScale(
                 mapping: .logarithmic(5...14_400),
                 detents: [30, 60, 120, 300, 600, 1800, 3600]
             )
-        case .fileSizeAtLeast:
+        case .fileSize:
             NumericConditionScale(
-                mapping: .logarithmic(10_000_000...100_000_000_000),
+                mapping: .logarithmic(1_000_000...100_000_000_000),
                 detents: [100_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000]
             )
-        case .resolutionWidthAtLeast:
+        case .resolutionWidth:
             NumericConditionScale(
                 mapping: .stepped,
                 detents: Self.resolutionSteps.map { Double($0.width) }
@@ -107,22 +163,22 @@ enum NumericConditionKind: Equatable, Sendable {
     private var units: [Unit] {
         switch self {
         case .addedWithinDays, .createdWithinDays: [Self.dayUnit]
-        case .durationAtLeast: [Self.secondUnit, Self.minuteUnit, Self.hourUnit]
-        case .fileSizeAtLeast: Self.byteUnits
-        case .resolutionWidthAtLeast: []
+        case .duration: [Self.secondUnit, Self.minuteUnit, Self.hourUnit]
+        case .fileSize: Self.byteUnits
+        case .resolutionWidth: []
         }
     }
 
     /// The unit a value is shown in: the largest unit that keeps the number at 1 or more.
     private func displayUnit(for value: Double) -> Unit? {
-        let candidates = units.filter { $0.factor >= (self == .fileSizeAtLeast ? 1_000_000 : 1) }
+        let candidates = units.filter { $0.factor >= (self == .fileSize ? 1_000_000 : 1) }
         return candidates.last { value >= $0.factor } ?? candidates.first
     }
 
     /// Rounds to what the field can show, so dragging lands on readable values
     /// (37 min, 1.4 GB) and the field never displays a different value than is saved.
     func rounded(_ value: Double) -> Double {
-        if case .resolutionWidthAtLeast = self { return scale.nearestDetent(to: value) }
+        if case .resolutionWidth = self { return scale.nearestDetent(to: value) }
         let value = min(max(value, valueBounds.lowerBound), valueBounds.upperBound)
         guard let unit = displayUnit(for: value) else { return value }
         let number = value / unit.factor
@@ -135,14 +191,14 @@ enum NumericConditionKind: Equatable, Sendable {
     var valueBounds: ClosedRange<Double> {
         switch self {
         case .addedWithinDays, .createdWithinDays: 1...36_500
-        case .durationAtLeast: 1...10_000_000
-        case .fileSizeAtLeast: 1_000_000...1_000_000_000_000_000
-        case .resolutionWidthAtLeast: 1...100_000
+        case .duration: 1...10_000_000
+        case .fileSize: 1_000_000...1_000_000_000_000_000
+        case .resolutionWidth: 1...100_000
         }
     }
 
     func formatted(_ value: Double) -> String {
-        if case .resolutionWidthAtLeast = self {
+        if case .resolutionWidth = self {
             let width = Int(value.rounded())
             return Self.resolutionSteps.first { $0.width == width }?.name ?? "\(width) px"
         }
@@ -150,11 +206,21 @@ enum NumericConditionKind: Equatable, Sendable {
         return unit.format(Self.numberText(value / unit.factor))
     }
 
+    /// "1–5 min" when both ends share a unit, otherwise "30 s–5 min"; "1080p–4K".
+    func formattedRange(_ low: Double, _ high: Double) -> String {
+        if low == high { return formatted(low) }
+        if let lowUnit = displayUnit(for: low), let highUnit = displayUnit(for: high),
+           lowUnit.factor == highUnit.factor {
+            return lowUnit.format("\(Self.numberText(low / lowUnit.factor))–\(Self.numberText(high / highUnit.factor))")
+        }
+        return "\(formatted(low))–\(formatted(high))"
+    }
+
     /// Reads typed text such as "90", "1.5 GB", "2h", "45 秒" or "4K". A bare number keeps
     /// the unit the field currently shows. Returns nil for text that is not a positive value.
     func parse(_ text: String, currentValue: Double) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if case .resolutionWidthAtLeast = self {
+        if case .resolutionWidth = self {
             if let step = Self.resolutionSteps.first(where: { $0.name.lowercased() == trimmed }) {
                 return Double(step.width)
             }
@@ -177,6 +243,26 @@ enum NumericConditionKind: Equatable, Sendable {
             unit = match
         }
         return rounded(number * (unit?.factor ?? 1))
+    }
+
+    enum RangeBoundInput: Equatable, Sendable {
+        case any
+        case value(Double)
+
+        var value: Double? {
+            if case let .value(value) = self { value } else { nil }
+        }
+    }
+
+    /// Reads a range field: empty, "Any" or 0 leaves that end open; otherwise as `parse`.
+    func parseRangeBound(_ text: String, anyText: String, currentValue: Double) -> RangeBoundInput? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.isEmpty || [anyText.lowercased(), "any", "不限"].contains(trimmed) {
+            return .any
+        }
+        let numberPart = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
+        if Self.number(from: String(numberPart)) == 0 { return .any }
+        return parse(text, currentValue: currentValue).map { .value($0) }
     }
 
     /// "1,000" is a thousands separator; any other comma ("1,5") is a decimal comma.
@@ -397,5 +483,410 @@ private final class DetentSlider: NSSlider {
             guard dot.intersects(knob) == false else { continue }
             NSBezierPath(ovalIn: dot).fill()
         }
+    }
+}
+
+/// Positions on a range slider's track. Each end of the track has a short open zone:
+/// a knob pushed into it leaves that end of the range open ("Any"), so every value on
+/// the scale, including its first and last, stays selectable.
+struct NumericRangeTrack: Equatable, Sendable {
+    static let openZone = 0.06
+
+    let scale: NumericConditionScale
+
+    func position(forMin value: Double?) -> Double {
+        value.map { Self.openZone + scale.position(for: $0) * (1 - 2 * Self.openZone) } ?? 0
+    }
+
+    func position(forMax value: Double?) -> Double {
+        value.map { Self.openZone + scale.position(for: $0) * (1 - 2 * Self.openZone) } ?? 1
+    }
+
+    /// The bound a knob at a track position stands for: nil inside its end's open zone,
+    /// otherwise the scale value there and whether a detent pulled it in.
+    func minBound(at position: Double, snapping: Bool) -> (value: Double?, detent: Double?) {
+        guard position > Self.openZone / 2 else { return (nil, nil) }
+        return scale.value(at: scalePosition(position), snapping: snapping)
+    }
+
+    func maxBound(at position: Double, snapping: Bool) -> (value: Double?, detent: Double?) {
+        guard position < 1 - Self.openZone / 2 else { return (nil, nil) }
+        return scale.value(at: scalePosition(position), snapping: snapping)
+    }
+
+    private func scalePosition(_ position: Double) -> Double {
+        min(max((position - Self.openZone) / (1 - 2 * Self.openZone), 0), 1)
+    }
+}
+
+/// Bounds of a range being edited. Keeps min ≤ max: an end that would pass the other stops on it.
+struct NumericRangeBounds: Equatable, Sendable {
+    enum End: Sendable { case min, max }
+
+    private(set) var min: Double?
+    private(set) var max: Double?
+
+    init(min: Double?, max: Double?) {
+        self.min = min
+        self.max = max
+    }
+
+    mutating func set(_ end: End, to value: Double?) {
+        switch end {
+        case .min: min = value.map { value in max.map { Swift.min(value, $0) } ?? value }
+        case .max: max = value.map { value in min.map { Swift.max(value, $0) } ?? value }
+        }
+    }
+
+    /// The bound one detent further in a direction, with "Any" past the outermost detent.
+    func stepped(_ end: End, up: Bool, detents: [Double]) -> Double? {
+        let current = end == .min ? min : max
+        switch (end, up) {
+        case (.min, true):
+            guard let current else { return detents.first }
+            return detents.first { $0 > current } ?? current
+        case (.min, false):
+            guard let current else { return nil }
+            return detents.last { $0 < current }
+        case (.max, true):
+            guard let current else { return nil }
+            return detents.first { $0 > current }
+        case (.max, false):
+            guard let current else { return detents.last }
+            return detents.last { $0 < current } ?? current
+        }
+    }
+}
+
+/// Two-knob slider with magnetic detents plus min and max fields, kept in sync both ways.
+/// An empty field, or a knob pushed to its end of the track, leaves that end open.
+@MainActor
+final class NumericRangeSlider: NSView, NSTextFieldDelegate {
+    private static let valueFieldWidth: CGFloat = 76
+
+    private let kind: NumericConditionKind
+    private let track: NumericRangeTrack
+    private let clearMinButton = NSButton()
+    private let clearMaxButton = NSButton()
+    private let trackView = RangeTrackView()
+    private let minField = NSTextField()
+    private let maxField = NSTextField()
+    private(set) var rangeBounds: NumericRangeBounds
+    private static let openEndSnap = -1.0
+    private var lastSnap: [NumericRangeBounds.End: Double] = [:]
+    var onChange: ((Double?, Double?) -> Void)?
+
+    static let anyText = String(localized: "filter.range.any", defaultValue: "Any")
+
+    var range: (min: Double?, max: Double?) { (rangeBounds.min, rangeBounds.max) }
+
+    init(kind: NumericConditionKind, min: Double?, max: Double?) {
+        self.kind = kind
+        self.track = NumericRangeTrack(scale: kind.scale)
+        self.rangeBounds = NumericRangeBounds(min: min, max: max)
+        super.init(frame: .zero)
+
+        trackView.detentPositions = track.scale.detentPositions.map {
+            NumericRangeTrack.openZone + $0 * (1 - 2 * NumericRangeTrack.openZone)
+        }
+        trackView.onDrag = { [weak self] end, position, snapping in
+            self?.knobMoved(end, to: position, snapping: snapping)
+        }
+        trackView.onDragEnded = { [weak self] in self?.showRange() }
+        trackView.onStep = { [weak self] end, up in self?.step(end, up: up) }
+
+        let minLabel = Self.label(String(localized: "filter.range.min", defaultValue: "Min"))
+        let maxLabel = Self.label(String(localized: "filter.range.max", defaultValue: "Max"))
+        trackView.knobTitles = [.min: minLabel.stringValue, .max: maxLabel.stringValue]
+        for (field, label) in [(minField, minLabel), (maxField, maxLabel)] {
+            field.controlSize = .small
+            field.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+            field.alignment = .right
+            field.bezelStyle = .roundedBezel
+            field.placeholderString = Self.anyText
+            field.delegate = self
+            field.target = self
+            field.action = #selector(valueFieldCommitted(_:))
+            field.cell?.sendsActionOnEndEditing = true
+            field.cell?.isScrollable = true
+            field.setAccessibilityLabel(label.stringValue)
+            field.widthAnchor.constraint(equalToConstant: Self.valueFieldWidth).isActive = true
+        }
+        for (button, title) in [
+            (clearMinButton, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
+            (clearMaxButton, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
+        ] {
+            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: title)
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .tertiaryLabelColor
+            button.toolTip = title
+            button.setAccessibilityLabel(title)
+            button.target = self
+            button.action = #selector(clearEnd(_:))
+            button.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        }
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let fields = NSStackView(views: [minLabel, minField, clearMinButton, spacer, maxLabel, maxField, clearMaxButton])
+        fields.orientation = .horizontal
+        fields.alignment = .centerY
+        fields.spacing = 6
+        fields.setCustomSpacing(3, after: minField)
+        fields.setCustomSpacing(3, after: maxField)
+
+        let column = NSStackView(views: [trackView, fields])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 6
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
+        NSLayoutConstraint.activate([
+            column.leadingAnchor.constraint(equalTo: leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor),
+            column.topAnchor.constraint(equalTo: topAnchor),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor),
+            trackView.widthAnchor.constraint(equalTo: column.widthAnchor),
+            fields.widthAnchor.constraint(equalTo: column.widthAnchor),
+        ])
+
+        lastSnap = [.min: rangeBounds.min ?? Self.openEndSnap, .max: rangeBounds.max ?? Self.openEndSnap]
+        showRange()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private static func label(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    private func showRange() {
+        trackView.minPosition = track.position(forMin: rangeBounds.min)
+        trackView.maxPosition = track.position(forMax: rangeBounds.max)
+        // Hidden by transparency so the fields keep their place.
+        for (button, isSet) in [(clearMinButton, rangeBounds.min != nil), (clearMaxButton, rangeBounds.max != nil)] {
+            button.alphaValue = isSet ? 1 : 0
+            button.isEnabled = isSet
+            button.setAccessibilityElement(isSet)
+        }
+        minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
+        maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
+        trackView.knobValues = [
+            .min: rangeBounds.min.map(kind.formatted) ?? Self.anyText,
+            .max: rangeBounds.max.map(kind.formatted) ?? Self.anyText,
+        ]
+    }
+
+    private func knobMoved(_ end: NumericRangeBounds.End, to position: Double, snapping: Bool) {
+        let result = end == .min
+            ? track.minBound(at: position, snapping: snapping)
+            : track.maxBound(at: position, snapping: snapping)
+        let value = result.value.map { result.detent ?? kind.rounded($0) }
+        var updated = rangeBounds
+        updated.set(end, to: value)
+        let snapped: Double? = value == nil ? Self.openEndSnap : result.detent
+        if let snapped, lastSnap[end] != snapped {
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+        lastSnap[end] = snapped
+        // The knob follows the pointer except where it is held: on a detent, on the other knob,
+        // or at its open end.
+        let held = value == nil || result.detent != nil
+            || (end == .min ? updated.min : updated.max) != value
+        let shownPosition = end == .min
+            ? (held ? track.position(forMin: updated.min) : min(position, trackView.maxPosition))
+            : (held ? track.position(forMax: updated.max) : max(position, trackView.minPosition))
+        commit(updated)
+        showRange()
+        if end == .min { trackView.minPosition = shownPosition } else { trackView.maxPosition = shownPosition }
+    }
+
+    @objc private func valueFieldCommitted(_ sender: NSTextField) {
+        let end: NumericRangeBounds.End = sender === minField ? .min : .max
+        let current = end == .min ? rangeBounds.min : rangeBounds.max
+        guard let input = kind.parseRangeBound(
+            sender.stringValue,
+            anyText: Self.anyText,
+            currentValue: current ?? rangeBounds.min ?? rangeBounds.max ?? 1
+        ) else {
+            showRange()
+            return
+        }
+        var updated = rangeBounds
+        updated.set(end, to: input.value)
+        commit(updated)
+        showRange()
+    }
+
+    @objc private func clearEnd(_ sender: NSButton) {
+        var updated = rangeBounds
+        updated.set(sender === clearMinButton ? .min : .max, to: nil)
+        commit(updated)
+        showRange()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        let up = commandSelector == #selector(NSResponder.moveUp(_:))
+        guard up || commandSelector == #selector(NSResponder.moveDown(_:)) else { return false }
+        step(control === minField ? .min : .max, up: up)
+        textView.selectAll(nil)
+        return true
+    }
+
+    private func step(_ end: NumericRangeBounds.End, up: Bool) {
+        var updated = rangeBounds
+        updated.set(end, to: rangeBounds.stepped(end, up: up, detents: track.scale.detents))
+        commit(updated)
+        showRange()
+    }
+
+    private func commit(_ updated: NumericRangeBounds) {
+        guard updated != rangeBounds else { return }
+        rangeBounds = updated
+        onChange?(updated.min, updated.max)
+    }
+}
+
+/// The track of a range slider: the system slider bar and knobs, the selected span in the
+/// accent color between the knobs (or from a knob to an open end), and dots for the detents.
+/// Each knob is its own accessibility slider.
+private final class RangeTrackView: NSView {
+    private let cell: NSSliderCell = {
+        let cell = NSSliderCell()
+        cell.controlSize = .small
+        cell.minValue = 0
+        cell.maxValue = 1
+        cell.doubleValue = 0
+        return cell
+    }()
+    private lazy var knobElements: [NumericRangeBounds.End: RangeKnobAccessibilityElement] = [
+        .min: RangeKnobAccessibilityElement(end: .min, track: self),
+        .max: RangeKnobAccessibilityElement(end: .max, track: self),
+    ]
+
+    var minPosition: Double = 0 { didSet { needsDisplay = true } }
+    var maxPosition: Double = 1 { didSet { needsDisplay = true } }
+    var detentPositions: [Double] = [] { didSet { needsDisplay = true } }
+    var knobTitles: [NumericRangeBounds.End: String] = [:]
+    var knobValues: [NumericRangeBounds.End: String] = [:]
+    var onDrag: ((NumericRangeBounds.End, Double, Bool) -> Void)?
+    var onDragEnded: (() -> Void)?
+    var onStep: ((NumericRangeBounds.End, Bool) -> Void)?
+    private var draggedEnd: NumericRangeBounds.End?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        cell.controlView = self
+        setAccessibilityElement(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 7) }
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    private var knobSize: CGFloat { ceil(cell.knobThickness) }
+    private var trackMinX: CGFloat { bounds.minX + knobSize / 2 }
+    private var trackWidth: CGFloat { max(bounds.width - knobSize, 1) }
+    private var trackMidY: CGFloat { knobSize / 2 }
+
+    private func x(for position: Double) -> CGFloat { trackMinX + trackWidth * position }
+    private func position(for x: CGFloat) -> Double { min(max(Double((x - trackMinX) / trackWidth), 0), 1) }
+
+    fileprivate func knobRect(_ end: NumericRangeBounds.End) -> NSRect {
+        let center = x(for: end == .min ? minPosition : maxPosition)
+        return NSRect(x: (center - knobSize / 2).rounded(), y: 0, width: knobSize, height: knobSize)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let barHeight: CGFloat = 4
+        let bar = NSRect(x: trackMinX, y: trackMidY - barHeight / 2, width: trackWidth, height: barHeight)
+        cell.drawBar(inside: bar, flipped: isFlipped)
+
+        let selected = NSRect(
+            x: x(for: minPosition), y: bar.minY,
+            width: max(x(for: maxPosition) - x(for: minPosition), 0), height: barHeight
+        )
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: selected, xRadius: barHeight / 2, yRadius: barHeight / 2).fill()
+
+        let dotDiameter: CGFloat = 3
+        NSColor.tertiaryLabelColor.setFill()
+        for position in detentPositions {
+            let dot = NSRect(x: x(for: position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
+            NSBezierPath(ovalIn: dot).fill()
+        }
+
+        cell.drawKnob(knobRect(.min))
+        cell.drawKnob(knobRect(.max))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let pointer = position(for: convert(event.locationInWindow, from: nil).x)
+        let toMin = abs(pointer - minPosition)
+        let toMax = abs(pointer - maxPosition)
+        // Stacked knobs: the side clicked decides, so either can be pulled away.
+        draggedEnd = toMin == toMax ? (pointer <= minPosition ? .min : .max) : (toMin < toMax ? .min : .max)
+        drag(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        drag(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        draggedEnd = nil
+        onDragEnded?()
+    }
+
+    private func drag(with event: NSEvent) {
+        guard let draggedEnd else { return }
+        let pointer = position(for: convert(event.locationInWindow, from: nil).x)
+        onDrag?(draggedEnd, pointer, event.modifierFlags.contains(.option) == false)
+    }
+
+    override func accessibilityChildren() -> [Any]? {
+        [knobElements[.min], knobElements[.max]].compactMap { $0 }
+    }
+}
+
+private final class RangeKnobAccessibilityElement: NSAccessibilityElement {
+    private let end: NumericRangeBounds.End
+    private weak var track: RangeTrackView?
+
+    init(end: NumericRangeBounds.End, track: RangeTrackView) {
+        self.end = end
+        self.track = track
+        super.init()
+    }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+    override func accessibilityParent() -> Any? { track }
+    override func accessibilityLabel() -> String? { track?.knobTitles[end] }
+    override func accessibilityValue() -> Any? { track?.knobValues[end] }
+
+    override func accessibilityFrame() -> NSRect {
+        guard let track else { return .zero }
+        return NSAccessibility.screenRect(fromView: track, rect: track.knobRect(end))
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        track?.onStep?(end, true)
+        return true
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        track?.onStep?(end, false)
+        return true
     }
 }
