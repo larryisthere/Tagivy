@@ -19,6 +19,16 @@ enum AppUpdateStatus: Equatable, Sendable {
         default: false
         }
     }
+
+    /// The app menu's update item: it checks for updates until an update is ready, then installs it.
+    var menuCommand: AppUpdateMenuCommand {
+        if case .readyToRelaunch = self { .relaunchToInstall } else { .checkForUpdates }
+    }
+}
+
+enum AppUpdateMenuCommand: Equatable, Sendable {
+    case checkForUpdates
+    case relaunchToInstall
 }
 
 /// Where an update Sparkle presents already is.

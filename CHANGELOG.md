@@ -27,6 +27,8 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Changes in a filter's editor apply as you make them, so the editor no longer has Cancel, Done, or Remove buttons; press Return or Escape, or click outside it, to close it, and use the × on a filter to remove it. Untagged applies as soon as you choose it, without opening an editor.
 - Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
 - Duration, file size, and resolution filters take a minimum and a maximum, such as Duration 1–5 min or Resolution 1080p–4K. Drag either knob to the end of the slider, clear its field, type 0, or click the × beside it to leave that end open; if both ends are left open, the filter is removed when its editor closes. The file size slider starts at 1 MB. Filters saved earlier keep their minimum with no maximum. Resolution filters, grouping, and sorting treat portrait and widescreen videos like standard 16:9 ones: a portrait 1080 × 1920 video counts as 1080p, and a widescreen 3840 × 1608 video as 4K. Date filters keep a single value, labeled Within last.
+- The update button in the bottom-left corner reads Install Update, Downloading Update, or Relaunch to Install without a version number, so it fits a narrow sidebar. Point at it to see which version it installs; VoiceOver reads the version too.
+- Once an update is ready, Check for Updates… in the Tagivy menu becomes Relaunch to Install Update, so you can install it from the menu too.
 - Settings uses the standard Mac layout: a toolbar with Import, Privacy, and Updates panes, a window that fits each pane, and help text under each option. Settings reopens on the pane you viewed last, and About Tagivy opens the standard About window. Betas show their beta number, such as 1.0.18 Beta 6 (Build 24), in Settings > Updates and in the About window.
 - The View menu no longer shows Show Tab Bar, since Tagivy windows don't use tabs.
 
@@ -36,6 +38,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
 - Premiere Pro imports the XML file from Export to Editing App instead of refusing it, and DaVinci Resolve has its own item in that menu, because Resolve imports XML files only as timelines.
+- In Premiere Pro, exported clips arrive in a bin named after the exported tag or the saved file, with subtags as bins inside it, instead of loose in the project.
 - Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.
 - Command-A selects all videos in the grid, and Cut, Copy, Paste, and Select All work in text fields.
 - Undo after creating, renaming, updating, or deleting a smart filter reverts that change, instead of an earlier, unrelated change such as an import.
