@@ -47,6 +47,47 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/keyword-collection/@name").map(\.stringValue), ["海边"])
     }
 
+    func testExportingAParentTagWithItsSubtagKeepsOneCopyOfTheSubtag() throws {
+        let relations: [(String, String?)] = [("sunset", "travel"), ("ferry", "travel"), ("ferry", "coast"), ("waves", "coast")]
+        let plan = makePlan(name: "旅行", grouping: .chosenTags(["travel", "coast"]), relations: relations)
+        let parentOnly = makePlan(rootTagID: "travel", relations: relations)
+
+        XCTAssertTrue(plan.rootIsTag)
+        XCTAssertEqual(plan.root.name, "旅行")
+        XCTAssertEqual(plan.root.clipIDs, ["sunset", "ferry"])
+        XCTAssertEqual(plan.root.bins.map(\.name), ["海边"])
+        XCTAssertEqual(plan.root.bins[0].clipIDs, ["ferry", "waves"])
+        XCTAssertTrue(plan.root.bins[0].bins.isEmpty)
+        XCTAssertEqual(plan.root.clipIDs, parentOnly.root.clipIDs)
+        XCTAssertEqual(plan.root.bins.map(\.name), parentOnly.root.bins.map(\.name))
+        XCTAssertEqual(plan.root.bins.map(\.clipIDs), parentOnly.root.bins.map(\.clipIDs))
+        XCTAssertEqual(plan.clips.map(\.id), ["sunset", "ferry", "waves"])
+
+        let xmeml = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["旅行"])
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/clip").count, 0)
+        XCTAssertEqual(try xmeml.nodes(forXPath: "//bin[name='海边']").count, 1)
+        XCTAssertEqual(try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/bin/name").map(\.stringValue), ["海边"])
+        XCTAssertEqual(
+            try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/clip/name").map(\.stringValue),
+            ["sunset.mov", "ferry.mov"]
+        )
+        XCTAssertEqual(
+            try xmeml.nodes(forXPath: "/xmeml/project/children/bin/children/bin/children/clip/name").map(\.stringValue),
+            ["ferry.mov", "waves.mov"]
+        )
+        XCTAssertEqual(try xmeml.nodes(forXPath: "//clip").count, 4)
+
+        let fcpxml = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "//collection-folder/@name").map(\.stringValue), ["旅行"])
+        XCTAssertEqual(
+            try fcpxml.nodes(forXPath: "//collection-folder/keyword-collection/@name").map(\.stringValue),
+            ["旅行", "海边"]
+        )
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "/fcpxml/library/event/keyword-collection").count, 0)
+        XCTAssertEqual(try fcpxml.nodes(forXPath: "//asset-clip").count, 3)
+    }
+
     func testSeveralSubtagsShareTheBinsOfTheirParentTags() {
         let plan = makePlan(rootTagIDs: ["city", "coast", "people"], relations: [
             ("sunset", "coast"), ("ferry", "city"), ("family", "people"),
