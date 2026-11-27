@@ -11,13 +11,13 @@ Tagivy never moves or copies your videos. It tells an editing app which videos t
 
 ## Supported editing apps
 
-| App | Export menu item | What you get after importing |
-|---|---|---|
-| Final Cut Pro | Final Cut Pro (.fcpxml)… | An event with one keyword collection per tag |
-| Adobe Premiere Pro | Premiere Pro (.xml)… | Bins nested by tag |
-| DaVinci Resolve | DaVinci Resolve (.xml)… | Bins nested by tag, plus a timeline with every video |
-| JianYing (剪映) | JianYing (.fcpxml)… | A timeline with every video (JianYing has no bins) |
-| iMovie, CapCut and other apps | Drag and drop | The video files |
+| App | Export in Tagivy with | Import in the app with | What you get |
+|---|---|---|---|
+| Final Cut Pro | Final Cut Pro (.fcpxml)… | File › Import › XML… | An event with one keyword collection per tag |
+| Adobe Premiere Pro | Premiere Pro / DaVinci Resolve (.xml)… | File › Import… | Bins nested by tag |
+| DaVinci Resolve | Premiere Pro / DaVinci Resolve (.xml)… | File › Import › Media from File… | Bins nested by tag |
+| JianYing (剪映) | JianYing (.fcpxml)… | 更多 › 导入PR或FCP工程 | A timeline with every video (JianYing has no bins) |
+| iMovie, CapCut and other apps | Drag and drop | — | The video files |
 
 ## Export
 
@@ -30,29 +30,26 @@ Control-click a tag, several selected tags, a smart filter, or selected videos, 
 
 ## Final Cut Pro
 
-1. Open the library you want to use, choose **File › Import › XML…**, and select the exported .fcpxml file.
-2. The videos appear in a new event, with keyword collections under it for your tags.
+1. In Tagivy, export with **Final Cut Pro (.fcpxml)…**.
+2. In Final Cut Pro, open the library you want to use, choose **File › Import › XML…**, and select the exported .fcpxml file.
+3. The videos appear in a new event, with keyword collections under it for your tags.
 
 ## Adobe Premiere Pro
 
-1. Choose **File › Import…** (⌘I) and select the exported .xml file.
-2. A bin appears in the Project panel with your tags nested inside.
-3. If clips show as offline, Control-click them, choose **Link Media…**, and point to the folder that holds the videos.
+1. In Tagivy, export with **Premiere Pro / DaVinci Resolve (.xml)…**.
+2. In Premiere Pro, choose **File › Import…** (⌘I) and select the exported .xml file.
+3. A bin appears in the Project panel with your tags nested inside.
+4. If clips show as offline, Control-click them, choose **Link Media…**, and point to the folder that holds the videos.
 
 ## DaVinci Resolve
 
-Resolve can import the file in two ways, depending on what you need.
+Resolve uses the same .xml file as Premiere Pro.
 
-**Clips only (bins)**
+1. In Tagivy, export with **Premiere Pro / DaVinci Resolve (.xml)…**.
+2. In Resolve, choose **File › Import › Media from File…** and select the exported .xml file. Resolve imports it right away, with no further options.
+3. Bins nested by tag appear in the Media Pool.
 
-1. Choose **File › Import › Media from File…** and select the exported .xml file.
-2. Bins nested by tag appear in the Media Pool.
-
-**Clips and a timeline**
-
-1. Choose **File › Import › Timeline…** (⇧⌘I) and select the exported .xml file.
-2. In the Load XML window, keep the default settings, including **Mixed frame rate format: Final Cut Pro 7**, and click **Ok**.
-3. The bins and a timeline appear in the Media Pool.
+Don't use **File › Import › Timeline…**: Resolve can't find the audio of the clips that way.
 
 **If the Mac App Store version can't find the clips**
 
@@ -67,8 +64,9 @@ The version downloaded from Blackmagic's website doesn't have this limit.
 
 JianYing, the China edition of CapCut, imports timelines only and has no bins, so Tagivy writes a separate file with a timeline for it.
 
-1. On the JianYing home screen, choose **更多 › 导入PR或FCP工程** (More › Import PR or FCP Project) and select the exported .fcpxml file.
-2. JianYing creates a new project with all the videos placed end to end on the timeline.
+1. In Tagivy, export with **JianYing (.fcpxml)…**.
+2. On the JianYing home screen, choose **更多 › 导入PR或FCP工程** (More › Import PR or FCP Project) and select the exported .fcpxml file.
+3. JianYing creates a new project with all the videos placed end to end on the timeline.
 
 The international edition of CapCut can't import projects from other apps, so use drag and drop with it.
 

@@ -27,7 +27,6 @@ enum EditorExportMenu {
     static func formatTitle(_ format: NLEExportFormat) -> String {
         switch format {
         case .fcp7XML: String(localized: .exportEditorFormatPremiere)
-        case .resolve: String(localized: .exportEditorFormatResolve)
         case .fcpXML: String(localized: .exportEditorFormatFinalCut)
         case .capCut: String(localized: .exportEditorFormatCapCut)
         }

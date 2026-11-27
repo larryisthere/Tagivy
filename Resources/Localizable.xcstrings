@@ -5333,30 +5333,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro (.xml)…"
+            "value" : "Premiere Pro / DaVinci Resolve (.xml)…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Premiere Pro（.xml）…"
-          }
-        }
-      }
-    },
-    "export.editor.format.resolve" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DaVinci Resolve (.xml)…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DaVinci Resolve（.xml）…"
+            "value" : "Premiere Pro / DaVinci Resolve（.xml）…"
           }
         }
       }
@@ -5470,30 +5453,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In Premiere Pro, choose File › Import and select this file."
+            "value" : "In Premiere Pro, choose File › Import. In DaVinci Resolve, choose File › Import › Media from File. Then select this file."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Premiere Pro 中选择“文件 › 导入”，然后选择此文件。"
-          }
-        }
-      }
-    },
-    "export.editor.done.resolve" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In DaVinci Resolve, choose File › Import › Timeline and select this file."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 DaVinci Resolve 中选择“文件 › 导入 › 时间线”，然后选择此文件。"
+            "value" : "在 Premiere Pro 中选择“文件 › 导入”；在 DaVinci Resolve 中选择“文件 › 导入 › Media from File”。然后选择此文件。"
           }
         }
       }

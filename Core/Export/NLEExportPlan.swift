@@ -14,10 +14,9 @@ final class NLEExportMenuChoice: NSObject {
 }
 
 enum NLEExportFormat: String, CaseIterable, Sendable {
-    /// Final Cut Pro 7 XML of bins and master clips, which Premiere Pro imports into its project.
+    /// Final Cut Pro 7 XML of bins and master clips, which Premiere Pro imports into its project
+    /// and DaVinci Resolve imports with Import > Media from File.
     case fcp7XML
-    /// Final Cut Pro 7 XML with a timeline of every clip end to end, because DaVinci Resolve imports only timelines.
-    case resolve
     /// FCPXML, which Final Cut Pro and DaVinci Resolve import.
     case fcpXML
     /// FCPXML with a timeline of every clip end to end, because JianYing (剪映) imports only timelines; the international CapCut imports no projects at all.
@@ -25,7 +24,7 @@ enum NLEExportFormat: String, CaseIterable, Sendable {
 
     var fileExtension: String {
         switch self {
-        case .fcp7XML, .resolve: "xml"
+        case .fcp7XML: "xml"
         case .fcpXML, .capCut: "fcpxml"
         }
     }
@@ -37,7 +36,6 @@ enum NLEExportFormat: String, CaseIterable, Sendable {
     func data(for plan: NLEExportPlan) -> Data {
         switch self {
         case .fcp7XML: Data(FCP7XMLWriter.document(for: plan).utf8)
-        case .resolve: Data(FCP7XMLWriter.document(for: plan, includesTimeline: true).utf8)
         case .fcpXML: Data(FCPXMLWriter.document(for: plan).utf8)
         case .capCut: Data(FCPXMLWriter.document(for: plan, includesTimeline: true).utf8)
         }
