@@ -240,7 +240,7 @@ final class RecoveryReadBudgetTests: XCTestCase {
     func testSelectAllSelectsEveryVideoInTheGrid() throws {
         var reported: [String] = []
         let grid = VideoGridViewController(
-            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onOpenVideo: { _ in }, onRevealVideos: { _ in }, onCopyPaths: { _ in },
             onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
             onSelectionChanged: { reported = $0.map(\.id) }, thumbnailURL: { _ in nil },
             resolveVideos: { _ in .empty }, onAssignTagID: { _, _ in },
@@ -269,7 +269,7 @@ final class RecoveryReadBudgetTests: XCTestCase {
     func testLeavingPinnedGroupingReplacesOnlyScrollHost() throws {
         guard #available(macOS 26.0, *) else { return }
         let grid = VideoGridViewController(
-            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onOpenVideo: { _ in }, onRevealVideos: { _ in }, onCopyPaths: { _ in },
             onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
             onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, resolveVideos: { _ in .empty },
             onAssignTagID: { _, _ in },

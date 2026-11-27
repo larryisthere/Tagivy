@@ -179,7 +179,7 @@ final class FilterResultTransitionTests: XCTestCase {
         addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(180.0, forKey: "VideoGridItemWidth")
         let grid = VideoGridViewController(
-            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onOpenVideo: { _ in }, onRevealVideos: { _ in }, onCopyPaths: { _ in },
             onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
             onSelectionChanged: { _ in }, thumbnailURL: thumbnailURL, resolveVideos: { _ in .empty },
             onAssignTagID: { _, _ in },

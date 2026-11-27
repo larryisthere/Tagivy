@@ -14,6 +14,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Notices that need no answer, such as a finished export, appear at the bottom of the window and show how long until they close. Pointing at a notice keeps it open.
 - Tagivy checks for updates at launch and every hour. By default it downloads a new version in the background, then shows Relaunch to Install in the bottom-left corner of the window; if you don't relaunch, the update installs when you quit. Check for Updates in the Tagivy menu shows its progress in the same place. In Settings > Updates you can turn off automatic checks or background downloads, or choose to receive beta versions. Checking for updates is the only network access, and it goes through the updater rather than the app itself.
 - If you run a beta, Receive beta versions in Settings > Updates is turned on for you, and stays on after an update to a release until you turn it off.
+- Keyboard shortcuts for common commands, each listed in the menu bar. A new Video menu acts on the selected videos: Open (Command-O, or Command-Down Arrow in the grid), Quick Look (Command-Y), Show in Finder (Shift-Command-R), Copy Pathname (Option-Command-C, one path per line for several videos), Add Tags (Command-K, which opens the Inspector and puts the cursor in its tag field), Export to Editing App, and Remove from Library (Command-Delete). In the View menu, Command-3 and Command-4 show Untagged and Unavailable Videos; Zoom In (Command-+), Zoom Out (Command-−), and Actual Size (Command-0) change the thumbnail size; Control-Command-S and Option-Command-I show or hide the sidebar and Inspector; and the menu has Hide Toolbar and Enter Full Screen. In the File menu, Scan for New Videos is Command-R and Save as Smart Collection… is Command-S. The Window menu adds Zoom and Bring All to Front. Press Return on a selected tag or smart filter in the sidebar to rename it.
 
 ### Changed
 
@@ -31,6 +32,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Once an update is ready, Check for Updates… in the Tagivy menu becomes Relaunch to Install Update, so you can install it from the menu too.
 - Settings uses the standard Mac layout: a toolbar with Import, Privacy, and Updates panes, a window that fits each pane, and help text under each option. Settings reopens on the pane you viewed last, and About Tagivy opens the standard About window. Betas show their beta number, such as 1.0.18 Beta 6 (Build 24), in Settings > Updates and in the About window.
 - The View menu no longer shows Show Tab Bar, since Tagivy windows don't use tabs.
+- In the grid's shortcut menu, Open, Show in Finder, and Copy Pathname (formerly Copy Full Path) act on all selected videos, the same as in the Video menu.
 
 ### Fixed
 

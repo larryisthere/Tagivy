@@ -93,7 +93,9 @@ final class SidebarFilterNode {
         switch filter {
         case .all: "⌘1"
         case .recent: "⌘2"
-        case .untagged, .unavailable, .tag, .tags: nil
+        case .untagged: "⌘3"
+        case .unavailable: "⌘4"
+        case .tag, .tags: nil
         }
     }
 
