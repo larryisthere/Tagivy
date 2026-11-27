@@ -686,6 +686,13 @@ final class LibraryAccessCoordinator {
                     _ = await previousCleanupTask?.value
                     guard let self else { return }
                     do {
+                        let redundantSourceIDs = try await database.removeRedundantSourcesWithoutAccess()
+                        for sourceID in redundantSourceIDs { disconnectSource(sourceID) }
+                        if redundantSourceIDs.isEmpty == false {
+                            AppLogger.library.info(
+                                "Removed sources without access data covered by other sources: \(redundantSourceIDs.count, privacy: .public)"
+                            )
+                        }
                         let removedSourceIDs = try await database.removeUnreferencedSourceAuthorizations()
                         for sourceID in removedSourceIDs { disconnectSource(sourceID) }
                         if let mediaService {
@@ -707,6 +714,8 @@ final class LibraryAccessCoordinator {
                     sourceDisplayNames[source.id] = source.displayName
                     sourceScansDescendants[source.id] = source.scansDescendants
                     sourceScanPolicyExplicit[source.id] = source.scanPolicyExplicit
+                    // Without access data the folder cannot be opened; its videos stay listed for recovery.
+                    guard source.rootBookmarkData.isEmpty == false else { continue }
                     do {
                         var isStale = false
                         let url = try URL(
@@ -2897,7 +2906,7 @@ final class LibraryAccessCoordinator {
 
     private func refreshSourceURLsFromBookmarks() async {
         let bookmarks = sourceBookmarks
-        for (sourceID, bookmark) in bookmarks {
+        for (sourceID, bookmark) in bookmarks where bookmark.isEmpty == false {
             var phase = "resolve"
             do {
                 var isStale = false

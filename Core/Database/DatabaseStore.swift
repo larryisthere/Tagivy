@@ -274,6 +274,56 @@ actor DatabaseStore {
         return records
     }
 
+    /// Removes sources stored without access data whose every video is also recorded in an available
+    /// location of a source that has access data. Such a source can never be opened, and its locations
+    /// only duplicate ones the library already reaches. Sources that are the only record of a video stay,
+    /// so the video remains listed for recovery.
+    func removeRedundantSourcesWithoutAccess() throws -> [String] {
+        try prepareIfNeeded()
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let lookup = try prepare(
+                """
+                SELECT id FROM source_authorizations AS source
+                WHERE length(source.root_bookmark_data) = 0
+                  AND NOT EXISTS (
+                    SELECT 1 FROM video_locations AS location
+                    WHERE location.source_id = source.id
+                      AND NOT EXISTS (
+                        SELECT 1 FROM video_locations AS other
+                        JOIN source_authorizations AS other_source ON other_source.id = other.source_id
+                        WHERE other.video_id = location.video_id
+                          AND other.source_id <> source.id
+                          AND other.is_available = 1
+                          AND length(other_source.root_bookmark_data) > 0
+                      )
+                  )
+                """
+            )
+            var sourceIDs: [String] = []
+            while sqlite3_step(lookup) == SQLITE_ROW {
+                if let id = text(at: 0, in: lookup) { sourceIDs.append(id) }
+            }
+            sqlite3_finalize(lookup)
+            let delete = try prepare("DELETE FROM source_authorizations WHERE id = ?")
+            for id in sourceIDs {
+                sqlite3_reset(delete)
+                sqlite3_clear_bindings(delete)
+                bindText(id, to: 1, in: delete)
+                guard sqlite3_step(delete) == SQLITE_DONE else {
+                    sqlite3_finalize(delete)
+                    throw DatabaseError.statementFailed
+                }
+            }
+            sqlite3_finalize(delete)
+            try execute("COMMIT")
+            return sourceIDs
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
     func removeUnreferencedSourceAuthorizations(candidateIDs: [String]? = nil) throws -> [String] {
         try prepareIfNeeded()
         try execute("BEGIN IMMEDIATE")
