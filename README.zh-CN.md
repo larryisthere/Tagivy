@@ -100,10 +100,10 @@ Tagivy 面向在本地保存视频，并希望灵活整理视频且保持现有�
 
 | 软件 | 方式 |
 |---|---|
-| Final Cut Pro | 导出 FCPXML：标签变成关键词 |
-| Adobe Premiere Pro | 导出 XML：标签变成素材箱 |
-| DaVinci Resolve | 导出和 Premiere Pro 相同的 XML，用“导入 › Media from File”：标签变成素材箱 |
-| 剪映 | 导出时间线 |
+| Final Cut Pro | 用 Final Cut Pro（.fcpxml）导出，再选“文件 › 导入 › XML”：标签变成关键词 |
+| Adobe Premiere Pro | 用 Premiere Pro / DaVinci Resolve（.xml）导出，再选“文件 › 导入”：标签变成素材箱 |
+| DaVinci Resolve | 用 Premiere Pro / DaVinci Resolve（.xml）导出，再选“文件 › 导入 › Media from File”（Mixed frame rate format 选 Final Cut Pro 7）：标签变成素材箱 |
+| 剪映 | 用剪映（.fcpxml）导出，再选“更多 › 导入PR或FCP工程”：得到一条时间线 |
 | iMovie、CapCut 国际版及其他软件 | 拖拽 |
 
 具体步骤见[在剪辑软件里使用 Tagivy 的视频](docs/editing-apps.zh-CN.md)。

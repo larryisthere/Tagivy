@@ -11,13 +11,13 @@ Tagivy 不移动、不复制你的视频，它只告诉剪辑软件“用哪些�
 
 ## 支持的剪辑软件
 
-| 软件 | 导出菜单项 | 导入后得到 |
-|---|---|---|
-| Final Cut Pro | Final Cut Pro（.fcpxml）… | 事件 + 关键词精选，每个标签一个关键词 |
-| Adobe Premiere Pro | Premiere Pro / DaVinci Resolve（.xml）… | 按标签分层的素材箱 |
-| DaVinci Resolve | Premiere Pro / DaVinci Resolve（.xml）… | 按标签分层的素材箱 |
-| 剪映 | 剪映（.fcpxml）… | 一条包含全部视频的时间线（剪映不支持素材箱） |
-| iMovie、CapCut 国际版及其他软件 | 拖拽 | 视频文件 |
+| 软件 | 在 Tagivy 中导出 | 在软件中导入 | 导入后得到 |
+|---|---|---|---|
+| Final Cut Pro | Final Cut Pro（.fcpxml）… | 文件 › 导入 › XML… | 事件 + 关键词精选，每个标签一个关键词 |
+| Adobe Premiere Pro | Premiere Pro / DaVinci Resolve（.xml）… | 文件 › 导入… | 按标签分层的素材箱 |
+| DaVinci Resolve | Premiere Pro / DaVinci Resolve（.xml）… | 文件 › 导入 › Media from File… | 按标签分层的素材箱 |
+| 剪映 | 剪映（.fcpxml）… | 更多 › 导入PR或FCP工程 | 一条包含全部视频的时间线（剪映不支持素材箱） |
+| iMovie、CapCut 国际版及其他软件 | 拖拽 | — | 视频文件 |
 
 ## 导出
 
@@ -30,21 +30,25 @@ Tagivy 不移动、不复制你的视频，它只告诉剪辑软件“用哪些�
 
 ## Final Cut Pro
 
-1. 在 Final Cut Pro 里打开要导入的资源库，选 **文件 › 导入 › XML…**，选择导出的 .fcpxml 文件。
-2. 视频会出现在一个新事件里，事件下的关键词精选对应你的标签。
+1. 在 Tagivy 中用 **Final Cut Pro（.fcpxml）…** 导出。
+2. 在 Final Cut Pro 里打开要导入的资源库，选 **文件 › 导入 › XML…**，选择导出的 .fcpxml 文件。
+3. 视频会出现在一个新事件里，事件下的关键词精选对应你的标签。
 
 ## Adobe Premiere Pro
 
-1. 在 Premiere Pro 里选 **文件 › 导入…**（⌘I），选择导出的 .xml 文件。
-2. 项目面板里会出现一个素材箱，里面按标签分层。
-3. 如果片段显示为离线，右键选 **链接媒体…**，指向视频所在的文件夹。
+1. 在 Tagivy 中用 **Premiere Pro / DaVinci Resolve（.xml）…** 导出。
+2. 在 Premiere Pro 里选 **文件 › 导入…**（⌘I），选择导出的 .xml 文件。
+3. 项目面板里会出现一个素材箱，里面按标签分层。
+4. 如果片段显示为离线，右键选 **链接媒体…**，指向视频所在的文件夹。
 
 ## DaVinci Resolve
 
 Resolve 和 Premiere Pro 用同一个 .xml 文件。
 
-1. 选 **文件 › 导入 › Media from File…**，选择导出的 .xml 文件。
-2. 媒体池里会出现按标签分层的素材箱。
+1. 在 Tagivy 中用 **Premiere Pro / DaVinci Resolve（.xml）…** 导出。
+2. 在 Resolve 里选 **文件 › 导入 › Media from File…**，选择导出的 .xml 文件。如果要求选择文件类型，选 FCP 7 XML。
+3. 如果出现导入选项，**Mixed frame rate format** 选 **Final Cut Pro 7**，点 **Ok**。
+4. 媒体池里会出现按标签分层的素材箱。
 
 不要用 **文件 › 导入 › 时间线…**：这样导入时 Resolve 找不到片段的音频。
 
@@ -61,8 +65,9 @@ App Store 版 Resolve 只能读取你授权过的文件夹，所以第一次导�
 
 剪映只能导入时间线，不支持素材箱，所以 Tagivy 为剪映单独生成一个带时间线的文件。
 
-1. 在剪映首页选 **更多 › 导入PR或FCP工程**，选择导出的 .fcpxml 文件。
-2. 剪映会新建一个草稿，所有视频按顺序首尾相接排在时间线上。
+1. 在 Tagivy 中用 **剪映（.fcpxml）…** 导出。
+2. 在剪映首页选 **更多 › 导入PR或FCP工程**，选择导出的 .fcpxml 文件。
+3. 剪映会新建一个草稿，所有视频按顺序首尾相接排在时间线上。
 
 CapCut 国际版不能导入其他软件的工程，请用拖拽。
 
