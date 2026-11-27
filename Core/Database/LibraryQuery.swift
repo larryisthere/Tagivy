@@ -94,10 +94,6 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case .untagged: .untagged
         case let .addedWithinDays(days): .addedWithinDays(days)
         case let .createdWithinDays(days): .createdWithinDays(days)
-        // A range with only a minimum keeps the earlier shape, so builds before ranges still read it.
-        case let .durationRange(low?, nil): .durationAtLeast(low)
-        case let .fileSizeRange(low?, nil): .fileSizeAtLeast(low)
-        case let .resolutionWidthRange(low?, nil): .resolutionWidthAtLeast(low)
         case let .durationRange(low, high): .durationRange(min: low, max: high)
         case let .fileSizeRange(low, high): .fileSizeRange(min: low, max: high)
         case let .resolutionWidthRange(low, high): .resolutionWidthRange(min: low, max: high)

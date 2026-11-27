@@ -2424,14 +2424,10 @@ actor DatabaseStore {
                 let id = text(at: 0, in: statement),
                 let storedLibraryID = text(at: 1, in: statement),
                 let name = text(at: 2, in: statement),
-                let ruleJSON = text(at: 3, in: statement)
+                let ruleJSON = text(at: 3, in: statement),
+                let rule = decodedLibraryQueryRule(ruleJSON)
             else {
                 throw DatabaseError.statementFailed
-            }
-            // A rule written by a newer build may not decode here; the other smart filters still load.
-            guard let rule = decodedLibraryQueryRule(ruleJSON) else {
-                AppLogger.database.error("Skipped a smart filter whose rule could not be read")
-                continue
             }
             records.append(SmartCollectionRecord(
                 id: id,
