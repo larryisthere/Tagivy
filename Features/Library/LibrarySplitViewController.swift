@@ -73,6 +73,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var selectedSmartCollection: SmartCollectionRecord?
     private var pendingNavigationTarget: NavigationTarget?
     private var isPresentingSmartCollectionAlert = false
+    private var dropsConditionsOfRemovedSmartCollection = false
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
     private var filterQueryGenerations = FilterQueryGenerations()
@@ -583,7 +584,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
                 selectedSmartCollection = updated
                 if updated.name != selected.name { setContextTitle(updated.name, tagID: nil) }
             } else {
-                // Gone, for example by undoing its creation: show All Videos and keep its conditions unsaved.
+                // Gone, for example by undoing its creation: show All Videos; an undo keeps its conditions
+                // unsaved, a delete drops them.
+                if dropsConditionsOfRemovedSmartCollection {
+                    currentRule = .standard
+                    setTemporaryFilenameSearch("", applyQuery: false)
+                }
+                dropsConditionsOfRemovedSmartCollection = false
                 selectedSmartCollection = nil
                 currentBaseFilter = .all
                 updateContext(for: .all)
@@ -1051,13 +1058,11 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         alert.addButton(withTitle: String(localized: .actionCancel))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
-            let wasSelected = selectedSmartCollection?.id == collection.id
-            onDeleteSmartCollection(collection.id) { [weak self] succeeded in
-                // The refreshed list already moved to All Videos; deleting also drops the conditions.
-                guard let self, succeeded, wasSelected, selectedSmartCollection == nil else { return }
-                currentRule = .standard
-                refreshRuleBar()
-                applyCurrentQuery()
+            if selectedSmartCollection?.id == collection.id {
+                dropsConditionsOfRemovedSmartCollection = true
+            }
+            onDeleteSmartCollection(collection.id) { [weak self] _ in
+                self?.dropsConditionsOfRemovedSmartCollection = false
             }
         }
     }

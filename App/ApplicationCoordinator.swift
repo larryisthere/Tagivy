@@ -921,9 +921,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
     }
 }
 
-@MainActor
 /// Cut, Copy, Paste and Select All go to whatever has focus: text fields edit text, and the video grid
 /// selects every video it shows. Without these items their shortcuts do nothing anywhere in the app.
+@MainActor
 enum StandardEditMenu {
     static func items() -> [NSMenuItem] {
         [
@@ -937,6 +937,7 @@ enum StandardEditMenu {
     }
 }
 
+@MainActor
 enum LibraryUndoRouting {
     static func perform(editingText: Bool, textUndo: UndoManager?, isLibraryKey: Bool, catalogUndo: () -> Void) {
         if editingText {
