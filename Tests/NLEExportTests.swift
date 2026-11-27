@@ -107,7 +107,6 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "//file/media/audio/channelcount").first?.stringValue, "1")
     }
 
-    /// Premiere Pro refuses master clips that hold their file directly instead of in tracks.
     /// Premiere Pro puts a project's children at the top of its project, so a tag without subtags
     /// still needs its own bin around its clips.
     func testFCP7XMLKeepsASingleTagsClipsInItsBin() throws {
@@ -119,6 +118,7 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/children/clip/name").map(\.stringValue), ["sunset.mov", "waves.mov"])
     }
 
+    /// Premiere Pro refuses master clips that hold their file directly instead of in tracks.
     func testFCP7XMLWritesMasterClipsTheWayPremiereDoes() throws {
         let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("ferry", "coast"), ("ferry", "city"), ("plain", nil)])
         let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
