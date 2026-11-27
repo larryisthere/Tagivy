@@ -468,7 +468,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             return String(localized: "filter.addedDays", defaultValue: "Added in last \(days) days")
         case let .createdWithinDays(days):
             return String(localized: "filter.createdDays", defaultValue: "Created in last \(days) days")
-        case .durationRange, .fileSizeRange, .resolutionWidthRange:
+        case .durationRange, .fileSizeRange, .resolutionShortEdgeRange:
             return NumericConditionKind.label(for: condition) ?? ""
         }
     }
@@ -737,7 +737,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
         case "fileSize":
             condition = NumericConditionKind.fileSize.defaultCondition
         case "resolution":
-            condition = NumericConditionKind.resolutionWidth.defaultCondition
+            condition = NumericConditionKind.resolution.defaultCondition
         default:
             return
         }
@@ -1454,7 +1454,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .untagged:
             break
         case .addedWithinDays, .createdWithinDays, .durationRange, .fileSizeRange,
-             .resolutionWidthRange:
+             .resolutionShortEdgeRange:
             addNumericEditor(for: condition, to: stack)
         }
     }
@@ -1564,7 +1564,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .createdWithinDays: "created"
         case .durationRange: "duration"
         case .fileSizeRange: "fileSize"
-        case .resolutionWidthRange: "resolution"
+        case .resolutionShortEdgeRange: "resolution"
         }
     }
 
@@ -1734,7 +1734,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case "created": condition = NumericConditionKind.createdWithinDays.defaultCondition
         case "duration": condition = NumericConditionKind.duration.defaultCondition
         case "fileSize": condition = NumericConditionKind.fileSize.defaultCondition
-        case "resolution": condition = NumericConditionKind.resolutionWidth.defaultCondition
+        case "resolution": condition = NumericConditionKind.resolution.defaultCondition
         default: return
         }
         setEditedCondition(condition)

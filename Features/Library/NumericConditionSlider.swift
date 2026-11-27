@@ -9,7 +9,7 @@ enum NumericConditionKind: Equatable, Sendable {
     case createdWithinDays
     case duration
     case fileSize
-    case resolutionWidth
+    case resolution
 
     init?(_ condition: LibraryFilterCondition) {
         switch condition {
@@ -17,7 +17,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: self = .createdWithinDays
         case .durationRange: self = .duration
         case .fileSizeRange: self = .fileSize
-        case .resolutionWidthRange: self = .resolutionWidth
+        case .resolutionShortEdgeRange: self = .resolution
         case .tags, .untagged: return nil
         }
     }
@@ -25,7 +25,7 @@ enum NumericConditionKind: Equatable, Sendable {
     var isRange: Bool {
         switch self {
         case .addedWithinDays, .createdWithinDays: false
-        case .duration, .fileSize, .resolutionWidth: true
+        case .duration, .fileSize, .resolution: true
         }
     }
 
@@ -33,7 +33,7 @@ enum NumericConditionKind: Equatable, Sendable {
     static func value(of condition: LibraryFilterCondition) -> Double? {
         switch condition {
         case let .addedWithinDays(days), let .createdWithinDays(days): Double(days)
-        case .durationRange, .fileSizeRange, .resolutionWidthRange, .tags, .untagged: nil
+        case .durationRange, .fileSizeRange, .resolutionShortEdgeRange, .tags, .untagged: nil
         }
     }
 
@@ -42,7 +42,7 @@ enum NumericConditionKind: Equatable, Sendable {
         switch condition {
         case let .durationRange(low, high): (low, high)
         case let .fileSizeRange(low, high): (low.map(Double.init), high.map(Double.init))
-        case let .resolutionWidthRange(low, high): (low.map(Double.init), high.map(Double.init))
+        case let .resolutionShortEdgeRange(low, high): (low.map(Double.init), high.map(Double.init))
         case .addedWithinDays, .createdWithinDays, .tags, .untagged: nil
         }
     }
@@ -51,7 +51,7 @@ enum NumericConditionKind: Equatable, Sendable {
         switch self {
         case .addedWithinDays: .addedWithinDays(Int(value.rounded()))
         case .createdWithinDays: .createdWithinDays(Int(value.rounded()))
-        case .duration, .fileSize, .resolutionWidth: condition(min: value, max: nil)
+        case .duration, .fileSize, .resolution: condition(min: value, max: nil)
         }
     }
 
@@ -61,8 +61,8 @@ enum NumericConditionKind: Equatable, Sendable {
         case .duration: .durationRange(min: low?.rounded(), max: high?.rounded()).normalized()
         case .fileSize:
             .fileSizeRange(min: low.map { Int64($0.rounded()) }, max: high.map { Int64($0.rounded()) }).normalized()
-        case .resolutionWidth:
-            .resolutionWidthRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
+        case .resolution:
+            .resolutionShortEdgeRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
         }
     }
 
@@ -72,7 +72,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: .createdWithinDays(30)
         case .duration: .durationRange(min: 60, max: nil)
         case .fileSize: .fileSizeRange(min: 1_000_000_000, max: nil)
-        case .resolutionWidth: .resolutionWidthRange(min: 3840, max: nil)
+        case .resolution: .resolutionShortEdgeRange(min: 2160, max: nil)
         }
     }
 
@@ -121,17 +121,22 @@ enum NumericConditionKind: Equatable, Sendable {
                 mapping: .logarithmic(1_000_000...100_000_000_000),
                 detents: [100_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000]
             )
-        case .resolutionWidth:
+        case .resolution:
             NumericConditionScale(
                 mapping: .stepped,
-                detents: Self.resolutionSteps.map { Double($0.width) }
+                detents: Self.resolutionSteps.map { Double($0.shortEdge) }
             )
         }
     }
 
-    static let resolutionSteps: [(width: Int, name: String)] = [
-        (1280, "720p"), (1920, "1080p"), (2560, "1440p"), (3840, "4K"), (7680, "8K"),
+    /// Resolution tiers by the frame's short edge, so portrait and landscape videos share a tier.
+    static let resolutionSteps: [(shortEdge: Int, name: String)] = [
+        (720, "720p"), (1080, "1080p"), (1440, "1440p"), (2160, "4K"), (4320, "8K"),
     ]
+
+    static func resolutionTier(width: Int, height: Int) -> Int {
+        min(width, height)
+    }
 
     // MARK: Display units
 
@@ -165,7 +170,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .addedWithinDays, .createdWithinDays: [Self.dayUnit]
         case .duration: [Self.secondUnit, Self.minuteUnit, Self.hourUnit]
         case .fileSize: Self.byteUnits
-        case .resolutionWidth: []
+        case .resolution: []
         }
     }
 
@@ -178,7 +183,7 @@ enum NumericConditionKind: Equatable, Sendable {
     /// Rounds to what the field can show, so dragging lands on readable values
     /// (37 min, 1.4 GB) and the field never displays a different value than is saved.
     func rounded(_ value: Double) -> Double {
-        if case .resolutionWidth = self { return scale.nearestDetent(to: value) }
+        if case .resolution = self { return scale.nearestDetent(to: value) }
         let value = min(max(value, valueBounds.lowerBound), valueBounds.upperBound)
         guard let unit = displayUnit(for: value) else { return value }
         let number = value / unit.factor
@@ -193,14 +198,14 @@ enum NumericConditionKind: Equatable, Sendable {
         case .addedWithinDays, .createdWithinDays: 1...36_500
         case .duration: 1...10_000_000
         case .fileSize: 1_000_000...1_000_000_000_000_000
-        case .resolutionWidth: 1...100_000
+        case .resolution: 1...100_000
         }
     }
 
     func formatted(_ value: Double) -> String {
-        if case .resolutionWidth = self {
-            let width = Int(value.rounded())
-            return Self.resolutionSteps.first { $0.width == width }?.name ?? "\(width) px"
+        if case .resolution = self {
+            let shortEdge = Int(value.rounded())
+            return Self.resolutionSteps.first { $0.shortEdge == shortEdge }?.name ?? "\(shortEdge)p"
         }
         guard let unit = displayUnit(for: value) else { return "\(value)" }
         return unit.format(Self.numberText(value / unit.factor))
@@ -220,15 +225,20 @@ enum NumericConditionKind: Equatable, Sendable {
     /// the unit the field currently shows. Returns nil for text that is not a positive value.
     func parse(_ text: String, currentValue: Double) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if case .resolutionWidth = self {
+        if case .resolution = self {
             if let step = Self.resolutionSteps.first(where: { $0.name.lowercased() == trimmed }) {
-                return Double(step.width)
+                return Double(step.shortEdge)
             }
-            if trimmed == "2k" { return 2560 }
+            if trimmed == "2k" { return 1440 }
             let digits = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789").inverted)
             guard let number = Double(digits), valueBounds.contains(number) else { return nil }
-            let byHeight = Self.resolutionSteps.first { $0.name == "\(Int(number))p" }
-            return byHeight.map { Double($0.width) } ?? scale.nearestDetent(to: number)
+            if Self.resolutionSteps.contains(where: { Double($0.shortEdge) == number }) { return number }
+            // A familiar 16:9 width such as 1920 or 3840 means its tier.
+            let byWidth = LibraryFilterCondition.shortEdge(forLegacyWidth: Int(number))
+            if Self.resolutionSteps.contains(where: { $0.shortEdge == byWidth }), Int(number) != byWidth {
+                return Double(byWidth)
+            }
+            return scale.nearestDetent(to: number)
         }
         let numberPart = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
         let unitPart = trimmed.dropFirst(numberPart.count).trimmingCharacters(in: .whitespaces)

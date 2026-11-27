@@ -19,13 +19,13 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
     case createdWithinDays(Int)
     case durationRange(min: Double?, max: Double?)
     case fileSizeRange(min: Int64?, max: Int64?)
-    case resolutionWidthRange(min: Int?, max: Int?)
+    case resolutionShortEdgeRange(min: Int?, max: Int?)
 
     /// A range with both ends open, possible only while its editor is open; it filters nothing
     /// and is dropped when the editor closes.
     var isUnboundedRange: Bool {
         switch self {
-        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionWidthRange(nil, nil): true
+        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionShortEdgeRange(nil, nil): true
         default: false
         }
     }
@@ -39,9 +39,9 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .fileSizeRange(low, high):
             let bounds = Self.ordered(low, high)
             return .fileSizeRange(min: bounds.min, max: bounds.max)
-        case let .resolutionWidthRange(low, high):
+        case let .resolutionShortEdgeRange(low, high):
             let bounds = Self.ordered(low, high)
-            return .resolutionWidthRange(min: bounds.min, max: bounds.max)
+            return .resolutionShortEdgeRange(min: bounds.min, max: bounds.max)
         case .tags, .untagged, .addedWithinDays, .createdWithinDays:
             return self
         }
@@ -61,10 +61,16 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case createdWithinDays(Int)
         case durationRange(min: Double?, max: Double?)
         case fileSizeRange(min: Int64?, max: Int64?)
-        case resolutionWidthRange(min: Int?, max: Int?)
+        case resolutionShortEdgeRange(min: Int?, max: Int?)
         case durationAtLeast(Double)
         case fileSizeAtLeast(Int64)
         case resolutionWidthAtLeast(Int)
+    }
+
+    /// Earlier builds filtered resolution on a 16:9 width; read those as the matching short edge.
+    static func shortEdge(forLegacyWidth width: Int) -> Int {
+        let tiers = [1280: 720, 1920: 1080, 2560: 1440, 3840: 2160, 7680: 4320]
+        return tiers[width] ?? Int((Double(width) * 9 / 16).rounded())
     }
 
     init(from decoder: Decoder) throws {
@@ -75,10 +81,11 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .createdWithinDays(days): self = .createdWithinDays(days)
         case let .durationRange(low, high): self = .durationRange(min: low, max: high)
         case let .fileSizeRange(low, high): self = .fileSizeRange(min: low, max: high)
-        case let .resolutionWidthRange(low, high): self = .resolutionWidthRange(min: low, max: high)
+        case let .resolutionShortEdgeRange(low, high): self = .resolutionShortEdgeRange(min: low, max: high)
         case let .durationAtLeast(seconds): self = .durationRange(min: seconds, max: nil)
         case let .fileSizeAtLeast(bytes): self = .fileSizeRange(min: bytes, max: nil)
-        case let .resolutionWidthAtLeast(width): self = .resolutionWidthRange(min: width, max: nil)
+        case let .resolutionWidthAtLeast(width):
+            self = .resolutionShortEdgeRange(min: Self.shortEdge(forLegacyWidth: width), max: nil)
         }
         if isUnboundedRange {
             throw DecodingError.dataCorrupted(
@@ -96,7 +103,7 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .createdWithinDays(days): .createdWithinDays(days)
         case let .durationRange(low, high): .durationRange(min: low, max: high)
         case let .fileSizeRange(low, high): .fileSizeRange(min: low, max: high)
-        case let .resolutionWidthRange(low, high): .resolutionWidthRange(min: low, max: high)
+        case let .resolutionShortEdgeRange(low, high): .resolutionShortEdgeRange(min: low, max: high)
         }
         try stored.encode(to: encoder)
     }
