@@ -73,6 +73,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var selectedSmartCollection: SmartCollectionRecord?
     private var pendingNavigationTarget: NavigationTarget?
     private var isPresentingSmartCollectionAlert = false
+    private var dropsConditionsOfRemovedSmartCollection = false
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
     private var filterQueryGenerations = FilterQueryGenerations()
@@ -571,12 +572,36 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func setSmartCollections(_ collections: [SmartCollectionRecord]) {
         smartCollections = collections
-        if let selectedID = selectedSmartCollection?.id,
-           let updated = collections.first(where: { $0.id == selectedID }) {
-            selectedSmartCollection = updated
+        var needsQuery = false
+        if let selected = selectedSmartCollection {
+            if let updated = collections.first(where: { $0.id == selected.id }) {
+                // An undo can put back the saved rule; follow it unless the filter has unsaved edits.
+                if currentRule.normalized() == selected.rule.normalized(),
+                   updated.rule.normalized() != selected.rule.normalized() {
+                    currentRule = updated.rule
+                    needsQuery = true
+                }
+                selectedSmartCollection = updated
+                if updated.name != selected.name { setContextTitle(updated.name, tagID: nil) }
+            } else {
+                // Gone, for example by undoing its creation: show All Videos; an undo keeps its conditions
+                // unsaved, a delete drops them.
+                if dropsConditionsOfRemovedSmartCollection {
+                    currentRule = .standard
+                    setTemporaryFilenameSearch("", applyQuery: false)
+                }
+                dropsConditionsOfRemovedSmartCollection = false
+                selectedSmartCollection = nil
+                currentBaseFilter = .all
+                updateContext(for: .all)
+                updateInspectorBrowsingContext()
+                needsQuery = true
+            }
         }
         sidebarViewController.setSmartCollections(collections)
+        if selectedSmartCollection == nil, needsQuery { sidebarViewController.selectFilter(.all) }
         refreshRuleBar()
+        if needsQuery { applyCurrentQuery() }
     }
 
     private var smartCollectionIsDirty: Bool {
@@ -1033,18 +1058,11 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         alert.addButton(withTitle: String(localized: .actionCancel))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
-            onDeleteSmartCollection(collection.id) { [weak self] succeeded in
-                guard let self, succeeded else { return }
-                if selectedSmartCollection?.id == collection.id {
-                    selectedSmartCollection = nil
-                    currentBaseFilter = .all
-                    currentRule = .standard
-                    sidebarViewController.selectFilter(.all)
-                    updateContext(for: .all)
-                    updateInspectorBrowsingContext()
-                    refreshRuleBar()
-                    applyCurrentQuery()
-                }
+            if selectedSmartCollection?.id == collection.id {
+                dropsConditionsOfRemovedSmartCollection = true
+            }
+            onDeleteSmartCollection(collection.id) { [weak self] _ in
+                self?.dropsConditionsOfRemovedSmartCollection = false
             }
         }
     }

@@ -213,6 +213,13 @@ struct TagMutationUndoID: Equatable {
 private enum LastUndoMutation {
     case tag(TagMutationUndoID)
     case videoRemoval(VideoRemovalSnapshot)
+    case smartCollection
+}
+
+/// What undoing a smart filter change writes back.
+private enum SmartCollectionRestore: Sendable {
+    case remove(id: String)
+    case save(SmartCollectionRecord)
 }
 
 private enum RelinkConfirmationChoice {
@@ -418,6 +425,7 @@ final class LibraryAccessCoordinator {
     private var smartCollectionTask: Task<Void, Never>?
     private var tagMutationTask: Task<Void, Never>?
     private var pendingTagMutationCount = 0
+    private var pendingSmartCollectionMutationCount = 0
     private var tagStateRevision = 0
     private var tags: [TagRecord] = []
     private var smartCollections: [SmartCollectionRecord] = []
@@ -450,7 +458,7 @@ final class LibraryAccessCoordinator {
     var onUndoHistoryChanged: (() -> Void)?
 
     var canUndoLastMutation: Bool {
-        pendingTagMutationCount == 0 && undoManager.canUndo
+        pendingTagMutationCount == 0 && pendingSmartCollectionMutationCount == 0 && undoManager.canUndo
     }
 
     var canUndoVideoRemoval: Bool {
@@ -1548,18 +1556,20 @@ final class LibraryAccessCoordinator {
     ) {
         let now = Date()
         let nextOrder = (smartCollections.map(\.sortOrder).max() ?? -1) + 1
-        persistSmartCollection(
-            SmartCollectionRecord(
-                id: UUID().uuidString,
-                libraryID: LibraryRecord.primaryID,
-                name: name,
-                rule: rule.normalized(),
-                sortOrder: nextOrder,
-                createdAt: now,
-                updatedAt: now
-            ),
-            completion: completion
+        let record = SmartCollectionRecord(
+            id: UUID().uuidString,
+            libraryID: LibraryRecord.primaryID,
+            name: name,
+            rule: rule.normalized(),
+            sortOrder: nextOrder,
+            createdAt: now,
+            updatedAt: now
         )
+        mutateSmartCollection(restore: .remove(id: record.id)) { database in
+            try await database.saveSmartCollection(record)
+        } completion: { [weak self] succeeded in
+            completion(succeeded ? self?.smartCollections.first(where: { $0.id == record.id }) : nil)
+        }
     }
 
     func updateSmartCollection(
@@ -1568,59 +1578,97 @@ final class LibraryAccessCoordinator {
         rule: LibraryQueryRule? = nil,
         completion: @escaping (SmartCollectionRecord?) -> Void
     ) {
-        guard var record = smartCollections.first(where: { $0.id == id }) else {
+        guard let previous = smartCollections.first(where: { $0.id == id }) else {
             completion(nil)
             return
         }
+        var record = previous
         if let name { record.name = name }
         if let rule { record.rule = rule.normalized() }
         record.updatedAt = Date()
-        persistSmartCollection(record, completion: completion)
-    }
-
-    func deleteSmartCollection(id: String, completion: @escaping (Bool) -> Void) {
-        let previousTask = smartCollectionTask
-        smartCollectionTask = Task { [weak self] in
-            _ = await previousTask?.value
-            guard let self else {
-                completion(false)
-                return
-            }
-            do {
-                try await database.deleteSmartCollection(id: id)
-                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
-                completion(true)
-            } catch {
-                AppLogger.database.error(
-                    "Smart collection deletion failed with category: \(String(describing: type(of: error)), privacy: .public)"
-                )
-                onOperationError?(String(localized: .errorDatabaseOperation))
-                completion(false)
-            }
+        let updated = record
+        mutateSmartCollection(restore: .save(previous)) { database in
+            try await database.saveSmartCollection(updated)
+        } completion: { [weak self] succeeded in
+            completion(succeeded ? self?.smartCollections.first(where: { $0.id == id }) : nil)
         }
     }
 
-    private func persistSmartCollection(
-        _ record: SmartCollectionRecord,
-        completion: @escaping (SmartCollectionRecord?) -> Void
+    func deleteSmartCollection(id: String, completion: @escaping (Bool) -> Void) {
+        let restore = smartCollections.first(where: { $0.id == id }).map(SmartCollectionRestore.save)
+        mutateSmartCollection(restore: restore) { database in
+            try await database.deleteSmartCollection(id: id)
+        } completion: { succeeded in
+            completion(succeeded)
+        }
+    }
+
+    /// Smart filter changes are undoable like tag changes: each replaces the previous undo, so ⌘Z after
+    /// one reverts it and never reaches an earlier, unrelated change.
+    private func mutateSmartCollection(
+        restore: SmartCollectionRestore?,
+        operation: @escaping @Sendable (DatabaseStore) async throws -> Void,
+        completion: @escaping (Bool) -> Void
     ) {
+        let database = self.database
         let previousTask = smartCollectionTask
+        pendingSmartCollectionMutationCount += 1
         smartCollectionTask = Task { [weak self] in
             _ = await previousTask?.value
             guard let self else {
-                completion(nil)
+                completion(false)
                 return
             }
+            defer { pendingSmartCollectionMutationCount -= 1 }
             do {
-                try await database.saveSmartCollection(record)
-                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
-                completion(smartCollections.first(where: { $0.id == record.id }))
+                try await operation(database)
             } catch {
                 AppLogger.database.error(
-                    "Smart collection persistence failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                    "Smart collection change failed with category: \(String(describing: type(of: error)), privacy: .public)"
                 )
                 onOperationError?(String(localized: .errorDatabaseOperation))
-                completion(nil)
+                completion(false)
+                return
+            }
+            invalidateUndoHistory()
+            if let restore {
+                undoManager.registerUndo(withTarget: self) { target in
+                    target.restoreSmartCollection(restore)
+                }
+                lastUndoMutation = .smartCollection
+            }
+            do {
+                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+            } catch {
+                AppLogger.database.error(
+                    "Smart collection refresh failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                onOperationError?(String(localized: .errorDatabaseOperation))
+            }
+            completion(true)
+        }
+    }
+
+    private func restoreSmartCollection(_ restore: SmartCollectionRestore) {
+        let database = self.database
+        let previousTask = smartCollectionTask
+        pendingSmartCollectionMutationCount += 1
+        smartCollectionTask = Task { [weak self] in
+            _ = await previousTask?.value
+            guard let self else { return }
+            defer { pendingSmartCollectionMutationCount -= 1 }
+            do {
+                switch restore {
+                case let .remove(id): try await database.deleteSmartCollection(id: id)
+                case let .save(record): try await database.saveSmartCollection(record)
+                }
+                invalidateUndoHistory()
+                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+            } catch {
+                AppLogger.database.error(
+                    "Smart collection undo failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                onOperationError?(String(localized: .errorUndo))
             }
         }
     }

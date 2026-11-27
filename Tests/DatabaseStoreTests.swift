@@ -947,6 +947,57 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertLessThan(filterDuration, 0.2, "10,000 条标签筛选目标为 200 毫秒")
     }
 
+    @MainActor
+    func testUndoAfterSmartCollectionChangeRevertsThatChangeOnly() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let coordinator = LibraryAccessCoordinator(database: store)
+        func settle(_ condition: () async throws -> Bool) async throws {
+            var attempts = 0
+            while try await condition() == false, attempts < 500 {
+                attempts += 1
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            let satisfied = try await condition()
+            XCTAssertTrue(satisfied)
+        }
+        func collections() async throws -> [SmartCollectionRecord] {
+            try await store.fetchSmartCollections(libraryID: LibraryRecord.primaryID)
+        }
+        func created(_ name: String) async throws -> SmartCollectionRecord {
+            var record: SmartCollectionRecord?
+            coordinator.createSmartCollection(name: name, rule: .standard) { record = $0 }
+            try await settle { record != nil }
+            try await settle { coordinator.canUndoLastMutation }
+            return try XCTUnwrap(record)
+        }
+
+        coordinator.createTag(name: "Earlier", parentID: nil)
+        try await settle { coordinator.canUndoLastMutation }
+
+        // Creating, renaming and deleting a smart filter each undo themselves, never the earlier tag change.
+        let first = try await created("First")
+        coordinator.undoLastMutation()
+        try await settle { try await collections().isEmpty && coordinator.canUndoLastMutation == false }
+
+        let second = try await created("Second")
+        coordinator.updateSmartCollection(id: second.id, name: "Renamed") { _ in }
+        try await settle { try await collections().map(\.name) == ["Renamed"] && coordinator.canUndoLastMutation }
+        coordinator.undoLastMutation()
+        try await settle { try await collections().map(\.name) == ["Second"] }
+
+        coordinator.deleteSmartCollection(id: second.id) { _ in }
+        try await settle { try await collections().isEmpty && coordinator.canUndoLastMutation }
+        coordinator.undoLastMutation()
+        try await settle { try await collections().map(\.id) == [second.id] }
+
+        XCTAssertNotEqual(first.id, second.id)
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(tags.map(\.name), ["Earlier"])
+    }
+
     func testCancelledImportLeavesExistingVideosAvailable() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
