@@ -152,6 +152,35 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "//link").count, 0)
     }
 
+    func testResolveExportAddsATimelineOfEveryClipAfterTheBins() throws {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("waves", "people"), ("plain", nil)], silent: ["waves"])
+        let text = String(decoding: NLEExportFormat.resolve.data(for: plan), as: UTF8.self)
+        let document = try XMLDocument(xmlString: text)
+
+        XCTAssertEqual(NLEExportFormat.resolve.fileExtension, "xml")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin").count, 3, "The bins stay alongside the timeline")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/sequence/name").first?.stringValue, "导出")
+        XCTAssertEqual(try document.nodes(forXPath: "//sequence/duration").first?.stringValue, "900")
+        XCTAssertEqual(try document.nodes(forXPath: "//sequence/media/video/track/clipitem/start").map(\.stringValue), ["0", "300", "600"])
+        XCTAssertEqual(try document.nodes(forXPath: "//sequence/media/video/track/clipitem/end").map(\.stringValue), ["300", "600", "900"])
+        XCTAssertEqual(
+            try document.nodes(forXPath: "//sequence/media/audio/track/clipitem/start").map(\.stringValue),
+            ["0", "600"],
+            "The silent clip has no audio clip item"
+        )
+        XCTAssertEqual(try document.nodes(forXPath: "//sequence//clipitem/file[pathurl]").count, 0, "Files are described once, in the master clips")
+
+        let masterIDs = Set(try document.nodes(forXPath: "//clip/@id").compactMap(\.stringValue))
+        let timelineMasterIDs = Set(try document.nodes(forXPath: "//sequence//masterclipid").compactMap(\.stringValue))
+        XCTAssertTrue(timelineMasterIDs.isSubset(of: masterIDs))
+        XCTAssertEqual(
+            try document.nodes(forXPath: "//sequence/media/audio/track/clipitem[name='plain.mov']/link/clipindex").map(\.stringValue),
+            ["3", "2"],
+            "Links count positions within each track"
+        )
+        XCTAssertEqual(try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan)).nodes(forXPath: "//sequence").count, 0)
+    }
+
     func testFCPXMLBuildsKeywordFoldersForTagGroups() throws {
         let plan = makePlan(rootTagID: "travel", relations: [("sunset", "travel"), ("ferry", "coast"), ("ferry", "city")])
         let document = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
