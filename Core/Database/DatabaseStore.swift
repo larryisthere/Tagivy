@@ -2604,13 +2604,31 @@ actor DatabaseStore {
     }
 
     func setTagColor(id: String, color: String?) throws {
+        try setTagColor(ids: [id], color: color)
+    }
+
+    /// Gives every listed tag the same color in one transaction.
+    func setTagColor(ids: [String], color: String?) throws {
         try prepareIfNeeded()
-        let statement = try prepare("UPDATE tags SET color = ?, updated_at = ? WHERE id = ?")
-        defer { sqlite3_finalize(statement) }
-        bindOptionalText(color, to: 1, in: statement)
-        sqlite3_bind_double(statement, 2, Date().timeIntervalSince1970)
-        bindText(id, to: 3, in: statement)
-        guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
+        guard ids.isEmpty == false else { return }
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let statement = try prepare("UPDATE tags SET color = ?, updated_at = ? WHERE id = ?")
+            defer { sqlite3_finalize(statement) }
+            let now = Date().timeIntervalSince1970
+            for id in ids {
+                sqlite3_reset(statement)
+                sqlite3_clear_bindings(statement)
+                bindOptionalText(color, to: 1, in: statement)
+                sqlite3_bind_double(statement, 2, now)
+                bindText(id, to: 3, in: statement)
+                guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
+            }
+            try execute("COMMIT")
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
     }
 
     func deleteTag(id: String) throws {
@@ -2736,36 +2754,49 @@ actor DatabaseStore {
     }
 
     func mergeTag(sourceID: String, targetID: String) throws {
+        try mergeTags(sourceIDs: [sourceID], targetID: targetID)
+    }
+
+    /// Merges every source tag into the target in one transaction: their videos get the target tag and
+    /// their child tags move under it. The target can't be one of the sources or nested inside one.
+    func mergeTags(sourceIDs: [String], targetID: String) throws {
         try prepareIfNeeded()
-        guard sourceID != targetID else { return }
-        guard try isTag(targetID, descendantOf: sourceID) == false else {
+        let sourceIDs = sourceIDs.reduce(into: [String]()) { result, id in
+            if id != targetID, result.contains(id) == false { result.append(id) }
+        }
+        guard sourceIDs.isEmpty == false else { return }
+        for sourceID in sourceIDs where try isTag(targetID, descendantOf: sourceID) {
             throw DatabaseError.statementFailed
         }
         try execute("BEGIN IMMEDIATE")
         do {
-            let relations = try prepare(
-                "INSERT OR IGNORE INTO video_tags (video_id, tag_id, created_at) SELECT video_id, ?, created_at FROM video_tags WHERE tag_id = ?"
-            )
-            bindText(targetID, to: 1, in: relations)
-            bindText(sourceID, to: 2, in: relations)
-            guard sqlite3_step(relations) == SQLITE_DONE else { sqlite3_finalize(relations); throw DatabaseError.statementFailed }
-            sqlite3_finalize(relations)
-            let children = try prepare("UPDATE tags SET parent_id = ? WHERE parent_id = ?")
-            bindText(targetID, to: 1, in: children)
-            bindText(sourceID, to: 2, in: children)
-            guard sqlite3_step(children) == SQLITE_DONE else { sqlite3_finalize(children); throw DatabaseError.statementFailed }
-            sqlite3_finalize(children)
-            let mappings = try prepare("UPDATE finder_tag_import_mappings SET tag_id = ? WHERE tag_id = ?")
-            bindText(targetID, to: 1, in: mappings)
-            bindText(sourceID, to: 2, in: mappings)
-            guard sqlite3_step(mappings) == SQLITE_DONE else { sqlite3_finalize(mappings); throw DatabaseError.statementFailed }
-            sqlite3_finalize(mappings)
-            try deleteTag(id: sourceID)
+            for sourceID in sourceIDs { try mergeTagInTransaction(sourceID: sourceID, targetID: targetID) }
             try execute("COMMIT")
         } catch {
             try? execute("ROLLBACK")
             throw error
         }
+    }
+
+    private func mergeTagInTransaction(sourceID: String, targetID: String) throws {
+        let relations = try prepare(
+            "INSERT OR IGNORE INTO video_tags (video_id, tag_id, created_at) SELECT video_id, ?, created_at FROM video_tags WHERE tag_id = ?"
+        )
+        bindText(targetID, to: 1, in: relations)
+        bindText(sourceID, to: 2, in: relations)
+        guard sqlite3_step(relations) == SQLITE_DONE else { sqlite3_finalize(relations); throw DatabaseError.statementFailed }
+        sqlite3_finalize(relations)
+        let children = try prepare("UPDATE tags SET parent_id = ? WHERE parent_id = ?")
+        bindText(targetID, to: 1, in: children)
+        bindText(sourceID, to: 2, in: children)
+        guard sqlite3_step(children) == SQLITE_DONE else { sqlite3_finalize(children); throw DatabaseError.statementFailed }
+        sqlite3_finalize(children)
+        let mappings = try prepare("UPDATE finder_tag_import_mappings SET tag_id = ? WHERE tag_id = ?")
+        bindText(targetID, to: 1, in: mappings)
+        bindText(sourceID, to: 2, in: mappings)
+        guard sqlite3_step(mappings) == SQLITE_DONE else { sqlite3_finalize(mappings); throw DatabaseError.statementFailed }
+        sqlite3_finalize(mappings)
+        try deleteTag(id: sourceID)
     }
 
     func setTagAssignment(tagID: String, videoIDs: [String], enabled: Bool) throws {

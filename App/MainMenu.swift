@@ -58,6 +58,11 @@ enum MainMenu {
         return mainMenu
     }
 
+    /// The Services submenu of the app menu, which AppKit fills with the system's services.
+    static func servicesMenu(in mainMenu: NSMenu) -> NSMenu? {
+        mainMenu.items.first?.submenu?.items.first { $0.submenu != nil }?.submenu
+    }
+
     /// The Window menu, which AppKit fills with the list of open windows.
     static func windowMenu(in mainMenu: NSMenu) -> NSMenu? {
         mainMenu.items.last?.submenu
@@ -96,6 +101,28 @@ enum MainMenu {
             #selector(MainMenuActions.showSettings),
             ",",
             target: target
+        ))
+        menu.addItem(.separator())
+        let services = NSMenuItem(title: String(localized: "menu.services", defaultValue: "Services"), action: nil, keyEquivalent: "")
+        services.submenu = NSMenu(title: services.title)
+        menu.addItem(services)
+        menu.addItem(.separator())
+        menu.addItem(item(
+            String(localized: "menu.hide", defaultValue: "Hide \(AppConfiguration.displayName)"),
+            #selector(NSApplication.hide(_:)),
+            "h",
+            target: nil
+        ))
+        menu.addItem(item(
+            String(localized: "menu.hideOthers", defaultValue: "Hide Others"),
+            #selector(NSApplication.hideOtherApplications(_:)),
+            "h", [.command, .option],
+            target: nil
+        ))
+        menu.addItem(item(
+            String(localized: "menu.showAll", defaultValue: "Show All"),
+            #selector(NSApplication.unhideAllApplications(_:)),
+            target: nil
         ))
         menu.addItem(.separator())
         menu.addItem(item(
@@ -322,8 +349,9 @@ enum MainMenu {
             target: nil
         ))
         menu.addItem(.separator())
+        // Tagivy has one main window; ⌘0 stays with View → Actual Size.
         menu.addItem(item(
-            String(localized: .menuWindowShowLibrary),
+            String(localized: "menu.window.showMainWindow", defaultValue: "Show Main Window"),
             #selector(MainMenuActions.showLibraryWindow),
             target: target
         ))

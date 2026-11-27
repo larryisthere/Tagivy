@@ -20,6 +20,8 @@ final class MainMenuTests: XCTestCase {
         let expected: [(Selector, Shortcut)] = [
             (#selector(MainMenuActions.showSettings), Shortcut(",", [.command])),
             (#selector(NSApplication.terminate(_:)), Shortcut("q", [.command])),
+            (#selector(NSApplication.hide(_:)), Shortcut("h", [.command])),
+            (#selector(NSApplication.hideOtherApplications(_:)), Shortcut("h", [.command, .option])),
 
             (#selector(MainMenuActions.importVideos), Shortcut("i", [.command, .shift])),
             (#selector(MainMenuActions.scanForNewVideos), Shortcut("r", [.command])),
@@ -90,6 +92,33 @@ final class MainMenuTests: XCTestCase {
         XCTAssertTrue(MainMenu.windowMenu(in: menu)?.items.contains {
             $0.action == #selector(NSApplication.arrangeInFront(_:))
         } == true)
+    }
+
+    func testAppMenuHasServicesAndHideCommands() throws {
+        let menu = MainMenu.make(target: nil, includesCheckForUpdates: false)
+        let appItems = try XCTUnwrap(menu.items.first?.submenu).items
+        XCTAssertNotNil(MainMenu.servicesMenu(in: menu))
+        let actions = appItems.map { $0.submenu == nil ? $0.action : #selector(NSMenu.submenuAction(_:)) }
+            .compactMap { $0 }
+        XCTAssertEqual(actions, [
+            #selector(MainMenuActions.showAbout),
+            #selector(MainMenuActions.showSettings),
+            #selector(NSMenu.submenuAction(_:)),
+            #selector(NSApplication.hide(_:)),
+            #selector(NSApplication.hideOtherApplications(_:)),
+            #selector(NSApplication.unhideAllApplications(_:)),
+            #selector(NSApplication.terminate(_:)),
+        ])
+    }
+
+    func testWindowMenuShowsTheMainWindowWithoutAShortcut() throws {
+        let menu = MainMenu.make(target: nil, includesCheckForUpdates: false)
+        let item = try XCTUnwrap(MainMenu.windowMenu(in: menu)?.items.first {
+            $0.action == #selector(MainMenuActions.showLibraryWindow)
+        })
+        XCTAssertEqual(item.title, String(localized: "menu.window.showMainWindow", defaultValue: "Show Main Window"))
+        // ⌘0 belongs to View → Actual Size.
+        XCTAssertEqual(item.keyEquivalent, "")
     }
 
     func testSidebarShortcutHintsMatchTheViewMenu() {

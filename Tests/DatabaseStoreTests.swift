@@ -299,6 +299,90 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(states[targetID], .on)
     }
 
+    func testColoringSeveralTagsIsOneStepThatUndoRestores() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let keptID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "留", parentID: nil)
+        try await store.setTagColor(id: secondID, color: "blue")
+        try await store.setTagColor(id: keptID, color: "green")
+        let snapshot = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+
+        try await store.setTagColor(ids: [firstID, secondID], color: "red")
+        var colors = try await tagColors(in: store)
+        XCTAssertEqual(colors[firstID], "red")
+        XCTAssertEqual(colors[secondID], "red")
+        XCTAssertEqual(colors[keptID], "green")
+
+        try await store.restoreTagState(snapshot)
+        colors = try await tagColors(in: store)
+        XCTAssertEqual(colors[firstID], .some(nil))
+        XCTAssertEqual(colors[secondID], "blue")
+        XCTAssertEqual(colors[keptID], "green")
+    }
+
+    func testMergingSeveralTagsMovesTheirVideosAndChildrenAndUndoBringsThemBack() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let videos = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: [
+                makeDiscoveredVideo(path: "A.mp4", size: 10),
+                makeDiscoveredVideo(path: "B.mp4", size: 20),
+                makeDiscoveredVideo(path: "C.mp4", size: 30),
+            ]
+        )
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let firstChildID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一之子", parentID: firstID)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let targetID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "目标", parentID: nil)
+        try await store.setTagAssignment(tagID: firstID, videoIDs: [videos[0].id], enabled: true)
+        try await store.setTagAssignment(tagID: secondID, videoIDs: [videos[1].id], enabled: true)
+        try await store.setTagAssignment(tagID: targetID, videoIDs: [videos[2].id], enabled: true)
+        let snapshot = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+
+        try await store.mergeTags(sourceIDs: [firstID, secondID], targetID: targetID)
+        let merged = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(merged.map(\.id)), [firstChildID, targetID])
+        XCTAssertEqual(merged.first(where: { $0.id == firstChildID })?.parentID, targetID)
+        let states = try await store.tagAssignmentStates(videoIDs: videos.map(\.id), tags: merged)
+        XCTAssertEqual(states[targetID], .on)
+
+        try await store.restoreTagState(snapshot)
+        let restored = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(restored.tags.map(\.id)), Set(snapshot.tags.map(\.id)))
+        XCTAssertEqual(restored.tags.first(where: { $0.id == firstChildID })?.parentID, firstID)
+        XCTAssertEqual(restored.relations, snapshot.relations)
+    }
+
+    func testMergingIntoATagInsideASourceChangesNothing() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let nestedID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二之子", parentID: secondID)
+
+        do {
+            try await store.mergeTags(sourceIDs: [firstID, secondID], targetID: nestedID)
+            XCTFail("Merging into a tag nested in a source should fail")
+        } catch {}
+
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(tags.map(\.id)), [firstID, secondID, nestedID])
+    }
+
+    private func tagColors(in store: DatabaseStore) async throws -> [String: String?] {
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        return Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0.color) })
+    }
+
     func testMovingTagKeepsSiblingOrderContiguous() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }

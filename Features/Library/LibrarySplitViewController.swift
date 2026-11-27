@@ -135,8 +135,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onRenameTag: @escaping (TagRecord, String) -> Void,
         onDeleteTags: @escaping ([TagRecord]) -> Void,
         onMoveTags: @escaping ([TagRecord], String?, Int) -> Void,
-        onSetTagColor: @escaping (TagRecord, String?) -> Void,
-        onMergeTag: @escaping (TagRecord, TagRecord) -> Void,
+        onSetTagColor: @escaping ([TagRecord], String?) -> Void,
+        onMergeTags: @escaping ([TagRecord], TagRecord) -> Void,
         onAssignVideos: @escaping (TagRecord, [String]) -> Void,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onApplyTagDraft: @escaping ([TagCreationDraft], [String: Bool], [String], @escaping (Bool) -> Void) -> Void,
@@ -172,7 +172,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             onDeleteTags: onDeleteTags,
             onMoveTags: onMoveTags,
             onSetColor: onSetTagColor,
-            onMergeTag: onMergeTag,
+            onMergeTags: onMergeTags,
             onAssignVideos: onAssignVideos
         )
         videoGridViewController = VideoGridViewController(
@@ -201,6 +201,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         )
         super.init(nibName: nil, bundle: nil)
         sidebarViewController.resolveVideosInScopes = resolveVideosInScopes
+        sidebarViewController.canSelectAllVideos = { [weak self] in
+            guard let self else { return false }
+            return showsLibraryGrid && videoGridViewController.hasVisibleVideos
+        }
+        sidebarViewController.onSelectAllVideos = { [weak self] in
+            self?.videoGridViewController.selectAllVisibleVideosAndFocus()
+        }
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }

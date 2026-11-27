@@ -119,8 +119,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
         onRenameTag: { [weak self] tag, name in self?.libraryAccessCoordinator?.renameTag(tag, name: name) },
         onDeleteTags: { [weak self] tags in self?.deleteTags(tags) },
         onMoveTags: { [weak self] tags, parentID, order in self?.libraryAccessCoordinator?.moveTags(tags, parentID: parentID, sortOrder: order) },
-        onSetTagColor: { [weak self] tag, color in self?.libraryAccessCoordinator?.setTagColor(tag, color: color) },
-        onMergeTag: { [weak self] source, target in self?.libraryAccessCoordinator?.mergeTag(source, into: target) },
+        onSetTagColor: { [weak self] tags, color in self?.libraryAccessCoordinator?.setTagColor(tags, color: color) },
+        onMergeTags: { [weak self] sources, target in self?.libraryAccessCoordinator?.mergeTags(sources, into: target) },
         onAssignVideos: { [weak self] tag, videoIDs in self?.libraryAccessCoordinator?.setTagAssignment(tag, videoIDs: videoIDs, enabled: true) },
         onAssignTagID: { [weak self] tagID, videoIDs in self?.libraryAccessCoordinator?.setTagAssignment(tagID: tagID, videoIDs: videoIDs, enabled: true) },
         onApplyTagDraft: { [weak self] creations, assignments, videoIDs, completion in
@@ -878,6 +878,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
             includesCheckForUpdates: AppUpdateController.isEnabledInThisBuild
         )
         NSApp.windowsMenu = MainMenu.windowMenu(in: mainMenu)
+        NSApp.servicesMenu = MainMenu.servicesMenu(in: mainMenu)
         NSApp.mainMenu = mainMenu
     }
 
