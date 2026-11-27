@@ -65,7 +65,7 @@ enum FCP7XMLWriter {
             writeRate(clip.frameRate, into: &xml)
         }
 
-        xml.open("clip", attributes: [("id", masterID)])
+        xml.open("clip", attributes: [("id", masterID), ("explodedTracks", "true")])
         xml.element("masterclipid", masterID)
         xml.element("ismasterclip", "TRUE")
         xml.element("duration", String(clip.frameCount))

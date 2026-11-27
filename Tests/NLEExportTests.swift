@@ -117,7 +117,7 @@ final class NLEExportTests: XCTestCase {
         let clips = try document.nodes(forXPath: "//clip")
         XCTAssertEqual(clips.count, 4)
         XCTAssertEqual(try document.nodes(forXPath: "//clip/file").count, 0)
-        XCTAssertEqual(try document.nodes(forXPath: "//clip[ismasterclip='TRUE']").count, 4)
+        XCTAssertEqual(try document.nodes(forXPath: "//clip[ismasterclip='TRUE'][@explodedTracks='true']").count, 4)
         XCTAssertEqual(try document.nodes(forXPath: "//clip/media/video/track/clipitem/file").count, 4)
         XCTAssertEqual(try document.nodes(forXPath: "//clip/media/audio/track/clipitem/sourcetrack").count, 4)
 
