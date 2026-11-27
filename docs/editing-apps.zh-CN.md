@@ -46,9 +46,8 @@ Tagivy 不移动、不复制你的视频，它只告诉剪辑软件“用哪些�
 Resolve 和 Premiere Pro 用同一个 .xml 文件。
 
 1. 在 Tagivy 中用 **Premiere Pro / DaVinci Resolve（.xml）…** 导出。
-2. 在 Resolve 里选 **文件 › 导入 › Media from File…**，选择导出的 .xml 文件。如果要求选择文件类型，选 FCP 7 XML。
-3. 如果出现导入选项，**Mixed frame rate format** 选 **Final Cut Pro 7**，点 **Ok**。
-4. 媒体池里会出现按标签分层的素材箱。
+2. 在 Resolve 里选 **文件 › 导入 › Media from File…**，选择导出的 .xml 文件。Resolve 会直接导入，不需要再选格式。
+3. 媒体池里会出现按标签分层的素材箱。
 
 不要用 **文件 › 导入 › 时间线…**：这样导入时 Resolve 找不到片段的音频。
 

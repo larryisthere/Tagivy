@@ -46,9 +46,8 @@ Control-click a tag, several selected tags, a smart filter, or selected videos, 
 Resolve uses the same .xml file as Premiere Pro.
 
 1. In Tagivy, export with **Premiere Pro / DaVinci Resolve (.xml)…**.
-2. In Resolve, choose **File › Import › Media from File…** and select the exported .xml file. If Resolve asks for a file type, choose the FCP 7 XML option.
-3. If Resolve shows import options, set **Mixed frame rate format** to **Final Cut Pro 7** and click **Ok**.
-4. Bins nested by tag appear in the Media Pool.
+2. In Resolve, choose **File › Import › Media from File…** and select the exported .xml file. Resolve imports it right away, with no further options.
+3. Bins nested by tag appear in the Media Pool.
 
 Don't use **File › Import › Timeline…**: Resolve can't find the audio of the clips that way.
 
