@@ -40,6 +40,47 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(library?.rootBookmarkData, Data())
     }
 
+    // Real libraries hold sources stored without access data whose videos are also reached through
+    // a source that has it. Only those duplicates are removed; a video's only record is kept.
+    func testRemovesSourcesWithoutAccessOnlyWhenAnotherSourceReachesTheirVideos() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        for id in ["valid", "covered", "only", "stale-cover", "empty-unused"] {
+            try await store.saveSourceAuthorization(makeSource(id: id, name: id))
+        }
+        let volume = Data("volume".utf8)
+        func video(_ path: String, _ identity: String) -> DiscoveredVideo {
+            makeDiscoveredVideo(path: path, size: 10, volumeIdentifier: volume,
+                                fileResourceIdentifier: Data(identity.utf8))
+        }
+        _ = try await store.importVideos(sourceID: "valid", discoveredVideos: [video("Shared.mp4", "shared"), video("Gone.mp4", "gone")])
+        _ = try await store.importVideos(sourceID: "covered", discoveredVideos: [video("Shared.mp4", "shared")])
+        _ = try await store.importVideos(sourceID: "only", discoveredVideos: [video("Only.mp4", "only")])
+        _ = try await store.importVideos(sourceID: "stale-cover", discoveredVideos: [video("Gone.mp4", "gone")])
+        try executeSQL(
+            at: fixture.databaseURL,
+            sql: """
+            UPDATE source_authorizations SET root_bookmark_data = X''
+            WHERE id IN ('covered', 'only', 'stale-cover', 'empty-unused');
+            UPDATE source_authorizations SET scans_descendants = 1 WHERE id = 'empty-unused';
+            UPDATE video_locations SET is_available = 0
+            WHERE source_id = 'valid' AND relative_path = 'Gone.mp4';
+            """
+        )
+
+        let removed = try await store.removeRedundantSourcesWithoutAccess()
+        let remaining = try await store.fetchSourceAuthorizations().map(\.id)
+        let locations = try await store.fetchVideoLocations(includeUnavailable: true)
+        let videos = try await store.fetchVideos(libraryID: LibraryRecord.primaryID)
+
+        XCTAssertEqual(Set(removed), ["covered", "empty-unused"])
+        XCTAssertEqual(Set(remaining), ["valid", "only", "stale-cover"])
+        XCTAssertFalse(locations.contains { $0.sourceID == "covered" })
+        XCTAssertEqual(videos.count, 3)
+    }
+
     func testVersionTwoMigrationPreservesVideosAndTagRelations() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
