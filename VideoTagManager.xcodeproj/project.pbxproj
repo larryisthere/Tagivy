@@ -21,6 +21,7 @@
 		1CD2C0755FE991270B80D231 /* TagRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851696AF2C5AB56678B796BC /* TagRecord.swift */; };
 		1E40E58D5FC7F491D7B2D1D9 /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999DD897E04F33DB96FBAF98 /* SidebarViewController.swift */; };
 		1E908D672F65231A67801238 /* SidebarModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */; };
+		B7C4000000000000000000B2 /* MainMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C4000000000000000000F2 /* MainMenuTests.swift */; };
 		2624A94A0C0529BE610CA635 /* VideoFileDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE57EA82D27A64C7E43A55F /* VideoFileDiscoveryTests.swift */; };
 		26EDD4D529BFD1ECF201FC6A /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7F93F07756F716819CAB2 /* AppLogger.swift */; };
 		3CAA3D40356EDCAAA5BBC500 /* LockCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935F50B9F553D34C8563B4C9 /* LockCoordinatorTests.swift */; };
@@ -44,6 +45,7 @@
 		A0E1000000000000000000B4 /* NLEExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F4 /* NLEExportTests.swift */; };
 		A0E1000000000000000000B5 /* EditorExportMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F5 /* EditorExportMenu.swift */; };
 		A0E1000000000000000000B6 /* TransientNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E1000000000000000000F6 /* TransientNotice.swift */; };
+		B7C4000000000000000000B1 /* MainMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C4000000000000000000F1 /* MainMenu.swift */; };
 		A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F1 /* ThumbnailReveal.swift */; };
 		A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F2 /* InspectorTagListTests.swift */; };
 		A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */; };
@@ -121,6 +123,7 @@
 		A0E1000000000000000000F4 /* NLEExportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NLEExportTests.swift; sourceTree = "<group>"; };
 		A0E1000000000000000000F5 /* EditorExportMenu.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EditorExportMenu.swift; path = Library/EditorExportMenu.swift; sourceTree = "<group>"; };
 		A0E1000000000000000000F6 /* TransientNotice.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransientNotice.swift; sourceTree = "<group>"; };
+		B7C4000000000000000000F1 /* MainMenu.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainMenu.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F1 /* ThumbnailReveal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThumbnailReveal.swift; path = Library/ThumbnailReveal.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F2 /* InspectorTagListTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagListTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThumbnailRevealTests.swift; sourceTree = "<group>"; };
@@ -139,6 +142,7 @@
 		A1C0E5F7B2D4436C9E81F002 /* SettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
 		A1FF02AA6C391F4A09600494 /* VideoGridViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoGridViewController.swift; path = Library/VideoGridViewController.swift; sourceTree = "<group>"; };
 		AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarModelTests.swift; sourceTree = "<group>"; };
+		B7C4000000000000000000F2 /* MainMenuTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainMenuTests.swift; sourceTree = "<group>"; };
 		B9B21B0AA7F652B9F8991EEB /* UpdateStatusView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = UpdateStatusView.swift; path = Library/UpdateStatusView.swift; sourceTree = "<group>"; };
 		BE454120272DA2EE5504ABDC /* AppUpdateFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppUpdateFlow.swift; path = Updates/AppUpdateFlow.swift; sourceTree = "<group>"; };
 		C2129BA05EEE64F81130DCAB /* LockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LockView.swift; path = Lock/LockView.swift; sourceTree = "<group>"; };
@@ -210,6 +214,7 @@
 				65BC78F7B6A61CB148B1483D /* ApplicationCoordinator.swift */,
 				F11D00000000000000000002 /* FolderImportMethodPresenter.swift */,
 				A0E1000000000000000000F6 /* TransientNotice.swift */,
+				B7C4000000000000000000F1 /* MainMenu.swift */,
 				A0E1000000000000000000F1 /* EditorExportPresenter.swift */,
 				932A36E631207B2E8F36909B /* MainWindowController.swift */,
 				28EE52ACCC723EABBA98ECF0 /* AppUpdateController.swift */,
@@ -235,6 +240,7 @@
 				97EB9F42F6AE50FE1F8671DE /* PreferencesStoreTests.swift */,
 				A1C0E5F7B2D4436C9E81F002 /* SettingsTests.swift */,
 				AE9CC8AA63A88BF3576BA8A8 /* SidebarModelTests.swift */,
+				B7C4000000000000000000F2 /* MainMenuTests.swift */,
 				A0E1000000000000000000F4 /* NLEExportTests.swift */,
 				A0E2000000000000000000F2 /* InspectorTagListTests.swift */,
 				A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */,
@@ -430,6 +436,7 @@
 				1C1B65FF73D4A4735CE177E8 /* ApplicationCoordinator.swift in Sources */,
 				F11D00000000000000000001 /* FolderImportMethodPresenter.swift in Sources */,
 				A0E1000000000000000000B6 /* TransientNotice.swift in Sources */,
+				B7C4000000000000000000B1 /* MainMenu.swift in Sources */,
 				A0E1000000000000000000B1 /* EditorExportPresenter.swift in Sources */,
 				7DB2D23AF1009554B9C3BA4D /* MainWindowController.swift in Sources */,
 				D0109FDB87583764B7BF9312 /* DatabaseError.swift in Sources */,
@@ -483,6 +490,7 @@
 				DF49AD9A88819521E8985E78 /* PreferencesStoreTests.swift in Sources */,
 				A1C0E5F7B2D4436C9E81F001 /* SettingsTests.swift in Sources */,
 				1E908D672F65231A67801238 /* SidebarModelTests.swift in Sources */,
+				B7C4000000000000000000B2 /* MainMenuTests.swift in Sources */,
 				A0E1000000000000000000B4 /* NLEExportTests.swift in Sources */,
 				A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */,
 				A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */,

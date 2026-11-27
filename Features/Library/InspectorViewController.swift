@@ -1146,6 +1146,25 @@ final class InspectorViewController: NSViewController {
         showNewTagPopover(relativeTo: sender.bounds, of: sender, suggestedName: tagSearchText)
     }
 
+    /// Add Tags in the Video menu: shows the Tags section and puts the cursor in its search field,
+    /// where typing finds a tag or offers to create it.
+    var canFocusTagInput: Bool {
+        browsingContext == .library && selectedVideos.isEmpty == false
+    }
+
+    func focusTagInput() {
+        guard canFocusTagInput else { return }
+        if sectionControl.selectedSegment != 0 {
+            sectionControl.selectedSegment = 0
+            closeNewTagPopover()
+            renderSelection()
+            scheduleInitialTagStateLoadIfNeeded()
+        }
+        guard tagToolbar.isHidden == false else { return }
+        view.window?.makeFirstResponder(tagSearchField)
+        tagSearchField.selectText(nil)
+    }
+
     var canBeginCreatingTag: Bool {
         mode == .tags && selectedVideos.isEmpty == false
     }

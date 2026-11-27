@@ -118,6 +118,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.onDeleteKey = { [weak self] in
             self?.deleteSelectedItems() ?? false
         }
+        outlineView.onRenameKey = { [weak self] in
+            self?.renameSelectedItem() ?? false
+        }
         let menu = NSMenu()
         menu.delegate = self
         outlineView.menu = menu
@@ -1473,6 +1476,22 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         return true
     }
+    /// Return renames the one selected tag or smart collection, as in Finder.
+    private func renameSelectedItem() -> Bool {
+        guard inlineRenameTarget == nil, pendingRootTagDraft == nil,
+              outlineView.selectedRowIndexes.count == 1,
+              let item = outlineView.item(atRow: outlineView.selectedRow) else { return false }
+        if let collection = (item as? SmartCollectionNode)?.collection {
+            beginRenamingSmartCollection(collection)
+            return true
+        }
+        if let tag = (item as? TagNode)?.tag {
+            beginRenamingTag(tag)
+            return true
+        }
+        return false
+    }
+
     private func selectedOutlineItems() -> [Any] {
         outlineView.selectedRowIndexes.compactMap { outlineView.item(atRow: $0) }
     }
@@ -1597,8 +1616,12 @@ private enum SidebarInlineRenameTarget: Equatable {
 private final class SidebarOutlineView: NSOutlineView {
     var onMouseDown: ((NSEvent) -> Void)?
     var onDeleteKey: (() -> Bool)?
+    var onRenameKey: (() -> Bool)?
 
     override func keyDown(with event: NSEvent) {
+        if SidebarRenameKey.matches(event), editedRow < 0, onRenameKey?() == true {
+            return
+        }
         guard SidebarDeleteKey.matches(event) else {
             super.keyDown(with: event)
             return
