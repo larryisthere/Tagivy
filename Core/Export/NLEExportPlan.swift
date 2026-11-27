@@ -20,7 +20,7 @@ enum NLEExportFormat: String, CaseIterable, Sendable {
     case resolve
     /// FCPXML, which Final Cut Pro and DaVinci Resolve import.
     case fcpXML
-    /// FCPXML with a timeline of every clip end to end, because CapCut imports only timelines.
+    /// FCPXML with a timeline of every clip end to end, because JianYing (剪映) imports only timelines; the international CapCut imports no projects at all.
     case capCut
 
     var fileExtension: String {
