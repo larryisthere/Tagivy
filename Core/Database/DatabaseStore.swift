@@ -1378,7 +1378,7 @@ actor DatabaseStore {
         case .modified: sortColumn = "videos.modification_date"
         case .duration: sortColumn = "videos.duration"
         case .fileSize: sortColumn = "videos.file_size"
-        case .resolution: sortColumn = "MIN(videos.width, videos.height)"
+        case .resolution: sortColumn = ResolutionTier.sql
         }
         let sortDirection = effectiveSort.direction == .ascending ? "ASC" : "DESC"
         let nullOrdering = effectiveSort.key == .filename ? "" : "\(sortColumn) IS NULL, "
@@ -1490,9 +1490,9 @@ actor DatabaseStore {
                 max: high.map { .integer(max(0, $0)) },
                 bindings: &bindings
             )
-        case let .resolutionShortEdgeRange(low, high):
+        case let .resolutionTierRange(low, high):
             return rangePredicate(
-                column: "MIN(videos.width, videos.height)",
+                column: ResolutionTier.sql,
                 min: low.map { .integer(Int64(max(0, $0))) },
                 max: high.map { .integer(Int64(max(0, $0))) },
                 bindings: &bindings

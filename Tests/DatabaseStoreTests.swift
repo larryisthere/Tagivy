@@ -410,6 +410,9 @@ final class DatabaseStoreTests: XCTestCase {
             ("Epic.mp4", 400, 3600, 7680, 4320),
             ("PortraitHD.mp4", 500, 5000, 1080, 1920),
             ("Portrait4K.mp4", 600, 5000, 2160, 3840),
+            ("Scope4K.mp4", 700, 5000, 3840, 1608),
+            ("ScopeHD.mp4", 800, 5000, 1920, 800),
+            ("DCI4K.mp4", 900, 5000, 4096, 1716),
         ]
         _ = try await store.importTestVideos(
             libraryID: LibraryRecord.primaryID,
@@ -442,24 +445,31 @@ final class DatabaseStoreTests: XCTestCase {
         let atLeast = try await matches(.durationRange(min: 300, max: nil))
         let sizeBetween = try await matches(.fileSizeRange(min: 200, max: 300))
         let sizeAtMost = try await matches(.fileSizeRange(min: nil, max: 100))
-        let resolutionBetween = try await matches(.resolutionShortEdgeRange(min: 1080, max: 2160))
-        let resolutionAtLeast = try await matches(.resolutionShortEdgeRange(min: 2160, max: nil))
-        let fullHDOrMore = try await matches(.resolutionShortEdgeRange(min: 1080, max: nil))
-        let belowFullHD = try await matches(.resolutionShortEdgeRange(min: nil, max: 1079))
-        let exact = try await matches(.resolutionShortEdgeRange(min: 4320, max: 4320))
+        let resolutionBetween = try await matches(.resolutionTierRange(min: 1080, max: 2160))
+        let resolutionAtLeast = try await matches(.resolutionTierRange(min: 2160, max: nil))
+        let fullHDOrMore = try await matches(.resolutionTierRange(min: 1080, max: nil))
+        let belowFullHD = try await matches(.resolutionTierRange(min: nil, max: 1079))
+        let exact = try await matches(.resolutionTierRange(min: 4320, max: 4320))
         let open = try await matches(.durationRange(min: nil, max: nil))
 
         XCTAssertEqual(between, ["Mid.mp4", "Long.mp4"])
         XCTAssertEqual(atMost, ["Short.mp4", "Mid.mp4"])
-        XCTAssertEqual(atLeast, ["Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4"])
+        XCTAssertEqual(atLeast, [
+            "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
         XCTAssertEqual(sizeBetween, ["Mid.mp4", "Long.mp4"])
         XCTAssertEqual(sizeAtMost, ["Short.mp4"])
-        XCTAssertEqual(resolutionBetween, ["Mid.mp4", "Long.mp4", "PortraitHD.mp4", "Portrait4K.mp4"])
-        XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4", "Portrait4K.mp4"])
-        XCTAssertEqual(fullHDOrMore, ["Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4"])
+        XCTAssertEqual(resolutionBetween, ["Mid.mp4", "Long.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4"])
+        XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4", "Portrait4K.mp4", "Scope4K.mp4", "DCI4K.mp4"])
+        XCTAssertEqual(fullHDOrMore, [
+            "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
         XCTAssertEqual(belowFullHD, ["Short.mp4"])
         XCTAssertEqual(exact, ["Epic.mp4"])
-        XCTAssertEqual(open, ["Short.mp4", "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4"])
+        XCTAssertEqual(open, [
+            "Short.mp4", "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4",
+            "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
     }
 
     func testDurationRangeMatchesDurationsAsTheyAreShownInWholeSeconds() async throws {

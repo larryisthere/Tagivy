@@ -126,7 +126,7 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(rule.requiredConditions, [.durationRange(min: 60, max: nil)])
         XCTAssertEqual(rule.conditions, [
             .fileSizeRange(min: 1_000_000_000, max: nil),
-            .resolutionShortEdgeRange(min: 2160, max: nil),
+            .resolutionTierRange(min: 2160, max: nil),
             .addedWithinDays(30),
             .untagged,
             .tags(operator: .any, tagIDs: ["t"]),
@@ -137,7 +137,7 @@ final class NumericConditionSliderTests: XCTestCase {
         let conditions: [LibraryFilterCondition] = [
             .durationRange(min: nil, max: 10),
             .fileSizeRange(min: 1_000_000_000, max: 5_000_000_000),
-            .resolutionShortEdgeRange(min: 1080, max: nil),
+            .resolutionTierRange(min: 1080, max: nil),
         ]
         let data = try JSONEncoder().encode(conditions)
         XCTAssertEqual(try JSONDecoder().decode([LibraryFilterCondition].self, from: data), conditions)
@@ -153,15 +153,15 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(swapped, .fileSizeRange(min: 3, max: 9))
         XCTAssertEqual(NumericConditionKind.duration.condition(min: 300, max: 60), .durationRange(min: 60, max: 300))
         XCTAssertEqual(
-            LibraryQueryRule(conditions: [.resolutionShortEdgeRange(min: 2160, max: 1080)]).normalized().conditions,
-            [.resolutionShortEdgeRange(min: 1080, max: 2160)]
+            LibraryQueryRule(conditions: [.resolutionTierRange(min: 2160, max: 1080)]).normalized().conditions,
+            [.resolutionTierRange(min: 1080, max: 2160)]
         )
     }
 
     func testNewRangeConditionsStartAtTheEarlierDefaultWithNoMaximum() {
         XCTAssertEqual(NumericConditionKind.duration.defaultCondition, .durationRange(min: 60, max: nil))
         XCTAssertEqual(NumericConditionKind.fileSize.defaultCondition, .fileSizeRange(min: 1_000_000_000, max: nil))
-        XCTAssertEqual(NumericConditionKind.resolution.defaultCondition, .resolutionShortEdgeRange(min: 2160, max: nil))
+        XCTAssertEqual(NumericConditionKind.resolution.defaultCondition, .resolutionTierRange(min: 2160, max: nil))
         XCTAssertFalse(NumericConditionKind.addedWithinDays.isRange)
         XCTAssertTrue(NumericConditionKind.duration.isRange)
     }
@@ -182,8 +182,8 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(NumericConditionKind.resolution.formattedRange(2160, 2160), "4K")
         let sizeBoth = try XCTUnwrap(NumericConditionKind.label(for: .fileSizeRange(min: 1_000_000_000, max: 5_000_000_000)))
         let sizeMax = try XCTUnwrap(NumericConditionKind.label(for: .fileSizeRange(min: nil, max: 2_000_000_000)))
-        let resolutionBoth = try XCTUnwrap(NumericConditionKind.label(for: .resolutionShortEdgeRange(min: 1080, max: 2160)))
-        let resolutionMin = try XCTUnwrap(NumericConditionKind.label(for: .resolutionShortEdgeRange(min: 2160, max: nil)))
+        let resolutionBoth = try XCTUnwrap(NumericConditionKind.label(for: .resolutionTierRange(min: 1080, max: 2160)))
+        let resolutionMin = try XCTUnwrap(NumericConditionKind.label(for: .resolutionTierRange(min: 2160, max: nil)))
         XCTAssertTrue(sizeBoth.hasSuffix(" 1–5 GB"), sizeBoth)
         XCTAssertTrue(sizeMax.hasSuffix(" ≤ 2 GB"), sizeMax)
         XCTAssertTrue(resolutionBoth.hasSuffix(" 1080p–4K"), resolutionBoth)
@@ -245,11 +245,11 @@ final class NumericConditionSliderTests: XCTestCase {
     func testRangeOpenAtBothEndsIsDroppedAndNeverSaved() throws {
         let rule = LibraryQueryRule(
             requiredConditions: [.durationRange(min: nil, max: nil)],
-            conditions: [.fileSizeRange(min: nil, max: nil), .resolutionShortEdgeRange(min: 1080, max: nil)]
+            conditions: [.fileSizeRange(min: nil, max: nil), .resolutionTierRange(min: 1080, max: nil)]
         )
         XCTAssertEqual(
             rule.removingUnboundedRanges(),
-            LibraryQueryRule(conditions: [.resolutionShortEdgeRange(min: 1080, max: nil)])
+            LibraryQueryRule(conditions: [.resolutionTierRange(min: 1080, max: nil)])
         )
         let decoded = try JSONDecoder().decode(LibraryQueryRule.self, from: JSONEncoder().encode(rule))
         XCTAssertEqual(decoded, rule.removingUnboundedRanges())
@@ -267,21 +267,35 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertEqual(NumericRangeBounds(min: nil, max: 300).stepped(.min, up: true, detents: detents), 30)
     }
 
-    func testLegacyWidthFiltersReadAsShortEdgeTiers() throws {
+    func testLegacyWidthFiltersReadAsTiers() throws {
         let tiers = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160), (7680, 4320), (1000, 563)]
-        for (width, shortEdge) in tiers {
+        for (width, tier) in tiers {
             let condition = try JSONDecoder().decode(
                 LibraryFilterCondition.self,
                 from: Data(#"{"resolutionWidthAtLeast":{"_0":\#(width)}}"#.utf8)
             )
-            XCTAssertEqual(condition, .resolutionShortEdgeRange(min: shortEdge, max: nil), "\(width)")
+            XCTAssertEqual(condition, .resolutionTierRange(min: tier, max: nil), "\(width)")
         }
+        let range = try JSONDecoder().decode(
+            LibraryFilterCondition.self,
+            from: Data(#"{"resolutionWidthRange":{"max":3840,"min":1920}}"#.utf8)
+        )
+        XCTAssertEqual(range, .resolutionTierRange(min: 1080, max: 2160))
+        let maxOnly = try JSONDecoder().decode(
+            LibraryFilterCondition.self,
+            from: Data(#"{"resolutionWidthRange":{"max":2560}}"#.utf8)
+        )
+        XCTAssertEqual(maxOnly, .resolutionTierRange(min: nil, max: 1440))
     }
 
-    func testResolutionTierIsTheShortEdgeWhateverTheOrientation() {
-        XCTAssertEqual(NumericConditionKind.resolutionTier(width: 1920, height: 1080), 1080)
-        XCTAssertEqual(NumericConditionKind.resolutionTier(width: 1080, height: 1920), 1080)
-        XCTAssertEqual(NumericConditionKind.resolutionTier(width: 2160, height: 3840), 2160)
+    func testResolutionTierIsTheSmallest169FrameThatHoldsTheVideo() {
+        let cases: [(width: Int, height: Int, tier: Double)] = [
+            (1920, 1080, 1080), (1080, 1920, 1080), (2160, 3840, 2160),
+            (3840, 1608, 2160), (1920, 800, 1080), (4096, 1716, 2304), (1440, 1080, 1080),
+        ]
+        for sample in cases {
+            XCTAssertEqual(ResolutionTier.value(width: sample.width, height: sample.height), sample.tier, "\(sample)")
+        }
     }
 
     func testTypedResolutionsLandOnTiers() {

@@ -483,7 +483,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                     title: String(localized: "grouping.section.resolutionUnknown", defaultValue: "Resolution Unknown")
                 )
             }
-            let tier = NumericConditionKind.resolutionTier(width: width, height: height)
+            let tier = ResolutionTier.value(width: width, height: height)
             if tier >= 2160 {
                 return GroupBucket(
                     id: "resolution-4k",

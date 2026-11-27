@@ -468,7 +468,7 @@ final class LibraryRuleBarViewController: NSViewController, NSPopoverDelegate {
             return String(localized: "filter.addedDays", defaultValue: "Added in last \(days) days")
         case let .createdWithinDays(days):
             return String(localized: "filter.createdDays", defaultValue: "Created in last \(days) days")
-        case .durationRange, .fileSizeRange, .resolutionShortEdgeRange:
+        case .durationRange, .fileSizeRange, .resolutionTierRange:
             return NumericConditionKind.label(for: condition) ?? ""
         }
     }
@@ -1454,7 +1454,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .untagged:
             break
         case .addedWithinDays, .createdWithinDays, .durationRange, .fileSizeRange,
-             .resolutionShortEdgeRange:
+             .resolutionTierRange:
             addNumericEditor(for: condition, to: stack)
         }
     }
@@ -1466,7 +1466,13 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
             self?.editedCondition.flatMap(NumericConditionKind.init) == kind
         }
         if let bounds = NumericConditionKind.bounds(of: condition) {
-            let slider = NumericRangeSlider(kind: kind, min: bounds.min, max: bounds.max)
+            let footnote = kind == .resolution
+                ? String(
+                    localized: "filter.resolution.hint",
+                    defaultValue: "Portrait 1080×1920 counts as 1080p, and widescreen 3840×1608 as 4K."
+                )
+                : nil
+            let slider = NumericRangeSlider(kind: kind, min: bounds.min, max: bounds.max, footnote: footnote)
             slider.onChange = { [weak self] low, high in
                 guard let self, isStillEdited() else { return }
                 setEditedCondition(kind.condition(min: low, max: high))
@@ -1564,7 +1570,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         case .createdWithinDays: "created"
         case .durationRange: "duration"
         case .fileSizeRange: "fileSize"
-        case .resolutionShortEdgeRange: "resolution"
+        case .resolutionTierRange: "resolution"
         }
     }
 

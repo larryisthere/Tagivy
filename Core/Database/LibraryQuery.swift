@@ -19,13 +19,13 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
     case createdWithinDays(Int)
     case durationRange(min: Double?, max: Double?)
     case fileSizeRange(min: Int64?, max: Int64?)
-    case resolutionShortEdgeRange(min: Int?, max: Int?)
+    case resolutionTierRange(min: Int?, max: Int?)
 
     /// A range with both ends open, possible only while its editor is open; it filters nothing
     /// and is dropped when the editor closes.
     var isUnboundedRange: Bool {
         switch self {
-        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionShortEdgeRange(nil, nil): true
+        case .durationRange(nil, nil), .fileSizeRange(nil, nil), .resolutionTierRange(nil, nil): true
         default: false
         }
     }
@@ -39,9 +39,9 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .fileSizeRange(low, high):
             let bounds = Self.ordered(low, high)
             return .fileSizeRange(min: bounds.min, max: bounds.max)
-        case let .resolutionShortEdgeRange(low, high):
+        case let .resolutionTierRange(low, high):
             let bounds = Self.ordered(low, high)
-            return .resolutionShortEdgeRange(min: bounds.min, max: bounds.max)
+            return .resolutionTierRange(min: bounds.min, max: bounds.max)
         case .tags, .untagged, .addedWithinDays, .createdWithinDays:
             return self
         }
@@ -61,16 +61,11 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case createdWithinDays(Int)
         case durationRange(min: Double?, max: Double?)
         case fileSizeRange(min: Int64?, max: Int64?)
-        case resolutionShortEdgeRange(min: Int?, max: Int?)
+        case resolutionTierRange(min: Int?, max: Int?)
         case durationAtLeast(Double)
         case fileSizeAtLeast(Int64)
         case resolutionWidthAtLeast(Int)
-    }
-
-    /// Earlier builds filtered resolution on a 16:9 width; read those as the matching short edge.
-    static func shortEdge(forLegacyWidth width: Int) -> Int {
-        let tiers = [1280: 720, 1920: 1080, 2560: 1440, 3840: 2160, 7680: 4320]
-        return tiers[width] ?? Int((Double(width) * 9 / 16).rounded())
+        case resolutionWidthRange(min: Int?, max: Int?)
     }
 
     init(from decoder: Decoder) throws {
@@ -81,11 +76,16 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .createdWithinDays(days): self = .createdWithinDays(days)
         case let .durationRange(low, high): self = .durationRange(min: low, max: high)
         case let .fileSizeRange(low, high): self = .fileSizeRange(min: low, max: high)
-        case let .resolutionShortEdgeRange(low, high): self = .resolutionShortEdgeRange(min: low, max: high)
+        case let .resolutionTierRange(low, high): self = .resolutionTierRange(min: low, max: high)
         case let .durationAtLeast(seconds): self = .durationRange(min: seconds, max: nil)
         case let .fileSizeAtLeast(bytes): self = .fileSizeRange(min: bytes, max: nil)
         case let .resolutionWidthAtLeast(width):
-            self = .resolutionShortEdgeRange(min: Self.shortEdge(forLegacyWidth: width), max: nil)
+            self = .resolutionTierRange(min: ResolutionTier.tier(forLegacyWidth: width), max: nil)
+        case let .resolutionWidthRange(low, high):
+            self = .resolutionTierRange(
+                min: low.map(ResolutionTier.tier(forLegacyWidth:)),
+                max: high.map(ResolutionTier.tier(forLegacyWidth:))
+            )
         }
         if isUnboundedRange {
             throw DecodingError.dataCorrupted(
@@ -103,9 +103,27 @@ enum LibraryFilterCondition: Codable, Equatable, Sendable {
         case let .createdWithinDays(days): .createdWithinDays(days)
         case let .durationRange(low, high): .durationRange(min: low, max: high)
         case let .fileSizeRange(low, high): .fileSizeRange(min: low, max: high)
-        case let .resolutionShortEdgeRange(low, high): .resolutionShortEdgeRange(min: low, max: high)
+        case let .resolutionTierRange(low, high): .resolutionTierRange(min: low, max: high)
         }
         try stored.encode(to: encoder)
+    }
+}
+
+/// A frame's resolution tier: the 16:9 height (720, 1080, 2160 …) of the smallest 16:9 frame
+/// that holds it, in either orientation. A portrait 1080×1920 video is 1080p, and a
+/// widescreen 3840×1608 video is 4K rather than its 1608-pixel short edge.
+enum ResolutionTier {
+    static func value(width: Int, height: Int) -> Double {
+        max(Double(min(width, height)), Double(max(width, height)) * 9 / 16)
+    }
+
+    /// The same value computed by SQLite; NULL when either dimension is unknown.
+    static let sql = "MAX(MIN(videos.width, videos.height), MAX(videos.width, videos.height) * 9.0 / 16)"
+
+    /// Earlier builds filtered on a 16:9 width; read those as the matching tier.
+    static func tier(forLegacyWidth width: Int) -> Int {
+        let tiers = [1280: 720, 1920: 1080, 2560: 1440, 3840: 2160, 7680: 4320]
+        return tiers[width] ?? Int((Double(width) * 9 / 16).rounded())
     }
 }
 

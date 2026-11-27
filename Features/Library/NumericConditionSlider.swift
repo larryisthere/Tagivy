@@ -17,7 +17,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: self = .createdWithinDays
         case .durationRange: self = .duration
         case .fileSizeRange: self = .fileSize
-        case .resolutionShortEdgeRange: self = .resolution
+        case .resolutionTierRange: self = .resolution
         case .tags, .untagged: return nil
         }
     }
@@ -33,7 +33,7 @@ enum NumericConditionKind: Equatable, Sendable {
     static func value(of condition: LibraryFilterCondition) -> Double? {
         switch condition {
         case let .addedWithinDays(days), let .createdWithinDays(days): Double(days)
-        case .durationRange, .fileSizeRange, .resolutionShortEdgeRange, .tags, .untagged: nil
+        case .durationRange, .fileSizeRange, .resolutionTierRange, .tags, .untagged: nil
         }
     }
 
@@ -42,7 +42,7 @@ enum NumericConditionKind: Equatable, Sendable {
         switch condition {
         case let .durationRange(low, high): (low, high)
         case let .fileSizeRange(low, high): (low.map(Double.init), high.map(Double.init))
-        case let .resolutionShortEdgeRange(low, high): (low.map(Double.init), high.map(Double.init))
+        case let .resolutionTierRange(low, high): (low.map(Double.init), high.map(Double.init))
         case .addedWithinDays, .createdWithinDays, .tags, .untagged: nil
         }
     }
@@ -62,7 +62,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .fileSize:
             .fileSizeRange(min: low.map { Int64($0.rounded()) }, max: high.map { Int64($0.rounded()) }).normalized()
         case .resolution:
-            .resolutionShortEdgeRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
+            .resolutionTierRange(min: low.map { Int($0.rounded()) }, max: high.map { Int($0.rounded()) }).normalized()
         }
     }
 
@@ -72,7 +72,7 @@ enum NumericConditionKind: Equatable, Sendable {
         case .createdWithinDays: .createdWithinDays(30)
         case .duration: .durationRange(min: 60, max: nil)
         case .fileSize: .fileSizeRange(min: 1_000_000_000, max: nil)
-        case .resolution: .resolutionShortEdgeRange(min: 2160, max: nil)
+        case .resolution: .resolutionTierRange(min: 2160, max: nil)
         }
     }
 
@@ -124,19 +124,15 @@ enum NumericConditionKind: Equatable, Sendable {
         case .resolution:
             NumericConditionScale(
                 mapping: .stepped,
-                detents: Self.resolutionSteps.map { Double($0.shortEdge) }
+                detents: Self.resolutionSteps.map { Double($0.tier) }
             )
         }
     }
 
-    /// Resolution tiers by the frame's short edge, so portrait and landscape videos share a tier.
-    static let resolutionSteps: [(shortEdge: Int, name: String)] = [
+    /// Named `ResolutionTier` values.
+    static let resolutionSteps: [(tier: Int, name: String)] = [
         (720, "720p"), (1080, "1080p"), (1440, "1440p"), (2160, "4K"), (4320, "8K"),
     ]
-
-    static func resolutionTier(width: Int, height: Int) -> Int {
-        min(width, height)
-    }
 
     // MARK: Display units
 
@@ -204,8 +200,8 @@ enum NumericConditionKind: Equatable, Sendable {
 
     func formatted(_ value: Double) -> String {
         if case .resolution = self {
-            let shortEdge = Int(value.rounded())
-            return Self.resolutionSteps.first { $0.shortEdge == shortEdge }?.name ?? "\(shortEdge)p"
+            let tier = Int(value.rounded())
+            return Self.resolutionSteps.first { $0.tier == tier }?.name ?? "\(tier)p"
         }
         guard let unit = displayUnit(for: value) else { return "\(value)" }
         return unit.format(Self.numberText(value / unit.factor))
@@ -227,15 +223,15 @@ enum NumericConditionKind: Equatable, Sendable {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if case .resolution = self {
             if let step = Self.resolutionSteps.first(where: { $0.name.lowercased() == trimmed }) {
-                return Double(step.shortEdge)
+                return Double(step.tier)
             }
             if trimmed == "2k" { return 1440 }
             let digits = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "0123456789").inverted)
             guard let number = Double(digits), valueBounds.contains(number) else { return nil }
-            if Self.resolutionSteps.contains(where: { Double($0.shortEdge) == number }) { return number }
+            if Self.resolutionSteps.contains(where: { Double($0.tier) == number }) { return number }
             // A familiar 16:9 width such as 1920 or 3840 means its tier.
-            let byWidth = LibraryFilterCondition.shortEdge(forLegacyWidth: Int(number))
-            if Self.resolutionSteps.contains(where: { $0.shortEdge == byWidth }), Int(number) != byWidth {
+            let byWidth = ResolutionTier.tier(forLegacyWidth: Int(number))
+            if Self.resolutionSteps.contains(where: { $0.tier == byWidth }), Int(number) != byWidth {
                 return Double(byWidth)
             }
             return scale.nearestDetent(to: number)
@@ -590,7 +586,7 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
 
     var range: (min: Double?, max: Double?) { (rangeBounds.min, rangeBounds.max) }
 
-    init(kind: NumericConditionKind, min: Double?, max: Double?) {
+    init(kind: NumericConditionKind, min: Double?, max: Double?, footnote: String? = nil) {
         self.kind = kind
         self.track = NumericRangeTrack(scale: kind.scale)
         self.rangeBounds = NumericRangeBounds(min: min, max: max)
@@ -645,7 +641,16 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         fields.setCustomSpacing(3, after: minField)
         fields.setCustomSpacing(3, after: maxField)
 
-        let column = NSStackView(views: [trackView, fields])
+        var rows: [NSView] = [trackView, fields]
+        let footnoteLabel = footnote.map { text in
+            let label = NSTextField(wrappingLabelWithString: text)
+            label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            label.textColor = .secondaryLabelColor
+            label.isSelectable = false
+            return label
+        }
+        if let footnoteLabel { rows.append(footnoteLabel) }
+        let column = NSStackView(views: rows)
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 6
@@ -659,6 +664,7 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             trackView.widthAnchor.constraint(equalTo: column.widthAnchor),
             fields.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
+        footnoteLabel?.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
 
         lastSnap = [.min: rangeBounds.min ?? Self.openEndSnap, .max: rangeBounds.max ?? Self.openEndSnap]
         showRange()
