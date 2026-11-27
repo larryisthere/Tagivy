@@ -5367,7 +5367,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CapCut (.fcpxml)…"
+            "value" : "JianYing (.fcpxml)…"
           }
         },
         "zh-Hans" : {
@@ -5504,7 +5504,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "In CapCut, choose More › Import PR or FCP Project and select this file."
+            "value" : "In JianYing, choose 更多 › 导入PR或FCP工程 (More › Import PR or FCP Project) on the home screen and select this file."
           }
         },
         "zh-Hans" : {
