@@ -227,6 +227,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         collectionView.onRemoveSelection = { [weak self] in
             self?.requestRemoveSelectedVideos()
         }
+        collectionView.onSelectAll = { [weak self] in
+            self?.selectAllVisibleVideos()
+        }
 
         scrollViewport.translatesAutoresizingMaskIntoConstraints = false
         // Installed once and kept above the grid, so a filter change never alters the view tree.
@@ -603,6 +606,13 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             })
         }
         return indexPaths
+    }
+
+    /// ⌘A: every video the grid shows, leaving collapsed groups out like a Shift-click range does.
+    func selectAllVisibleVideos() {
+        selectedVideoIDs = Set(visibleItemIndexPaths().compactMap { video(at: $0)?.id })
+        syncCollectionSelectionFromIDs()
+        notifySelectionChanged()
     }
 
     private func syncCollectionSelectionFromIDs() {
@@ -2170,6 +2180,12 @@ private final class VideoCollectionView: NSCollectionView {
     var onPreviewSelection: (() -> Void)?
     var onSelectionGesture: ((IndexPath?, NSEvent.ModifierFlags) -> Bool)?
     var onRemoveSelection: (() -> Void)?
+    var onSelectAll: (() -> Void)?
+
+    override func selectAll(_ sender: Any?) {
+        guard let onSelectAll else { return super.selectAll(sender) }
+        onSelectAll()
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)

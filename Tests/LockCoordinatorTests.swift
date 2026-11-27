@@ -227,6 +227,45 @@ final class RecoveryReadBudgetTests: XCTestCase {
         XCTAssertEqual(Empty.resolve(libraryAvailable: false, hasConstraints: false, libraryCount: 0), .hidden)
     }
 
+    func testStandardEditShortcutsReachTheFocusedView() {
+        let items = StandardEditMenu.items()
+        XCTAssertEqual(items.map(\.keyEquivalent), ["x", "c", "v", "a"])
+        XCTAssertEqual(items.map(\.action), [
+            #selector(NSText.cut(_:)), #selector(NSText.copy(_:)),
+            #selector(NSText.paste(_:)), #selector(NSText.selectAll(_:)),
+        ])
+        XCTAssertTrue(items.allSatisfy { $0.target == nil && $0.keyEquivalentModifierMask == [.command] })
+    }
+
+    func testSelectAllSelectsEveryVideoInTheGrid() throws {
+        var reported: [String] = []
+        let grid = VideoGridViewController(
+            onOpenVideo: { _ in }, onRevealVideo: { _ in }, onCopyPath: { _ in },
+            onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
+            onSelectionChanged: { reported = $0.map(\.id) }, thumbnailURL: { _ in nil },
+            resolveVideos: { _ in .empty }, onAssignTagID: { _, _ in },
+            onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
+            onUndoLastMutation: {}, onDismissNotification: {}
+        )
+        grid.view.frame = CGRect(x: 0, y: 0, width: 680, height: 664)
+        grid.setVideos((0..<5).map { index in
+            VideoRecord(
+                id: "v\(index)", libraryID: "test", relativePath: "V\(index).mov", filename: "V\(index).mov",
+                fileExtension: "mov", fileSize: 1, creationDate: nil, modificationDate: nil,
+                duration: 1, width: 320, height: 180, thumbnailID: nil, metadataStatus: .completed,
+                thumbnailStatus: .completed, firstIndexedAt: .distantPast, availability: .available
+            )
+        })
+        let scrollView = try XCTUnwrap((grid.view.subviews + grid.view.subviews.flatMap(\.subviews))
+            .compactMap { $0 as? NSScrollView }.first)
+        let collection = try XCTUnwrap(scrollView.documentView as? NSCollectionView)
+
+        XCTAssertTrue(collection.tryToPerform(#selector(NSText.selectAll(_:)), with: nil))
+
+        XCTAssertEqual(Set(reported), ["v0", "v1", "v2", "v3", "v4"])
+        XCTAssertEqual(collection.selectionIndexPaths.count, 5)
+    }
+
     func testLeavingPinnedGroupingReplacesOnlyScrollHost() throws {
         guard #available(macOS 26.0, *) else { return }
         let grid = VideoGridViewController(

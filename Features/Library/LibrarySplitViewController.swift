@@ -571,12 +571,30 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func setSmartCollections(_ collections: [SmartCollectionRecord]) {
         smartCollections = collections
-        if let selectedID = selectedSmartCollection?.id,
-           let updated = collections.first(where: { $0.id == selectedID }) {
-            selectedSmartCollection = updated
+        var needsQuery = false
+        if let selected = selectedSmartCollection {
+            if let updated = collections.first(where: { $0.id == selected.id }) {
+                // An undo can put back the saved rule; follow it unless the filter has unsaved edits.
+                if currentRule.normalized() == selected.rule.normalized(),
+                   updated.rule.normalized() != selected.rule.normalized() {
+                    currentRule = updated.rule
+                    needsQuery = true
+                }
+                selectedSmartCollection = updated
+                if updated.name != selected.name { setContextTitle(updated.name, tagID: nil) }
+            } else {
+                // Gone, for example by undoing its creation: show All Videos and keep its conditions unsaved.
+                selectedSmartCollection = nil
+                currentBaseFilter = .all
+                updateContext(for: .all)
+                updateInspectorBrowsingContext()
+                needsQuery = true
+            }
         }
         sidebarViewController.setSmartCollections(collections)
+        if selectedSmartCollection == nil, needsQuery { sidebarViewController.selectFilter(.all) }
         refreshRuleBar()
+        if needsQuery { applyCurrentQuery() }
     }
 
     private var smartCollectionIsDirty: Bool {
@@ -1033,18 +1051,13 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         alert.addButton(withTitle: String(localized: .actionCancel))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
+            let wasSelected = selectedSmartCollection?.id == collection.id
             onDeleteSmartCollection(collection.id) { [weak self] succeeded in
-                guard let self, succeeded else { return }
-                if selectedSmartCollection?.id == collection.id {
-                    selectedSmartCollection = nil
-                    currentBaseFilter = .all
-                    currentRule = .standard
-                    sidebarViewController.selectFilter(.all)
-                    updateContext(for: .all)
-                    updateInspectorBrowsingContext()
-                    refreshRuleBar()
-                    applyCurrentQuery()
-                }
+                // The refreshed list already moved to All Videos; deleting also drops the conditions.
+                guard let self, succeeded, wasSelected, selectedSmartCollection == nil else { return }
+                currentRule = .standard
+                refreshRuleBar()
+                applyCurrentQuery()
             }
         }
     }

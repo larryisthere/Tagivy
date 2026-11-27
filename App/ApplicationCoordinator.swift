@@ -812,6 +812,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         undoItem.target = self
         editMenu.addItem(undoItem)
         editMenu.addItem(.separator())
+        StandardEditMenu.items().forEach(editMenu.addItem)
+        editMenu.addItem(.separator())
         let searchItem = NSMenuItem(
             title: String(
                 localized: "menu.searchFilenames",
@@ -920,6 +922,21 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
 }
 
 @MainActor
+/// Cut, Copy, Paste and Select All go to whatever has focus: text fields edit text, and the video grid
+/// selects every video it shows. Without these items their shortcuts do nothing anywhere in the app.
+enum StandardEditMenu {
+    static func items() -> [NSMenuItem] {
+        [
+            (String(localized: "menu.cut", defaultValue: "Cut"), #selector(NSText.cut(_:)), "x"),
+            (String(localized: "menu.copy", defaultValue: "Copy"), #selector(NSText.copy(_:)), "c"),
+            (String(localized: "menu.paste", defaultValue: "Paste"), #selector(NSText.paste(_:)), "v"),
+            (String(localized: "menu.selectAll", defaultValue: "Select All"), #selector(NSText.selectAll(_:)), "a"),
+        ].map { title, action, key in
+            NSMenuItem(title: title, action: action, keyEquivalent: key)
+        }
+    }
+}
+
 enum LibraryUndoRouting {
     static func perform(editingText: Bool, textUndo: UndoManager?, isLibraryKey: Bool, catalogUndo: () -> Void) {
         if editingText {
