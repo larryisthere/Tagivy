@@ -39,6 +39,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
 - Premiere Pro imports the XML file from Export to Editing App instead of refusing it, and DaVinci Resolve has its own item in that menu, because Resolve imports XML files only as timelines.
 - In Premiere Pro, exported clips arrive in a bin named after the exported tag or the saved file, with subtags as bins inside it, instead of loose in the project.
+- Exporting a subtag to an editing app keeps the tags above it: its bin, or its keyword collection in Final Cut Pro, sits inside folders named after its parent tags. The export is named after the tag path, such as 人物_张津瑜.
 - Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.
 - Command-A selects all videos in the grid, and Cut, Copy, Paste, and Select All work in text fields.
 - Undo after creating, renaming, updating, or deleting a smart filter reverts that change, instead of an earlier, unrelated change such as an import.

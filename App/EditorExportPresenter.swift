@@ -33,14 +33,15 @@ final class EditorExportPresenter {
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.allowedContentTypes = [format.contentType]
-        panel.nameFieldStringValue = "\(plan.root.name).\(format.fileExtension)"
+        panel.nameFieldStringValue = "\(plan.name).\(format.fileExtension)"
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
             self.isPresenting = false
             guard response == .OK, let url = panel.url else { return }
             var plan = plan
+            plan.name = url.deletingPathExtension().lastPathComponent
             if plan.rootIsTag == false {
-                plan.root.name = url.deletingPathExtension().lastPathComponent
+                plan.root.name = plan.name
             }
             self.write(plan, format: format, to: url, window: window)
         }
