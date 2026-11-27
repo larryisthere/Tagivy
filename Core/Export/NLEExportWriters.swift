@@ -15,10 +15,15 @@ enum FCP7XMLWriter {
         writer.xml.open("xmeml", attributes: [("version", "4")])
         writer.xml.open("project")
         writer.xml.element("name", plan.root.name)
-        // The editing app puts what it imports in a bin named after the file, so the outermost bin's
-        // contents go straight into the project instead of nesting a second bin of the same name.
+        // Premiere Pro places a project's children at the top of its own project, so the outermost bin
+        // is written as a bin too; otherwise a single tag's clips arrive loose, without its bin.
+        writer.xml.open("children")
+        writer.xml.open("bin")
+        writer.xml.element("name", plan.root.name)
         writer.xml.open("children")
         writer.writeContents(of: plan.root, plan: plan)
+        writer.xml.close("children")
+        writer.xml.close("bin")
         if includesTimeline, let first = plan.clips.first {
             writer.writeSequence(plan, rate: first.frameRate, width: first.width, height: first.height)
         }
