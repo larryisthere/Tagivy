@@ -93,7 +93,8 @@ final class NLEExportTests: XCTestCase {
         let document = try XMLDocument(xmlString: text)
 
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/name").first?.stringValue, "旅行")
-        let bins = try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue)
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["旅行"])
+        let bins = try document.nodes(forXPath: "/xmeml/project/children/bin/children/bin/name").map(\.stringValue)
         XCTAssertEqual(bins, ["海边", "城市"])
         XCTAssertEqual(try document.nodes(forXPath: "//file[pathurl]").count, 1)
         XCTAssertEqual(try document.nodes(forXPath: "//file[not(*)]").count, 3)
@@ -106,14 +107,26 @@ final class NLEExportTests: XCTestCase {
         XCTAssertEqual(try document.nodes(forXPath: "//file/media/audio/channelcount").first?.stringValue, "1")
     }
 
+    /// Premiere Pro puts a project's children at the top of its project, so a tag without subtags
+    /// still needs its own bin around its clips.
+    func testFCP7XMLKeepsASingleTagsClipsInItsBin() throws {
+        let plan = makePlan(rootTagID: "people", relations: [("sunset", "people"), ("waves", "people")])
+        let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
+
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["人物"])
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/clip").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/children/clip/name").map(\.stringValue), ["sunset.mov", "waves.mov"])
+    }
+
     /// Premiere Pro refuses master clips that hold their file directly instead of in tracks.
     func testFCP7XMLWritesMasterClipsTheWayPremiereDoes() throws {
         let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast"), ("ferry", "coast"), ("ferry", "city"), ("plain", nil)])
         let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
 
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/@version").first?.stringValue, "4")
-        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["旅行", "未打标签"])
-        XCTAssertEqual(try document.nodes(forXPath: "//bin/children/bin/name").map(\.stringValue), ["海边", "城市"])
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/name").map(\.stringValue), ["导出"])
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/children/bin/name").map(\.stringValue), ["旅行", "未打标签"])
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/children/bin/children/bin/name").map(\.stringValue), ["海边", "城市"])
         let clips = try document.nodes(forXPath: "//clip")
         XCTAssertEqual(clips.count, 4)
         XCTAssertEqual(try document.nodes(forXPath: "//clip/file").count, 0)
@@ -158,7 +171,7 @@ final class NLEExportTests: XCTestCase {
         let document = try XMLDocument(xmlString: text)
 
         XCTAssertEqual(NLEExportFormat.resolve.fileExtension, "xml")
-        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin").count, 3, "The bins stay alongside the timeline")
+        XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/bin/children/bin").count, 3, "The bins stay alongside the timeline")
         XCTAssertEqual(try document.nodes(forXPath: "/xmeml/project/children/sequence/name").first?.stringValue, "导出")
         XCTAssertEqual(try document.nodes(forXPath: "//sequence/duration").first?.stringValue, "900")
         XCTAssertEqual(try document.nodes(forXPath: "//sequence/media/video/track/clipitem/start").map(\.stringValue), ["0", "300", "600"])
