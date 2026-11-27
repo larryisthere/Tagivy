@@ -2,6 +2,8 @@ import AppKit
 
 /// The bottom-left corner of the library: a rounded row under a separator showing update progress.
 /// When an update can be installed, the whole row is the button that installs and relaunches.
+/// The row keeps its text short so it fits the narrowest sidebar; the version goes in the help tag
+/// and the accessibility label, and anything that still doesn't fit shows in full on hover.
 @MainActor
 final class UpdateStatusView: NSView {
     var onInstall: () -> Void = {}
@@ -33,6 +35,7 @@ final class UpdateStatusView: NSView {
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.lineBreakMode = .byTruncatingTail
         label.translatesAutoresizingMaskIntoConstraints = false
+        label.allowsExpansionToolTips = true
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         capsule.translatesAutoresizingMaskIntoConstraints = false
@@ -86,13 +89,27 @@ final class UpdateStatusView: NSView {
         case .failed:
             show(.symbol("exclamationmark.circle"), text: String(localized: .updateFailed))
         case let .available(version):
-            show(.symbol("arrow.down.circle"), text: String(localized: .updateInstallVersion(version)), actionable: true)
+            show(
+                .symbol("arrow.down.circle"),
+                text: String(localized: .updateInstall),
+                detail: String(localized: .updateInstallVersion(version)),
+                actionable: true
+            )
         case let .downloading(version, fraction):
-            show(fraction.map(Leading.progress) ?? .spinner, text: String(localized: .updateDownloadingVersion(version)))
+            show(
+                fraction.map(Leading.progress) ?? .spinner,
+                text: String(localized: .updateDownloading),
+                detail: String(localized: .updateDownloadingVersion(version))
+            )
         case .preparing:
             show(.spinner, text: String(localized: .updatePreparing))
         case let .readyToRelaunch(version):
-            show(.symbol("arrow.clockwise.circle"), text: String(localized: .updateRelaunchVersion(version)), actionable: true)
+            show(
+                .symbol("arrow.clockwise.circle"),
+                text: String(localized: .updateRelaunch),
+                detail: String(localized: .updateRelaunchVersion(version)),
+                actionable: true
+            )
         case .installing:
             show(.spinner, text: String(localized: .updateInstalling))
         }
@@ -105,7 +122,8 @@ final class UpdateStatusView: NSView {
         case symbol(String)
     }
 
-    private func show(_ leading: Leading, text: String, actionable: Bool = false) {
+    /// `detail` names the version; it becomes the help tag and what VoiceOver reads.
+    private func show(_ leading: Leading, text: String, detail: String? = nil, actionable: Bool = false) {
         label.stringValue = text
         label.textColor = actionable ? .labelColor : .secondaryLabelColor
 
@@ -130,7 +148,8 @@ final class UpdateStatusView: NSView {
         }
 
         capsule.isActionable = actionable
-        capsule.setAccessibilityLabel(text)
+        capsule.toolTip = detail
+        capsule.setAccessibilityLabel(detail ?? text)
     }
 }
 
