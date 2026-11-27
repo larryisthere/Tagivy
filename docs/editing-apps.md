@@ -25,7 +25,7 @@ Control-click a tag, several selected tags, a smart filter, or selected videos, 
 
 - Your tag tree comes across: each tag becomes a bin (a keyword in Final Cut Pro), with its child tags nested inside.
 - Every clip's tags are also written into its notes, so you can search for them in the editing app.
-- Videos that are unavailable right now, for example on a disconnected drive, are skipped. Tagivy tells you how many when the export finishes.
+- Videos that are unavailable right now, for example on a disconnected drive, and videos whose length Tagivy hasn't read yet are skipped. Tagivy tells you how many when the export finishes.
 - iCloud videos that aren't downloaded yet are exported as usual. The editing app downloads them when it needs them.
 
 ## Final Cut Pro
