@@ -120,6 +120,17 @@ enum ResolutionTier {
     /// The same value computed by SQLite; NULL when either dimension is unknown.
     static let sql = "MAX(MIN(videos.width, videos.height), MAX(videos.width, videos.height) * 9.0 / 16)"
 
+    static let named = [720, 1080, 1440, 2160, 4320]
+
+    /// What "at most `max`" admits. A named tier covers every frame below the next tier, so a
+    /// DCI 4096×2160 frame (2304) is still "≤ 4K"; above the top tier there is no limit (nil).
+    /// Any other value is an exact inclusive limit.
+    static func upperLimit(forMax max: Int) -> (value: Double, isInclusive: Bool)? {
+        guard let index = named.firstIndex(of: max) else { return (Double(max), true) }
+        let next = named.index(after: index)
+        return next < named.endIndex ? (Double(named[next]), false) : nil
+    }
+
     /// Earlier builds filtered on a 16:9 width; read those as the matching tier.
     static func tier(forLegacyWidth width: Int) -> Int {
         let tiers = [1280: 720, 1920: 1080, 2560: 1440, 3840: 2160, 7680: 4320]

@@ -130,9 +130,9 @@ enum NumericConditionKind: Equatable, Sendable {
     }
 
     /// Named `ResolutionTier` values.
-    static let resolutionSteps: [(tier: Int, name: String)] = [
-        (720, "720p"), (1080, "1080p"), (1440, "1440p"), (2160, "4K"), (4320, "8K"),
-    ]
+    static let resolutionSteps: [(tier: Int, name: String)] = Array(
+        zip(ResolutionTier.named, ["720p", "1080p", "1440p", "4K", "8K"])
+    )
 
     // MARK: Display units
 

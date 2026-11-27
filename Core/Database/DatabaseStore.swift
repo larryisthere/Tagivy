@@ -1491,12 +1491,16 @@ actor DatabaseStore {
                 bindings: &bindings
             )
         case let .resolutionTierRange(low, high):
-            return rangePredicate(
+            let upper = high.flatMap(ResolutionTier.upperLimit(forMax:))
+            let predicate = rangePredicate(
                 column: ResolutionTier.sql,
                 min: low.map { .integer(Int64(max(0, $0))) },
-                max: high.map { .integer(Int64(max(0, $0))) },
+                max: upper.map { .double($0.value) },
+                maxIsInclusive: upper?.isInclusive ?? true,
                 bindings: &bindings
             )
+            // "≤ 8K" has no upper limit but still leaves out videos whose resolution is unknown.
+            return predicate == "1" ? "\(ResolutionTier.sql) IS NOT NULL" : predicate
         }
     }
 

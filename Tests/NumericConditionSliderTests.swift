@@ -308,4 +308,15 @@ final class NumericConditionSliderTests: XCTestCase {
             XCTAssertEqual(resolution.parse(text, currentValue: 1080), tier, text)
         }
     }
+
+    func testResolutionUpperLimitReachesTheNextTier() {
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 1080)?.value, 1440)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 1080)?.isInclusive, false)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 2160)?.value, 4320)
+        XCTAssertNil(ResolutionTier.upperLimit(forMax: 4320))
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 900)?.value, 900)
+        XCTAssertEqual(ResolutionTier.upperLimit(forMax: 900)?.isInclusive, true)
+        XCTAssertEqual(ResolutionTier.value(width: 4096, height: 2160), 2304)
+        XCTAssertEqual(ResolutionTier.value(width: 2048, height: 1080), 1152)
+    }
 }

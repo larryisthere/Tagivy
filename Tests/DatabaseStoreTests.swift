@@ -459,7 +459,9 @@ final class DatabaseStoreTests: XCTestCase {
         ])
         XCTAssertEqual(sizeBetween, ["Mid.mp4", "Long.mp4"])
         XCTAssertEqual(sizeAtMost, ["Short.mp4"])
-        XCTAssertEqual(resolutionBetween, ["Mid.mp4", "Long.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4"])
+        XCTAssertEqual(resolutionBetween, [
+            "Mid.mp4", "Long.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
         XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4", "Portrait4K.mp4", "Scope4K.mp4", "DCI4K.mp4"])
         XCTAssertEqual(fullHDOrMore, [
             "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
@@ -513,6 +515,58 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(between, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
         XCTAssertEqual(atMost, ["Below.mp4", "RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
         XCTAssertEqual(atLeast, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4", "RoundsUpPastMax.mp4"])
+    }
+
+    func testResolutionUpperBoundCoversItsWholeTier() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, width: Int, height: Int)] = [
+            ("UHD.mp4", 3840, 2160),
+            ("DCI4K.mp4", 4096, 2160),
+            ("DCIScope.mp4", 4096, 1716),
+            ("DCI2K.mp4", 2048, 1080),
+            ("QHD.mp4", 2560, 1440),
+            ("UHD8K.mp4", 7680, 4320),
+            ("Huge.mp4", 15360, 8640),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: 10) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: "UPDATE videos SET width = \(sample.width), height = \(sample.height) WHERE filename = '\(sample.name)'"
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let upTo1080p = try await matches(.resolutionTierRange(min: nil, max: 1080))
+        let upTo4K = try await matches(.resolutionTierRange(min: nil, max: 2160))
+        let fullHDTo4K = try await matches(.resolutionTierRange(min: 1080, max: 2160))
+        let atLeast4K = try await matches(.resolutionTierRange(min: 2160, max: nil))
+        let upTo8K = try await matches(.resolutionTierRange(min: nil, max: 4320))
+        let exactly4K = try await matches(.resolutionTierRange(min: 2160, max: 2160))
+
+        XCTAssertEqual(upTo1080p, ["DCI2K.mp4"])
+        XCTAssertEqual(upTo4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "DCI2K.mp4", "QHD.mp4"])
+        XCTAssertEqual(fullHDTo4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "DCI2K.mp4", "QHD.mp4"])
+        XCTAssertEqual(atLeast4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "UHD8K.mp4", "Huge.mp4"])
+        XCTAssertEqual(upTo8K, Set(samples.map(\.name)))
+        XCTAssertEqual(exactly4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4"])
     }
 
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {
