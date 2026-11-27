@@ -588,9 +588,11 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             self?.knobMoved(end, to: position, snapping: snapping)
         }
         trackView.onDragEnded = { [weak self] in self?.showRange() }
+        trackView.onStep = { [weak self] end, up in self?.step(end, up: up) }
 
         let minLabel = Self.label(String(localized: "filter.range.min", defaultValue: "Min"))
         let maxLabel = Self.label(String(localized: "filter.range.max", defaultValue: "Max"))
+        trackView.knobTitles = [.min: minLabel.stringValue, .max: maxLabel.stringValue]
         for (field, label) in [(minField, minLabel), (maxField, maxLabel)] {
             field.controlSize = .small
             field.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
@@ -671,9 +673,10 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         }
         minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
         maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
-        trackView.setAccessibilityValueDescription(
-            "\(rangeBounds.min.map(kind.formatted) ?? Self.anyText) – \(rangeBounds.max.map(kind.formatted) ?? Self.anyText)"
-        )
+        trackView.knobValues = [
+            .min: rangeBounds.min.map(kind.formatted) ?? Self.anyText,
+            .max: rangeBounds.max.map(kind.formatted) ?? Self.anyText,
+        ]
     }
 
     private func knobMoved(_ end: NumericRangeBounds.End, to position: Double, snapping: Bool) {
@@ -733,13 +736,16 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         let up = commandSelector == #selector(NSResponder.moveUp(_:))
         guard up || commandSelector == #selector(NSResponder.moveDown(_:)) else { return false }
-        let end: NumericRangeBounds.End = control === minField ? .min : .max
+        step(control === minField ? .min : .max, up: up)
+        textView.selectAll(nil)
+        return true
+    }
+
+    private func step(_ end: NumericRangeBounds.End, up: Bool) {
         var updated = rangeBounds
         updated.set(end, to: rangeBounds.stepped(end, up: up, detents: track.scale.detents))
         commit(updated)
         showRange()
-        textView.selectAll(nil)
-        return true
     }
 
     private func commit(_ updated: NumericRangeBounds) {
@@ -749,75 +755,82 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     }
 }
 
-/// The track of a range slider: two knobs, the selected span highlighted between them
-/// (or from a knob to an open end), and dots for the detents.
+/// The track of a range slider: the system slider bar and knobs, the selected span in the
+/// accent color between the knobs (or from a knob to an open end), and dots for the detents.
+/// Each knob is its own accessibility slider.
 private final class RangeTrackView: NSView {
-    private static let knobDiameter: CGFloat = 16
-    private static let trackHeight: CGFloat = 4
+    private let cell: NSSliderCell = {
+        let cell = NSSliderCell()
+        cell.controlSize = .small
+        cell.minValue = 0
+        cell.maxValue = 1
+        cell.doubleValue = 0
+        return cell
+    }()
+    private lazy var knobElements: [NumericRangeBounds.End: RangeKnobAccessibilityElement] = [
+        .min: RangeKnobAccessibilityElement(end: .min, track: self),
+        .max: RangeKnobAccessibilityElement(end: .max, track: self),
+    ]
 
     var minPosition: Double = 0 { didSet { needsDisplay = true } }
     var maxPosition: Double = 1 { didSet { needsDisplay = true } }
     var detentPositions: [Double] = [] { didSet { needsDisplay = true } }
+    var knobTitles: [NumericRangeBounds.End: String] = [:]
+    var knobValues: [NumericRangeBounds.End: String] = [:]
     var onDrag: ((NumericRangeBounds.End, Double, Bool) -> Void)?
     var onDragEnded: (() -> Void)?
+    var onStep: ((NumericRangeBounds.End, Bool) -> Void)?
     private var draggedEnd: NumericRangeBounds.End?
 
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 26) }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        cell.controlView = self
+        setAccessibilityElement(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 7) }
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    private var trackMinX: CGFloat { bounds.minX + Self.knobDiameter / 2 }
-    private var trackWidth: CGFloat { max(bounds.width - Self.knobDiameter, 1) }
-    private var trackMidY: CGFloat { Self.knobDiameter / 2 + 1 }
+    private var knobSize: CGFloat { ceil(cell.knobThickness) }
+    private var trackMinX: CGFloat { bounds.minX + knobSize / 2 }
+    private var trackWidth: CGFloat { max(bounds.width - knobSize, 1) }
+    private var trackMidY: CGFloat { knobSize / 2 }
 
     private func x(for position: Double) -> CGFloat { trackMinX + trackWidth * position }
     private func position(for x: CGFloat) -> Double { min(max(Double((x - trackMinX) / trackWidth), 0), 1) }
 
+    fileprivate func knobRect(_ end: NumericRangeBounds.End) -> NSRect {
+        let center = x(for: end == .min ? minPosition : maxPosition)
+        return NSRect(x: (center - knobSize / 2).rounded(), y: 0, width: knobSize, height: knobSize)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        let track = NSRect(x: trackMinX, y: trackMidY - Self.trackHeight / 2, width: trackWidth, height: Self.trackHeight)
-        NSColor.quaternaryLabelColor.setFill()
-        NSBezierPath(roundedRect: track, xRadius: Self.trackHeight / 2, yRadius: Self.trackHeight / 2).fill()
+        let barHeight: CGFloat = 4
+        let bar = NSRect(x: trackMinX, y: trackMidY - barHeight / 2, width: trackWidth, height: barHeight)
+        cell.drawBar(inside: bar, flipped: isFlipped)
 
         let selected = NSRect(
-            x: x(for: minPosition), y: track.minY,
-            width: max(x(for: maxPosition) - x(for: minPosition), 0), height: Self.trackHeight
+            x: x(for: minPosition), y: bar.minY,
+            width: max(x(for: maxPosition) - x(for: minPosition), 0), height: barHeight
         )
         NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: selected, xRadius: Self.trackHeight / 2, yRadius: Self.trackHeight / 2).fill()
+        NSBezierPath(roundedRect: selected, xRadius: barHeight / 2, yRadius: barHeight / 2).fill()
 
         let dotDiameter: CGFloat = 3
         NSColor.tertiaryLabelColor.setFill()
         for position in detentPositions {
-            let dot = NSRect(
-                x: x(for: position) - dotDiameter / 2,
-                y: trackMidY + Self.knobDiameter / 2 + 2,
-                width: dotDiameter,
-                height: dotDiameter
-            )
+            let dot = NSRect(x: x(for: position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
             NSBezierPath(ovalIn: dot).fill()
         }
 
-        for position in [minPosition, maxPosition] {
-            let knob = NSRect(
-                x: x(for: position) - Self.knobDiameter / 2 + 0.5,
-                y: trackMidY - Self.knobDiameter / 2 + 0.5,
-                width: Self.knobDiameter - 1,
-                height: Self.knobDiameter - 1
-            )
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
-            shadow.shadowOffset = NSSize(width: 0, height: -0.5)
-            shadow.shadowBlurRadius = 1.5
-            shadow.set()
-            NSColor.white.setFill()
-            NSBezierPath(ovalIn: knob).fill()
-            NSGraphicsContext.restoreGraphicsState()
-            NSColor.black.withAlphaComponent(0.12).setStroke()
-            let outline = NSBezierPath(ovalIn: knob)
-            outline.lineWidth = 0.5
-            outline.stroke()
-        }
+        cell.drawKnob(knobRect(.min))
+        cell.drawKnob(knobRect(.max))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -842,5 +855,40 @@ private final class RangeTrackView: NSView {
         guard let draggedEnd else { return }
         let pointer = position(for: convert(event.locationInWindow, from: nil).x)
         onDrag?(draggedEnd, pointer, event.modifierFlags.contains(.option) == false)
+    }
+
+    override func accessibilityChildren() -> [Any]? {
+        [knobElements[.min], knobElements[.max]].compactMap { $0 }
+    }
+}
+
+private final class RangeKnobAccessibilityElement: NSAccessibilityElement {
+    private let end: NumericRangeBounds.End
+    private weak var track: RangeTrackView?
+
+    init(end: NumericRangeBounds.End, track: RangeTrackView) {
+        self.end = end
+        self.track = track
+        super.init()
+    }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+    override func accessibilityParent() -> Any? { track }
+    override func accessibilityLabel() -> String? { track?.knobTitles[end] }
+    override func accessibilityValue() -> Any? { track?.knobValues[end] }
+
+    override func accessibilityFrame() -> NSRect {
+        guard let track else { return .zero }
+        return NSAccessibility.screenRect(fromView: track, rect: track.knobRect(end))
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        track?.onStep?(end, true)
+        return true
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        track?.onStep?(end, false)
+        return true
     }
 }
