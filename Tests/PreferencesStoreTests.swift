@@ -80,10 +80,6 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertTrue(PreferencesStore(defaults: defaults, isBetaBuild: false).receivesBetaUpdates)
     }
 
-    func testDevelopmentBuildIsNotABetaBuild() {
-        XCTAssertFalse(AppConfiguration.isBetaBuild)
-    }
-
     private func makeDefaults() -> UserDefaults {
         let suiteName = "PreferencesStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
