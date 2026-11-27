@@ -60,4 +60,8 @@ final class SettingsTests: XCTestCase {
             defaults: defaults
         )
     }
+
+    func testWindowsOfferNoTabBar() {
+        XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
+    }
 }

@@ -18,7 +18,7 @@ enum SettingsPane: String, CaseIterable {
     var systemImage: String {
         switch self {
         case .importOptions: "tray.and.arrow.down"
-        case .privacy: "lock"
+        case .privacy: "hand.raised"
         case .updates: "arrow.triangle.2.circlepath"
         }
     }
