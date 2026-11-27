@@ -144,6 +144,22 @@ final class NumericConditionSliderTests: XCTestCase {
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains(#"{"durationRange":{"max":10}}"#))
     }
 
+    func testRangesWithOnlyAMinimumAreSavedInTheEarlierShape() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let conditions: [LibraryFilterCondition] = [
+            .durationRange(min: 60, max: nil),
+            .fileSizeRange(min: 1_000_000_000, max: nil),
+            .resolutionWidthRange(min: 3840, max: nil),
+            .durationRange(min: 60, max: 300),
+        ]
+        XCTAssertEqual(
+            String(decoding: try encoder.encode(conditions), as: UTF8.self),
+            #"[{"durationAtLeast":{"_0":60}},{"fileSizeAtLeast":{"_0":1000000000}},"#
+                + #"{"resolutionWidthAtLeast":{"_0":3840}},{"durationRange":{"max":300,"min":60}}]"#
+        )
+    }
+
     func testRangeWithoutBoundsIsRejectedAndSwappedBoundsAreOrdered() throws {
         XCTAssertThrowsError(try JSONDecoder().decode(LibraryFilterCondition.self, from: Data(#"{"durationRange":{}}"#.utf8)))
         let swapped = try JSONDecoder().decode(

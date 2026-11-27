@@ -496,6 +496,33 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(atLeast, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4", "RoundsUpPastMax.mp4"])
     }
 
+    func testSmartFilterWithAnUnreadableRuleDoesNotHideTheOthers() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        for (index, id) in ["readable", "unreadable"].enumerated() {
+            try await store.saveSmartCollection(SmartCollectionRecord(
+                id: id,
+                libraryID: LibraryRecord.primaryID,
+                name: id,
+                rule: LibraryQueryRule(conditions: [.durationRange(min: 60, max: nil)]),
+                sortOrder: index,
+                createdAt: Date(timeIntervalSince1970: 0),
+                updatedAt: Date(timeIntervalSince1970: 0)
+            ))
+        }
+        try executeSQL(
+            at: fixture.databaseURL,
+            sql: #"UPDATE smart_collections SET rule_json = '{"conditions":[{"futureCondition":{}}]}' WHERE id = 'unreadable'"#
+        )
+
+        let collections = try await store.fetchSmartCollections(libraryID: LibraryRecord.primaryID)
+
+        XCTAssertEqual(collections.map(\.id), ["readable"])
+        XCTAssertEqual(collections.first?.rule.conditions, [.durationRange(min: 60, max: nil)])
+    }
+
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
