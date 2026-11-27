@@ -14,8 +14,8 @@ Tagivy never moves or copies your videos. It tells an editing app which videos t
 | App | Export menu item | What you get after importing |
 |---|---|---|
 | Final Cut Pro | Final Cut Pro (.fcpxml)… | An event with one keyword collection per tag |
-| Adobe Premiere Pro | Premiere Pro (.xml)… | Bins nested by tag |
-| DaVinci Resolve | DaVinci Resolve (.xml)… | Bins nested by tag, plus a timeline with every video |
+| Adobe Premiere Pro | Premiere Pro / DaVinci Resolve (.xml)… | Bins nested by tag |
+| DaVinci Resolve | Premiere Pro / DaVinci Resolve (.xml)… | Bins nested by tag |
 | JianYing (剪映) | JianYing (.fcpxml)… | A timeline with every video (JianYing has no bins) |
 | iMovie, CapCut and other apps | Drag and drop | The video files |
 
@@ -41,18 +41,12 @@ Control-click a tag, several selected tags, a smart filter, or selected videos, 
 
 ## DaVinci Resolve
 
-Resolve can import the file in two ways, depending on what you need.
-
-**Clips only (bins)**
+Resolve uses the same .xml file as Premiere Pro.
 
 1. Choose **File › Import › Media from File…** and select the exported .xml file.
 2. Bins nested by tag appear in the Media Pool.
 
-**Clips and a timeline**
-
-1. Choose **File › Import › Timeline…** (⇧⌘I) and select the exported .xml file.
-2. In the Load XML window, keep the default settings, including **Mixed frame rate format: Final Cut Pro 7**, and click **Ok**.
-3. The bins and a timeline appear in the Media Pool.
+Don't use **File › Import › Timeline…**: Resolve can't find the audio of the clips that way.
 
 **If the Mac App Store version can't find the clips**
 

@@ -14,8 +14,8 @@ Tagivy 不移动、不复制你的视频，它只告诉剪辑软件“用哪些�
 | 软件 | 导出菜单项 | 导入后得到 |
 |---|---|---|
 | Final Cut Pro | Final Cut Pro（.fcpxml）… | 事件 + 关键词精选，每个标签一个关键词 |
-| Adobe Premiere Pro | Premiere Pro（.xml）… | 按标签分层的素材箱 |
-| DaVinci Resolve | DaVinci Resolve（.xml）… | 按标签分层的素材箱，外加一条包含全部视频的时间线 |
+| Adobe Premiere Pro | Premiere Pro / DaVinci Resolve（.xml）… | 按标签分层的素材箱 |
+| DaVinci Resolve | Premiere Pro / DaVinci Resolve（.xml）… | 按标签分层的素材箱 |
 | 剪映 | 剪映（.fcpxml）… | 一条包含全部视频的时间线（剪映不支持素材箱） |
 | iMovie、CapCut 国际版及其他软件 | 拖拽 | 视频文件 |
 
@@ -41,18 +41,12 @@ Tagivy 不移动、不复制你的视频，它只告诉剪辑软件“用哪些�
 
 ## DaVinci Resolve
 
-Resolve 有两种导入方式，按你要什么来选：
-
-**只要素材（素材箱）**
+Resolve 和 Premiere Pro 用同一个 .xml 文件。
 
 1. 选 **文件 › 导入 › Media from File…**，选择导出的 .xml 文件。
 2. 媒体池里会出现按标签分层的素材箱。
 
-**素材 + 时间线**
-
-1. 选 **文件 › 导入 › 时间线…**（⇧⌘I），选择导出的 .xml 文件。
-2. 在 Load XML 窗口里保持默认设置，**Mixed frame rate format** 保持 **Final Cut Pro 7**，点 **Ok**。
-3. 媒体池里会出现素材箱和一条时间线。
+不要用 **文件 › 导入 › 时间线…**：这样导入时 Resolve 找不到片段的音频。
 
 **Mac App Store 版 Resolve 找不到素材怎么办**
 

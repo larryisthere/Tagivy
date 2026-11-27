@@ -102,7 +102,7 @@ Tagivy 面向在本地保存视频，并希望灵活整理视频且保持现有�
 |---|---|
 | Final Cut Pro | 导出 FCPXML：标签变成关键词 |
 | Adobe Premiere Pro | 导出 XML：标签变成素材箱 |
-| DaVinci Resolve | 导出 XML：标签变成素材箱，另附一条时间线 |
+| DaVinci Resolve | 导出和 Premiere Pro 相同的 XML，用“导入 › Media from File”：标签变成素材箱 |
 | 剪映 | 导出时间线 |
 | iMovie、CapCut 国际版及其他软件 | 拖拽 |
 

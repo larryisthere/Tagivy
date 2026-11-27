@@ -102,7 +102,7 @@ Export a tag, a smart filter, or selected videos straight into your editing app,
 |---|---|
 | Final Cut Pro | Export FCPXML: tags become keywords |
 | Adobe Premiere Pro | Export XML: tags become bins |
-| DaVinci Resolve | Export XML: tags become bins, plus a timeline |
+| DaVinci Resolve | Export the same XML as Premiere Pro, then Import › Media from File: tags become bins |
 | JianYing (剪映, the China edition of CapCut) | Export a timeline |
 | iMovie, CapCut and other apps | Drag and drop |
 

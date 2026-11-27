@@ -77,7 +77,6 @@ final class EditorExportPresenter {
     private func showDone(plan: NLEExportPlan, format: NLEExportFormat, url: URL, window: NSWindow) {
         var detail = switch format {
         case .fcp7XML: String(localized: .exportEditorDonePremiere)
-        case .resolve: String(localized: .exportEditorDoneResolve)
         case .fcpXML: String(localized: .exportEditorDoneFinalCut)
         case .capCut: String(localized: .exportEditorDoneCapCut)
         }
