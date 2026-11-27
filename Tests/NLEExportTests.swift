@@ -136,6 +136,22 @@ final class NLEExportTests: XCTestCase {
         }
     }
 
+    func testFCP7XMLClipItemsSpanTheWholeFileAndSilentClipsHaveNoLinks() throws {
+        let plan = makePlan(rootTagID: nil, relations: [("sunset", "coast")], silent: ["sunset"])
+        let document = try XMLDocument(xmlString: FCP7XMLWriter.document(for: plan))
+
+        XCTAssertEqual(try document.nodes(forXPath: "//clipitem").count, 1)
+        for field in ["duration", "end", "out"] {
+            XCTAssertEqual(try document.nodes(forXPath: "//clipitem/\(field)").first?.stringValue, "300", field)
+        }
+        for field in ["start", "in"] {
+            XCTAssertEqual(try document.nodes(forXPath: "//clipitem/\(field)").first?.stringValue, "0", field)
+        }
+        XCTAssertEqual(try document.nodes(forXPath: "//clip/media/audio").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "//file/media/audio").count, 0)
+        XCTAssertEqual(try document.nodes(forXPath: "//link").count, 0)
+    }
+
     func testFCPXMLBuildsKeywordFoldersForTagGroups() throws {
         let plan = makePlan(rootTagID: "travel", relations: [("sunset", "travel"), ("ferry", "coast"), ("ferry", "city")])
         let document = try XMLDocument(xmlString: FCPXMLWriter.document(for: plan))
@@ -197,13 +213,15 @@ final class NLEExportTests: XCTestCase {
     private func makePlan(
         rootTagID: String?,
         relations: [(String, String?)],
-        unknownDuration: Set<String> = []
+        unknownDuration: Set<String> = [],
+        silent: Set<String> = []
     ) -> NLEExportPlan {
         makePlan(
             name: rootTagID.flatMap { id in tags.first { $0.id == id }?.name } ?? "导出",
             grouping: rootTagID.map { .chosenTags([$0]) } ?? .videoTags(untaggedName: "未打标签"),
             relations: relations,
-            unknownDuration: unknownDuration
+            unknownDuration: unknownDuration,
+            silent: silent
         )
     }
 
@@ -215,14 +233,15 @@ final class NLEExportTests: XCTestCase {
         name: String,
         grouping: NLEExportGrouping,
         relations: [(String, String?)],
-        unknownDuration: Set<String> = []
+        unknownDuration: Set<String> = [],
+        silent: Set<String> = []
     ) -> NLEExportPlan {
         let videoIDs = relations.map(\.0).reduce(into: [String]()) { ids, id in
             if ids.contains(id) == false { ids.append(id) }
         }
         let videos = (videoIDs.isEmpty ? ["sunset", "waves"] : videoIDs).map { id in
             ResolvedVideo(
-                record: video(id, duration: unknownDuration.contains(id) ? nil : 10.01),
+                record: video(id, duration: unknownDuration.contains(id) ? nil : 10.01, silent: silent.contains(id)),
                 url: URL(fileURLWithPath: "/Volumes/Footage/A 海/\(id).mov")
             )
         }
@@ -236,7 +255,7 @@ final class NLEExportTests: XCTestCase {
         )
     }
 
-    private func video(_ id: String, duration: Double?) -> VideoRecord {
+    private func video(_ id: String, duration: Double?, silent: Bool = false) -> VideoRecord {
         VideoRecord(
             id: id,
             libraryID: LibraryRecord.primaryID,
@@ -254,7 +273,9 @@ final class NLEExportTests: XCTestCase {
             thumbnailStatus: .completed,
             firstIndexedAt: Date(timeIntervalSince1970: 0),
             availability: .available,
-            mediaSourceInfo: MediaSourceInfo(frameRate: 29.97, audioCodec: "aac", audioChannels: 1)
+            mediaSourceInfo: silent
+                ? MediaSourceInfo(frameRate: 29.97, audioCodec: nil, audioChannels: nil)
+                : MediaSourceInfo(frameRate: 29.97, audioCodec: "aac", audioChannels: 1)
         )
     }
 }
