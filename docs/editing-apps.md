@@ -6,8 +6,8 @@ Tagivy never moves or copies your videos. It tells an editing app which videos t
 
 | Method | Works with | What comes across |
 |---|---|---|
-| **Export to Editing App** | Premiere Pro, DaVinci Resolve, Final Cut Pro, CapCut | The video files plus your tag structure (bins or keywords), and a timeline for some apps |
-| **Drag and drop** | Any app that accepts files, including iMovie | The video files only |
+| **Export to Editing App** | Premiere Pro, DaVinci Resolve, Final Cut Pro, JianYing (剪映) | The video files plus your tag structure (bins or keywords), and a timeline for some apps |
+| **Drag and drop** | Any app that accepts files, including iMovie and CapCut | The video files only |
 
 ## Supported editing apps
 
@@ -16,8 +16,8 @@ Tagivy never moves or copies your videos. It tells an editing app which videos t
 | Final Cut Pro | Final Cut Pro (.fcpxml)… | An event with one keyword collection per tag |
 | Adobe Premiere Pro | Premiere Pro (.xml)… | Bins nested by tag |
 | DaVinci Resolve | DaVinci Resolve (.xml)… | Bins nested by tag, plus a timeline with every video |
-| CapCut | CapCut (.fcpxml)… | A timeline with every video (CapCut has no bins) |
-| iMovie and other apps | Drag and drop | The video files |
+| JianYing (剪映) | CapCut (.fcpxml)… | A timeline with every video (JianYing has no bins) |
+| iMovie, CapCut and other apps | Drag and drop | The video files |
 
 ## Export
 
@@ -63,14 +63,16 @@ The Mac App Store version of Resolve can only read folders you have allowed, so 
 
 The version downloaded from Blackmagic's website doesn't have this limit.
 
-## CapCut
+## JianYing (剪映)
 
-CapCut imports timelines only and has no bins, so Tagivy writes a separate file with a timeline for it.
+JianYing, the China edition of CapCut, imports timelines only and has no bins, so Tagivy writes a separate file with a timeline for it.
 
-1. On the CapCut home screen, choose **More › Import PR or FCP Project** and select the exported .fcpxml file.
-2. CapCut creates a new project with all the videos placed end to end on the timeline.
+1. On the JianYing home screen, choose **更多 › 导入PR或FCP工程** (More › Import PR or FCP Project) and select the exported .fcpxml file.
+2. JianYing creates a new project with all the videos placed end to end on the timeline.
 
-## iMovie and other apps
+The international edition of CapCut can't import projects from other apps, so use drag and drop with it.
+
+## iMovie, CapCut and other apps
 
 iMovie can't import XML or project files from other apps, so use drag and drop:
 

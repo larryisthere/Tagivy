@@ -104,7 +104,7 @@ Tagivy 面向在本地保存视频，并希望灵活整理视频且保持现有�
 | Adobe Premiere Pro | 导出 XML：标签变成素材箱 |
 | DaVinci Resolve | 导出 XML：标签变成素材箱，另附一条时间线 |
 | 剪映 | 导出时间线 |
-| iMovie 及其他软件 | 拖拽 |
+| iMovie、CapCut 国际版及其他软件 | 拖拽 |
 
 具体步骤见[在剪辑软件里使用 Tagivy 的视频](docs/editing-apps.zh-CN.md)。
 

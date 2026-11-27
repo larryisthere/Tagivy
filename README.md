@@ -103,8 +103,8 @@ Export a tag, a smart filter, or selected videos straight into your editing app,
 | Final Cut Pro | Export FCPXML: tags become keywords |
 | Adobe Premiere Pro | Export XML: tags become bins |
 | DaVinci Resolve | Export XML: tags become bins, plus a timeline |
-| CapCut | Export a timeline |
-| iMovie and other apps | Drag and drop |
+| JianYing (剪映, the China edition of CapCut) | Export a timeline |
+| iMovie, CapCut and other apps | Drag and drop |
 
 See [Use Tagivy videos in editing apps](docs/editing-apps.md) for step-by-step instructions.
 
