@@ -568,15 +568,13 @@ struct NumericRangeBounds: Equatable, Sendable {
 /// An empty field, or a knob pushed to its end of the track, leaves that end open.
 @MainActor
 final class NumericRangeSlider: NSView, NSTextFieldDelegate {
-    private static let valueFieldWidth: CGFloat = 76
+    private static let valueFieldWidth: CGFloat = 96
 
     private let kind: NumericConditionKind
     private let track: NumericRangeTrack
-    private let clearMinButton = NSButton()
-    private let clearMaxButton = NSButton()
     private let trackView = RangeTrackView()
-    private let minField = NSTextField()
-    private let maxField = NSTextField()
+    private let minField = ClearableTextField()
+    private let maxField = ClearableTextField()
     private(set) var rangeBounds: NumericRangeBounds
     private static let openEndSnap = -1.0
     private var lastSnap: [NumericRangeBounds.End: Double] = [:]
@@ -592,8 +590,15 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         self.rangeBounds = NumericRangeBounds(min: min, max: max)
         super.init(frame: .zero)
 
-        trackView.detentPositions = track.scale.detentPositions.map {
+        let detentPositions = track.scale.detentPositions.map {
             NumericRangeTrack.openZone + $0 * (1 - 2 * NumericRangeTrack.openZone)
+        }
+        if kind == .resolution {
+            trackView.detentMarks = zip(detentPositions, NumericConditionKind.resolutionSteps.map(\.name)).map {
+                RangeTrackView.DetentMark(position: $0, title: $1)
+            }
+        } else {
+            trackView.detentMarks = detentPositions.map { RangeTrackView.DetentMark(position: $0, title: nil) }
         }
         trackView.onDrag = { [weak self] end, position, snapping in
             self?.knobMoved(end, to: position, snapping: snapping)
@@ -604,7 +609,10 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         let minLabel = Self.label(String(localized: "filter.range.min", defaultValue: "Min"))
         let maxLabel = Self.label(String(localized: "filter.range.max", defaultValue: "Max"))
         trackView.knobTitles = [.min: minLabel.stringValue, .max: maxLabel.stringValue]
-        for (field, label) in [(minField, minLabel), (maxField, maxLabel)] {
+        for (field, label, clearTitle) in [
+            (minField, minLabel, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
+            (maxField, maxLabel, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
+        ] {
             field.controlSize = .small
             field.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             field.alignment = .right
@@ -616,44 +624,56 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             field.cell?.sendsActionOnEndEditing = true
             field.cell?.isScrollable = true
             field.setAccessibilityLabel(label.stringValue)
+            field.clearButtonTitle = clearTitle
+            field.onClear = { [weak self, weak field] in
+                guard let self, let field else { return }
+                clearEnd(field === minField ? .min : .max)
+            }
             field.widthAnchor.constraint(equalToConstant: Self.valueFieldWidth).isActive = true
         }
-        for (button, title) in [
-            (clearMinButton, String(localized: "filter.range.clearMin", defaultValue: "No Minimum")),
-            (clearMaxButton, String(localized: "filter.range.clearMax", defaultValue: "No Maximum")),
-        ] {
-            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: title)
-            button.isBordered = false
-            button.imagePosition = .imageOnly
-            button.contentTintColor = .tertiaryLabelColor
-            button.toolTip = title
-            button.setAccessibilityLabel(title)
-            button.target = self
-            button.action = #selector(clearEnd(_:))
-            button.widthAnchor.constraint(equalToConstant: 14).isActive = true
+
+        let fields = NSView()
+        for view in [minLabel, minField, maxLabel, maxField] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            fields.addSubview(view)
         }
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let fields = NSStackView(views: [minLabel, minField, clearMinButton, spacer, maxLabel, maxField, clearMaxButton])
-        fields.orientation = .horizontal
-        fields.alignment = .centerY
-        fields.spacing = 6
-        fields.setCustomSpacing(3, after: minField)
-        fields.setCustomSpacing(3, after: maxField)
+        // The fields line up with the ends of the slider bar.
+        let barInset = trackView.barInset
+        NSLayoutConstraint.activate([
+            minLabel.leadingAnchor.constraint(equalTo: fields.leadingAnchor, constant: barInset),
+            minField.leadingAnchor.constraint(equalTo: minLabel.trailingAnchor, constant: 6),
+            maxField.trailingAnchor.constraint(equalTo: fields.trailingAnchor, constant: -barInset),
+            maxLabel.trailingAnchor.constraint(equalTo: maxField.leadingAnchor, constant: -6),
+            maxLabel.leadingAnchor.constraint(greaterThanOrEqualTo: minField.trailingAnchor, constant: 12),
+            minField.topAnchor.constraint(equalTo: fields.topAnchor),
+            minField.bottomAnchor.constraint(equalTo: fields.bottomAnchor),
+            maxField.centerYAnchor.constraint(equalTo: minField.centerYAnchor),
+            minLabel.firstBaselineAnchor.constraint(equalTo: minField.firstBaselineAnchor),
+            maxLabel.firstBaselineAnchor.constraint(equalTo: maxField.firstBaselineAnchor),
+        ])
 
         var rows: [NSView] = [trackView, fields]
-        let footnoteLabel = footnote.map { text in
-            let label = NSTextField(wrappingLabelWithString: text)
+        if let footnote {
+            let label = NSTextField(wrappingLabelWithString: footnote)
             label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             label.textColor = .secondaryLabelColor
             label.isSelectable = false
-            return label
+            label.translatesAutoresizingMaskIntoConstraints = false
+            let container = NSView()
+            container.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: barInset),
+                label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -barInset),
+                label.topAnchor.constraint(equalTo: container.topAnchor),
+                label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            rows.append(container)
         }
-        if let footnoteLabel { rows.append(footnoteLabel) }
         let column = NSStackView(views: rows)
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 6
+        column.spacing = 8
+        column.setCustomSpacing(11, after: trackView)
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         NSLayoutConstraint.activate([
@@ -664,7 +684,7 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
             trackView.widthAnchor.constraint(equalTo: column.widthAnchor),
             fields.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
-        footnoteLabel?.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+        rows.dropFirst(2).forEach { $0.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true }
 
         lastSnap = [.min: rangeBounds.min ?? Self.openEndSnap, .max: rangeBounds.max ?? Self.openEndSnap]
         showRange()
@@ -685,12 +705,8 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
     private func showRange() {
         trackView.minPosition = track.position(forMin: rangeBounds.min)
         trackView.maxPosition = track.position(forMax: rangeBounds.max)
-        // Hidden by transparency so the fields keep their place.
-        for (button, isSet) in [(clearMinButton, rangeBounds.min != nil), (clearMaxButton, rangeBounds.max != nil)] {
-            button.alphaValue = isSet ? 1 : 0
-            button.isEnabled = isSet
-            button.setAccessibilityElement(isSet)
-        }
+        minField.showsClearButton = rangeBounds.min != nil
+        maxField.showsClearButton = rangeBounds.max != nil
         minField.stringValue = rangeBounds.min.map(kind.formatted) ?? ""
         maxField.stringValue = rangeBounds.max.map(kind.formatted) ?? ""
         trackView.knobValues = [
@@ -740,9 +756,9 @@ final class NumericRangeSlider: NSView, NSTextFieldDelegate {
         showRange()
     }
 
-    @objc private func clearEnd(_ sender: NSButton) {
+    private func clearEnd(_ end: NumericRangeBounds.End) {
         var updated = rangeBounds
-        updated.set(sender === clearMinButton ? .min : .max, to: nil)
+        updated.set(end, to: nil)
         commit(updated)
         showRange()
     }
@@ -788,7 +804,18 @@ private final class RangeTrackView: NSView {
 
     var minPosition: Double = 0 { didSet { needsDisplay = true } }
     var maxPosition: Double = 1 { didSet { needsDisplay = true } }
-    var detentPositions: [Double] = [] { didSet { needsDisplay = true } }
+    struct DetentMark {
+        let position: Double
+        /// Drawn under the track in place of a dot.
+        let title: String?
+    }
+
+    var detentMarks: [DetentMark] = [] {
+        didSet {
+            needsDisplay = true
+            invalidateIntrinsicContentSize()
+        }
+    }
     var knobTitles: [NumericRangeBounds.End: String] = [:]
     var knobValues: [NumericRangeBounds.End: String] = [:]
     var onDrag: ((NumericRangeBounds.End, Double, Bool) -> Void)?
@@ -807,7 +834,15 @@ private final class RangeTrackView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 7) }
+    private static let markFont = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .mini))
+
+    override var intrinsicContentSize: NSSize {
+        let markHeight = detentMarks.contains { $0.title != nil } ? ceil(Self.markFont.boundingRectForFont.height) : 3
+        return NSSize(width: NSView.noIntrinsicMetric, height: knobSize + 3 + markHeight)
+    }
+
+    /// Horizontal distance from the view's edge to the end of the slider bar.
+    var barInset: CGFloat { knobSize / 2 }
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -837,10 +872,20 @@ private final class RangeTrackView: NSView {
         NSBezierPath(roundedRect: selected, xRadius: barHeight / 2, yRadius: barHeight / 2).fill()
 
         let dotDiameter: CGFloat = 3
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: Self.markFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
         NSColor.tertiaryLabelColor.setFill()
-        for position in detentPositions {
-            let dot = NSRect(x: x(for: position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
-            NSBezierPath(ovalIn: dot).fill()
+        for mark in detentMarks {
+            if let title = mark.title {
+                let size = (title as NSString).size(withAttributes: titleAttributes)
+                let origin = NSPoint(x: (x(for: mark.position) - size.width / 2).rounded(), y: knobSize + 2)
+                (title as NSString).draw(at: origin, withAttributes: titleAttributes)
+            } else {
+                let dot = NSRect(x: x(for: mark.position) - dotDiameter / 2, y: knobSize + 3, width: dotDiameter, height: dotDiameter)
+                NSBezierPath(ovalIn: dot).fill()
+            }
         }
 
         cell.drawKnob(knobRect(.min))
@@ -904,5 +949,98 @@ private final class RangeKnobAccessibilityElement: NSAccessibilityElement {
     override func accessibilityPerformDecrement() -> Bool {
         track?.onStep?(end, false)
         return true
+    }
+}
+
+/// A text field with a trailing clear button inside its bezel, like a search field's.
+private final class ClearableTextField: NSTextField {
+    private static let buttonSize: CGFloat = 14
+
+    private let clearButton = NSButton()
+    var onClear: (() -> Void)?
+
+    var clearButtonTitle = "" {
+        didSet {
+            clearButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: clearButtonTitle)
+            clearButton.toolTip = clearButtonTitle
+            clearButton.setAccessibilityLabel(clearButtonTitle)
+        }
+    }
+
+    var showsClearButton = false {
+        didSet {
+            guard showsClearButton != oldValue else { return }
+            clearButton.isHidden = showsClearButton == false
+            (cell as? ClearableTextFieldCell)?.trailingInset = showsClearButton ? Self.buttonSize + 4 : 0
+            needsDisplay = true
+            // The field editor's frame is set when editing starts; restart editing to apply the new inset.
+            if let editor = currentEditor() {
+                let selection = editor.selectedRange
+                abortEditing()
+                selectText(nil)
+                currentEditor()?.selectedRange = selection
+            }
+        }
+    }
+
+    override class var cellClass: AnyClass? {
+        get { ClearableTextFieldCell.self }
+        set {}
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        clearButton.isBordered = false
+        clearButton.imagePosition = .imageOnly
+        clearButton.imageScaling = .scaleProportionallyDown
+        clearButton.contentTintColor = .tertiaryLabelColor
+        clearButton.refusesFirstResponder = true
+        clearButton.isHidden = true
+        clearButton.target = self
+        clearButton.action = #selector(clear(_:))
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(clearButton)
+        NSLayoutConstraint.activate([
+            clearButton.widthAnchor.constraint(equalToConstant: Self.buttonSize),
+            clearButton.heightAnchor.constraint(equalToConstant: Self.buttonSize),
+            clearButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+            clearButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func clear(_ sender: NSButton) {
+        onClear?()
+    }
+}
+
+private final class ClearableTextFieldCell: NSTextFieldCell {
+    var trailingInset: CGFloat = 0
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        var drawing = super.drawingRect(forBounds: rect)
+        drawing.size.width = max(drawing.width - trailingInset, 0)
+        return drawing
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: insetForEditing(rect), in: controlView, editor: textObj, delegate: delegate, event: event)
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(
+            withFrame: insetForEditing(rect), in: controlView, editor: textObj,
+            delegate: delegate, start: selStart, length: selLength
+        )
+    }
+
+    private func insetForEditing(_ rect: NSRect) -> NSRect {
+        var inset = rect
+        inset.size.width = max(rect.width - trailingInset, 0)
+        return inset
     }
 }

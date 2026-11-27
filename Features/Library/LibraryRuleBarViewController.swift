@@ -1226,7 +1226,7 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         stack.alignment = .leading
         stack.distribution = .fill
         stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 12, right: 14)
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
 
         let title = NSTextField(labelWithString: editorTitle)
         title.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -1296,8 +1296,11 @@ private final class LibraryRuleEditorViewController: NSViewController, NSTextFie
         }
     }
 
+    /// Editors whose message can appear while typing keep room for it so the popover doesn't jump.
+    /// A range editor shows one only for a duplicate, so it keeps its bottom margin even.
     private var reservesValidationSpace: Bool {
         if case .matchMode = mode { return false }
+        if let editedCondition, NumericConditionKind(editedCondition)?.isRange == true { return false }
         return true
     }
 
