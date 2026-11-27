@@ -1817,15 +1817,21 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func setTagColor(_ tag: TagRecord, color: String?) {
+    /// One undo step restores every tag's previous color.
+    func setTagColor(_ tags: [TagRecord], color: String?) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
         mutateTags(actionName: String(localized: .tagActionSetColor)) { database in
-            try await database.setTagColor(id: tag.id, color: color)
+            try await database.setTagColor(ids: tagIDs, color: color)
         }
     }
 
-    func mergeTag(_ source: TagRecord, into target: TagRecord) {
+    /// One undo step brings back every merged tag.
+    func mergeTags(_ sources: [TagRecord], into target: TagRecord) {
+        let sourceIDs = sources.map(\.id)
+        guard sourceIDs.isEmpty == false else { return }
         mutateTags(actionName: String(localized: .tagActionMerge)) { database in
-            try await database.mergeTag(sourceID: source.id, targetID: target.id)
+            try await database.mergeTags(sourceIDs: sourceIDs, targetID: target.id)
         }
     }
 

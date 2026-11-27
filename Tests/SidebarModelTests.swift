@@ -227,13 +227,120 @@ final class SidebarModelTests: XCTestCase {
         )
     }
 
-    private func makeTag(id: String, name: String, parentID: String? = nil) -> TagRecord {
+    // Rows: 0 All Videos, 1 Recent, 2 smart collection, 3 tag A, 4 tag B, 5 tag C; nil rows are group headers.
+    private let sidebarRowKinds: [SidebarRowKind?] = [.other, .other, .other, .tag, .tag, .tag, nil]
+
+    private func allowedRows(_ proposed: [Int], current: [Int], actedOn: Int = -1) -> [Int] {
+        Array(SidebarSelectionRule.allowedRows(
+            proposed: IndexSet(proposed),
+            current: IndexSet(current),
+            actedOnRow: actedOn
+        ) { row in
+            sidebarRowKinds.indices.contains(row) ? sidebarRowKinds[row] : nil
+        })
+    }
+
+    func testSeveralTagsCanBeSelectedTogether() {
+        XCTAssertEqual(allowedRows([3, 5], current: [3], actedOn: 5), [3, 5])
+        XCTAssertEqual(allowedRows([3, 4, 5], current: [3], actedOn: 5), [3, 4, 5])
+    }
+
+    func testSelectingAllSidebarRowsKeepsOnlyOneRow() {
+        // What ⌘A would have proposed before the sidebar sent it to the grid.
+        XCTAssertEqual(allowedRows([0, 1, 2, 3, 4, 5], current: [0]), [0])
+        XCTAssertEqual(allowedRows([0, 1, 2, 3, 4, 5], current: [3]), [3, 4, 5])
+    }
+
+    func testCommandClickingAnotherKindReplacesTheSelection() {
+        XCTAssertEqual(allowedRows([0, 4], current: [0], actedOn: 4), [4])
+        XCTAssertEqual(allowedRows([2, 3, 4], current: [3, 4], actedOn: 2), [2])
+        XCTAssertEqual(allowedRows([0, 2], current: [0], actedOn: 2), [2])
+    }
+
+    func testShiftClickRangeFromAFilterToATagKeepsTheTagsInRange() {
+        XCTAssertEqual(allowedRows([1, 2, 3, 4], current: [1], actedOn: 4), [3, 4])
+    }
+
+    func testKeyboardExtensionUsesTheNewlyAddedRow() {
+        XCTAssertEqual(allowedRows([2, 3], current: [3]), [2])
+        XCTAssertEqual(allowedRows([2, 3], current: [2]), [3])
+    }
+
+    func testGroupHeadersAreNeverSelected() {
+        XCTAssertEqual(allowedRows([4, 6], current: [4], actedOn: 6), [4])
+        XCTAssertEqual(allowedRows([0], current: []), [0])
+    }
+
+    func testTagMenuActsOnTheSelectionOnlyWhenTheClickedTagIsInIt() {
+        let first = makeTag(id: "first", name: "一")
+        let second = makeTag(id: "second", name: "二")
+        let outside = makeTag(id: "outside", name: "外")
+
+        XCTAssertEqual(SidebarTagMenuTargets(clicked: second, selection: [first, second]).tags, [first, second])
+        XCTAssertEqual(SidebarTagMenuTargets(clicked: outside, selection: [first, second]).tags, [outside])
+        XCTAssertFalse(SidebarTagMenuTargets(clicked: outside, selection: [first, second]).isMultiple)
+    }
+
+    func testColorIsCheckedOnlyWhenEveryTargetSharesIt() {
+        let red = makeTag(id: "red", name: "红", color: "red")
+        let alsoRed = makeTag(id: "alsoRed", name: "也红", color: "red")
+        let plain = makeTag(id: "plain", name: "无")
+        let alsoPlain = makeTag(id: "alsoPlain", name: "也无")
+
+        XCTAssertEqual(SidebarTagMenuTargets(clicked: red, selection: [red, alsoRed]).sharedColor, "red")
+        XCTAssertNil(SidebarTagMenuTargets(clicked: red, selection: [red, plain]).sharedColor)
+        XCTAssertEqual(SidebarTagMenuTargets(clicked: plain, selection: [plain, alsoPlain]).sharedColor, "")
+    }
+
+    func testMergeDestinationsLeaveOutTheTargetsAndTagsInsideThem() {
+        let parent = makeTag(id: "parent", name: "父级")
+        let child = makeTag(id: "child", name: "子级", parentID: "parent")
+        let grandchild = makeTag(id: "grandchild", name: "孙级", parentID: "child")
+        let other = makeTag(id: "other", name: "其他")
+        let otherChild = makeTag(id: "otherChild", name: "其他子级", parentID: "other")
+        let third = makeTag(id: "third", name: "第三")
+        let allTags = [parent, child, grandchild, other, otherChild, third]
+
+        let several = SidebarTagMenuTargets(clicked: parent, selection: [parent, other])
+        XCTAssertEqual(several.mergeDestinations(in: allTags).map(\.id), ["third"])
+
+        let single = SidebarTagMenuTargets(clicked: child, selection: [])
+        XCTAssertEqual(single.mergeDestinations(in: allTags).map(\.id), ["parent", "other", "otherChild", "third"])
+    }
+
+    func testNewAndMovedTagsOpenTheirParents() {
+        let parent = makeTag(id: "parent", name: "父级")
+        let child = makeTag(id: "child", name: "子级", parentID: "parent")
+        let other = makeTag(id: "other", name: "其他")
+        let created = makeTag(id: "created", name: "新", parentID: "child")
+        let moved = makeTag(id: "other", name: "其他", parentID: "parent")
+
+        XCTAssertEqual(
+            SidebarTagExpansion.parentsToReveal(previous: [parent, child, other], current: [parent, child, other, created]),
+            ["child", "parent"]
+        )
+        XCTAssertEqual(
+            SidebarTagExpansion.parentsToReveal(previous: [parent, child, other], current: [parent, child, moved]),
+            ["parent"]
+        )
+    }
+
+    func testRenamingOrRecoloringATagOpensNothing() {
+        let parent = makeTag(id: "parent", name: "父级")
+        let child = makeTag(id: "child", name: "子级", parentID: "parent")
+        let renamed = makeTag(id: "child", name: "改名", parentID: "parent", color: "red")
+
+        XCTAssertEqual(SidebarTagExpansion.parentsToReveal(previous: [parent, child], current: [parent, renamed]), [])
+        XCTAssertEqual(SidebarTagExpansion.parentsToReveal(previous: [], current: [parent, child]), [])
+    }
+
+    private func makeTag(id: String, name: String, parentID: String? = nil, color: String? = nil) -> TagRecord {
         TagRecord(
             id: id,
             libraryID: LibraryRecord.primaryID,
             name: name,
             parentID: parentID,
-            color: nil,
+            color: color,
             sortOrder: 0,
             source: "user",
             videoCount: 0

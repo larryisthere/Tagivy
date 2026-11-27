@@ -46,6 +46,11 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.
 - Command-A selects all videos in the grid, and Cut, Copy, Paste, and Select All work in text fields.
 - Undo after creating, renaming, updating, or deleting a smart filter reverts that change, instead of an earlier, unrelated change such as an import.
+- Command-A while the sidebar has focus selects all videos in the grid, as in Finder and Photos, instead of selecting every row in the sidebar. Only tags can be selected together in the sidebar; clicking a filter or smart filter while tags are selected selects it alone.
+- With several tags selected, the sidebar's shortcut menu acts on all of them: Delete N Tags, Color, and Merge Into, each a single undo step. Color shows a checkmark when all selected tags share that color, and Merge Into leaves out the selected tags and the tags inside them. Right-clicking a tag outside the selection acts on that tag only.
+- Changing a tag's color, renaming, creating, or deleting a tag no longer opens every collapsed tag in the sidebar. Tags you collapse stay collapsed after relaunching, and a new or moved tag opens its parent so you can see it.
+- The Window menu item that brings back the library window is now named Show Main Window instead of Show Library.
+- The Tagivy menu has the standard Services, Hide Tagivy (Command-H), Hide Others (Option-Command-H), and Show All items.
 
 ## [1.0.17] - 2026-11-23
 

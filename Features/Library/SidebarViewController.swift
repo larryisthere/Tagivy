@@ -5,6 +5,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     static let tagPasteboardType = NSPasteboard.PasteboardType("com.larryisthere.tagivy.tag-id")
     static let videoPasteboardType = NSPasteboard.PasteboardType("com.larryisthere.tagivy.video-ids")
     private static let tagSortModeDefaultsKey = "sidebar.tagSortMode"
+    private static let expandedTagIDsDefaultsKey = "sidebar.expandedTagIDs"
 
     private static let smartCollectionPasteboardType = NSPasteboard.PasteboardType(
         "com.larryisthere.tagivy.smart-collection-id"
@@ -28,11 +29,15 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private let onRenameTag: (TagRecord, String) -> Void
     private let onDeleteTags: ([TagRecord]) -> Void
     private let onMoveTags: ([TagRecord], String?, Int) -> Void
-    private let onSetColor: (TagRecord, String?) -> Void
-    private let onMergeTag: (TagRecord, TagRecord) -> Void
+    private let onSetColor: ([TagRecord], String?) -> Void
+    private let onMergeTags: ([TagRecord], TagRecord) -> Void
     private let onAssignVideos: (TagRecord, [String]) -> Void
     private var isRestoringSelection = false
     private var tagGroupExpansionPreference = true
+    /// Parent tags the user left open, kept across launches. Nil until the user first opens or closes
+    /// one: every parent tag starts open.
+    private var expandedTagIDs: Set<String>?
+    private var isRestoringExpansion = false
     private var pendingRootTagDraft: SidebarDraftTagNode?
     private var isResolvingRootTagDraft = false
     private var inlineRenameTarget: SidebarInlineRenameTarget?
@@ -43,6 +48,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private var showsPresetShortcutHints = false
     var resolveVideosInScopes: @MainActor ([VideoScope]) async -> ResolvedVideos = { _ in .empty }
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
+    /// Select All while the sidebar has focus selects the videos in the grid, as in Finder and Photos.
+    var canSelectAllVideos: () -> Bool = { false }
+    var onSelectAllVideos: () -> Void = {}
     private var dragPreparationGeneration = 0
     /// The videos a drag from the pressed row hands to other apps, loaded when the row is pressed.
     private var preparedDrag: (targets: SidebarTargets, videos: ResolvedVideos)?
@@ -61,8 +69,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         onRenameTag: @escaping (TagRecord, String) -> Void,
         onDeleteTags: @escaping ([TagRecord]) -> Void,
         onMoveTags: @escaping ([TagRecord], String?, Int) -> Void,
-        onSetColor: @escaping (TagRecord, String?) -> Void,
-        onMergeTag: @escaping (TagRecord, TagRecord) -> Void,
+        onSetColor: @escaping ([TagRecord], String?) -> Void,
+        onMergeTags: @escaping ([TagRecord], TagRecord) -> Void,
         onAssignVideos: @escaping (TagRecord, [String]) -> Void
     ) {
         self.onFilterChanged = onFilterChanged
@@ -76,10 +84,12 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         self.onDeleteTags = onDeleteTags
         self.onMoveTags = onMoveTags
         self.onSetColor = onSetColor
-        self.onMergeTag = onMergeTag
+        self.onMergeTags = onMergeTags
         self.onAssignVideos = onAssignVideos
         tagSortMode = UserDefaults.standard.string(forKey: Self.tagSortModeDefaultsKey)
             .flatMap(TagSortMode.init(rawValue:)) ?? .custom
+        expandedTagIDs = (UserDefaults.standard.array(forKey: Self.expandedTagIDsDefaultsKey) as? [String])
+            .map(Set.init)
         super.init(nibName: nil, bundle: nil)
         rebuildNodes()
     }
@@ -120,6 +130,12 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         outlineView.onRenameKey = { [weak self] in
             self?.renameSelectedItem() ?? false
+        }
+        outlineView.canSelectAll = { [weak self] in
+            self?.canSelectAllVideos() ?? false
+        }
+        outlineView.onSelectAll = { [weak self] in
+            self?.onSelectAllVideos()
         }
         let menu = NSMenu()
         menu.delegate = self
@@ -162,6 +178,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
 
     func setTags(_ tags: [TagRecord]) {
         let selection = selectedItemKeys()
+        let revealedParentIDs = SidebarTagExpansion.parentsToReveal(previous: self.tags, current: tags)
+        expandedTagIDs?.formUnion(revealedParentIDs)
         self.tags = tags
         if case let .tag(tagID) = inlineRenameTarget,
            tags.contains(where: { $0.id == tagID }) == false {
@@ -171,8 +189,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let previousCounts = visibleTrailingTexts()
         rebuildNodes()
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
@@ -190,8 +207,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let previousCounts = visibleTrailingTexts()
         rebuildNodes()
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
@@ -208,8 +224,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         isRestoringSelection = true
         defer { isRestoringSelection = false }
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
         refocusInlineRenameIfNeeded()
@@ -223,8 +238,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         rebuildNodes()
         loadViewIfNeeded()
         let scrollOrigin = outlineView.enclosingScrollView?.contentView.bounds.origin
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         restoreScrollOrigin(scrollOrigin)
     }
@@ -331,6 +345,23 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             || item is SmartCollectionNode
             || item is TagNode
             || item is ScanResultsNode
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView,
+        selectionIndexesForProposedSelection proposedSelectionIndexes: IndexSet
+    ) -> IndexSet {
+        SidebarSelectionRule.allowedRows(
+            proposed: proposedSelectionIndexes,
+            current: outlineView.selectedRowIndexes,
+            actedOnRow: self.outlineView.mouseDownRow
+        ) { [outlineView] row in
+            switch outlineView.item(atRow: row) {
+            case is TagNode: .tag
+            case is SidebarFilterNode, is SmartCollectionNode, is ScanResultsNode: .other
+            default: nil
+            }
+        }
     }
 
     func outlineView(
@@ -772,25 +803,40 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             menu.addItem(item)
             return
         }
-        let createChildItem = NSMenuItem(
-            title: String(localized: .tagActionCreateChild),
-            action: #selector(createTag),
-            keyEquivalent: ""
-        )
-        let renameItem = NSMenuItem(
-            title: String(localized: .tagActionRenameMenu),
-            action: #selector(renameTag(_:)),
-            keyEquivalent: ""
-        )
-        renameItem.representedObject = TagActionContext(tag: tag)
-        let deleteItem = NSMenuItem(
-            title: String(localized: .tagActionDeleteMenu),
-            action: #selector(deleteTag),
-            keyEquivalent: ""
-        )
-        for item in [createChildItem, renameItem, deleteItem] {
-            item.target = self
-            menu.addItem(item)
+        let targets = SidebarTagMenuTargets(clicked: tag, selection: selectedTagsInOutlineOrder())
+        if targets.isMultiple {
+            // Several tags: only the commands that make sense for all of them, as in Finder and Mail.
+            let deletedCount = SidebarTargets.topLevelTags(from: targets.tags, allTags: tags).count
+            let deleteItem = NSMenuItem(
+                title: deletedCount > 1
+                    ? String(localized: "tag.action.deleteMultiple", defaultValue: "Delete \(deletedCount) Tags")
+                    : String(localized: .tagActionDeleteMenu),
+                action: #selector(deleteTag),
+                keyEquivalent: ""
+            )
+            deleteItem.target = self
+            menu.addItem(deleteItem)
+        } else {
+            let createChildItem = NSMenuItem(
+                title: String(localized: .tagActionCreateChild),
+                action: #selector(createTag),
+                keyEquivalent: ""
+            )
+            let renameItem = NSMenuItem(
+                title: String(localized: .tagActionRenameMenu),
+                action: #selector(renameTag(_:)),
+                keyEquivalent: ""
+            )
+            renameItem.representedObject = TagActionContext(tags: [tag])
+            let deleteItem = NSMenuItem(
+                title: String(localized: .tagActionDeleteMenu),
+                action: #selector(deleteTag),
+                keyEquivalent: ""
+            )
+            for item in [createChildItem, renameItem, deleteItem] {
+                item.target = self
+                menu.addItem(item)
+            }
         }
         menu.addItem(.separator())
         let colorMenu = NSMenu()
@@ -803,20 +849,22 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             (String(localized: .colorBlue), "blue"),
             (String(localized: .colorPurple), "purple"),
         ]
+        let sharedColor = targets.sharedColor
         for (title, value) in colorOptions {
             let item = NSMenuItem(title: title, action: #selector(setColor(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = TagActionContext(tag: tag, value: value)
+            item.representedObject = TagActionContext(tags: targets.tags, value: value)
+            item.state = sharedColor == value ? .on : .off
             colorMenu.addItem(item)
         }
         let colorItem = NSMenuItem(title: String(localized: .tagActionColor), action: nil, keyEquivalent: "")
         colorItem.submenu = colorMenu
         menu.addItem(colorItem)
         let mergeMenu = NSMenu()
-        for target in tags where target.id != tag.id {
-            let item = NSMenuItem(title: target.name, action: #selector(mergeTag(_:)), keyEquivalent: "")
+        for destination in targets.mergeDestinations(in: tags) {
+            let item = NSMenuItem(title: destination.name, action: #selector(mergeTag(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = TagActionContext(tag: tag, target: target)
+            item.representedObject = TagActionContext(tags: targets.tags, target: destination)
             mergeMenu.addItem(item)
         }
         let mergeItem = NSMenuItem(
@@ -942,13 +990,57 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    /// Every reload of the sidebar goes through here, so tags the user closed stay closed.
+    private func reloadOutline() {
+        isRestoringExpansion = true
+        outlineView.reloadData()
+        isRestoringExpansion = false
+        restoreExpansionState()
+    }
+
     private func restoreExpansionState() {
+        isRestoringExpansion = true
+        defer { isRestoringExpansion = false }
         for group in groups {
             if group.kind != .tags || tagGroupExpansionPreference {
-                outlineView.expandItem(group, expandChildren: true)
+                outlineView.expandItem(group)
+                expandOpenTags(in: group.children)
             }
             updateTagGroupCell(for: group)
         }
+    }
+
+    private func expandOpenTags(in items: [Any]) {
+        for case let node as TagNode in items where node.children.isEmpty == false {
+            guard expandedTagIDs?.contains(node.tag.id) ?? true else { continue }
+            outlineView.expandItem(node)
+            expandOpenTags(in: node.children)
+        }
+    }
+
+    func outlineViewItemDidExpand(_ notification: Notification) {
+        guard isRestoringExpansion == false,
+              let node = notification.userInfo?["NSObject"] as? TagNode else { return }
+        updateExpandedTagIDs { $0.insert(node.tag.id) }
+        // Child tags the user left open open again with their parent.
+        isRestoringExpansion = true
+        expandOpenTags(in: node.children)
+        isRestoringExpansion = false
+    }
+
+    func outlineViewItemDidCollapse(_ notification: Notification) {
+        guard isRestoringExpansion == false,
+              let node = notification.userInfo?["NSObject"] as? TagNode else { return }
+        updateExpandedTagIDs { $0.remove(node.tag.id) }
+    }
+
+    private func updateExpandedTagIDs(_ change: (inout Set<String>) -> Void) {
+        let parentIDs = Set(tags.compactMap(\.parentID))
+        var ids = expandedTagIDs ?? parentIDs
+        change(&ids)
+        ids.formIntersection(parentIDs)
+        expandedTagIDs = ids
+        UserDefaults.standard.set(ids.sorted(), forKey: Self.expandedTagIDsDefaultsKey)
     }
 
     var canBeginCreatingRootTag: Bool {
@@ -969,8 +1061,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         tagGroupExpansionPreference = true
         rebuildNodes()
         loadViewIfNeeded()
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         DispatchQueue.main.async { [weak self] in self?.focusRootTagDraft() }
     }
@@ -989,10 +1080,13 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             view.window?.makeFirstResponder(outlineView)
         }
         tagGroupExpansionPreference.toggle()
+        isRestoringExpansion = true
         outlineView.reloadItem(currentTagGroup, reloadChildren: true)
         if tagGroupExpansionPreference {
-            outlineView.expandItem(currentTagGroup, expandChildren: true)
+            outlineView.expandItem(currentTagGroup)
+            expandOpenTags(in: currentTagGroup.children)
         }
+        isRestoringExpansion = false
         updateTagGroupCell(for: currentTagGroup)
     }
 
@@ -1033,38 +1127,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
               let mode = TagSortMode(rawValue: rawValue),
               mode != tagSortMode else { return }
         let selection = selectedItemKeys()
-        let expandedTagIDs = currentExpandedTagIDs()
         tagSortMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.tagSortModeDefaultsKey)
         rebuildNodes()
-        outlineView.reloadData()
-        restoreExpansionState(expandedTagIDs: expandedTagIDs)
+        reloadOutline()
         restoreSelection(selection)
-    }
-
-    private func currentExpandedTagIDs() -> Set<String> {
-        Set((0..<outlineView.numberOfRows).compactMap { row in
-            guard let node = outlineView.item(atRow: row) as? TagNode,
-                  outlineView.isItemExpanded(node) else { return nil }
-            return node.tag.id
-        })
-    }
-
-    private func restoreExpansionState(expandedTagIDs: Set<String>) {
-        for group in groups {
-            if group.kind != .tags || tagGroupExpansionPreference {
-                outlineView.expandItem(group)
-            }
-            restoreExpansionState(in: group.children, expandedTagIDs: expandedTagIDs)
-            updateTagGroupCell(for: group)
-        }
-    }
-
-    private func restoreExpansionState(in items: [Any], expandedTagIDs: Set<String>) {
-        for case let node as TagNode in items {
-            if expandedTagIDs.contains(node.tag.id) { outlineView.expandItem(node) }
-            restoreExpansionState(in: node.children, expandedTagIDs: expandedTagIDs)
-        }
     }
 
     @objc private func commitRootTagDraft(_ sender: NSTextField) {
@@ -1121,8 +1188,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let selection = selectedItemKeys()
         pendingRootTagDraft = nil
         rebuildNodes()
-        outlineView.reloadData()
-        restoreExpansionState()
+        reloadOutline()
         restoreSelection(selection)
         isResolvingRootTagDraft = false
 
@@ -1447,8 +1513,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         onDeleteSmartCollection(collection)
     }
     @objc private func renameTag(_ sender: NSMenuItem) {
-        guard let context = sender.representedObject as? TagActionContext else { return }
-        let tagID = context.tag.id
+        guard let context = sender.representedObject as? TagActionContext,
+              let tagID = context.tags.first?.id else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self,
                   let tag = self.tags.first(where: { $0.id == tagID }) else { return }
@@ -1497,11 +1563,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
     @objc private func setColor(_ sender: NSMenuItem) {
         guard let context = sender.representedObject as? TagActionContext else { return }
-        onSetColor(context.tag, context.value?.isEmpty == true ? nil : context.value)
+        onSetColor(context.tags, context.value?.isEmpty == true ? nil : context.value)
     }
     @objc private func mergeTag(_ sender: NSMenuItem) {
         guard let context = sender.representedObject as? TagActionContext, let target = context.target else { return }
-        onMergeTag(context.tag, target)
+        onMergeTags(context.tags, target)
+    }
+    private func selectedTagsInOutlineOrder() -> [TagRecord] {
+        outlineView.selectedRowIndexes.compactMap { (outlineView.item(atRow: $0) as? TagNode)?.tag }
     }
 
     private func prompt(title: String, value: String) -> String? {
@@ -1617,6 +1686,21 @@ private final class SidebarOutlineView: NSOutlineView {
     var onMouseDown: ((NSEvent) -> Void)?
     var onDeleteKey: (() -> Bool)?
     var onRenameKey: (() -> Bool)?
+    var canSelectAll: (() -> Bool)?
+    var onSelectAll: (() -> Void)?
+    /// The row a mouse press started on while AppKit tracks it, or -1.
+    private(set) var mouseDownRow = -1
+
+    /// The sidebar never selects all of its rows; Select All goes to the videos instead.
+    override func selectAll(_ sender: Any?) {
+        guard canSelectAll?() == true else { return NSSound.beep() }
+        onSelectAll?()
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(selectAll(_:)) { return canSelectAll?() == true }
+        return super.validateUserInterfaceItem(item)
+    }
 
     override func keyDown(with event: NSEvent) {
         if SidebarRenameKey.matches(event), editedRow < 0, onRenameKey?() == true {
@@ -1631,6 +1715,8 @@ private final class SidebarOutlineView: NSOutlineView {
 
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)
+        mouseDownRow = row(at: convert(event.locationInWindow, from: nil))
+        defer { mouseDownRow = -1 }
         super.mouseDown(with: event)
     }
 }
@@ -1917,8 +2003,12 @@ private final class SidebarInlineTextField: NSTextField {
 }
 
 private final class TagActionContext: NSObject {
-    let tag: TagRecord
+    let tags: [TagRecord]
     let value: String?
     let target: TagRecord?
-    init(tag: TagRecord, value: String? = nil, target: TagRecord? = nil) { self.tag = tag; self.value = value; self.target = target }
+    init(tags: [TagRecord], value: String? = nil, target: TagRecord? = nil) {
+        self.tags = tags
+        self.value = value
+        self.target = target
+    }
 }

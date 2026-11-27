@@ -619,6 +619,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         notifySelectionChanged()
     }
 
+    var hasVisibleVideos: Bool {
+        visibleItemIndexPaths().isEmpty == false
+    }
+
+    /// Select All from the sidebar: the grid takes keyboard focus too, so the next key acts on the
+    /// selected videos rather than on the sidebar row.
+    func selectAllVisibleVideosAndFocus() {
+        selectAllVisibleVideos()
+        view.window?.makeFirstResponder(collectionView)
+    }
+
     private func syncCollectionSelectionFromIDs() {
         isSynchronizingSelection = true
         collectionView.selectionIndexPaths = Set(selectedVideoIDs.compactMap(indexPath(forVideoID:)))
