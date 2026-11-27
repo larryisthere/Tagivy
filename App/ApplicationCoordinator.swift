@@ -467,9 +467,13 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
         updateController.start()
     }
 
+    /// The app menu's update item, which installs instead once an update is ready to relaunch.
     @objc private func checkForUpdates() {
         guard lockCoordinator.state == .unlocked else { return }
-        updateController.checkForUpdates()
+        switch updateController.status.menuCommand {
+        case .checkForUpdates: updateController.checkForUpdates()
+        case .relaunchToInstall: updateController.installUpdate()
+        }
     }
 
     @objc private func showSettings() {
@@ -706,7 +710,15 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation {
                 && libraryViewController.canNavigateLibraryPresets
         }
         if menuItem.action == #selector(checkForUpdates) {
-            return lockCoordinator.state == .unlocked && updateController.canCheckForUpdates
+            let unlocked = lockCoordinator.state == .unlocked
+            switch updateController.status.menuCommand {
+            case .checkForUpdates:
+                menuItem.title = String(localized: .menuCheckForUpdates)
+                return unlocked && updateController.canCheckForUpdates
+            case .relaunchToInstall:
+                menuItem.title = String(localized: .menuRelaunchToInstallUpdate)
+                return unlocked
+            }
         }
         if menuItem.action == #selector(showSettings) || menuItem.action == #selector(showAbout) {
             return lockCoordinator.state == .unlocked

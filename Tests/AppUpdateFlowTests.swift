@@ -101,4 +101,15 @@ final class AppUpdateFlowTests: XCTestCase {
         flow.userCheckStarted()
         XCTAssertFalse(flow.userChoseToInstall())
     }
+
+    func testAppMenuInstallsOnlyOnceAnUpdateIsReadyToRelaunch() {
+        XCTAssertEqual(AppUpdateStatus.readyToRelaunch(version: "1.0.19").menuCommand, .relaunchToInstall)
+        let others: [AppUpdateStatus] = [
+            .idle, .checking, .upToDate, .available(version: "1.0.19"),
+            .downloading(version: "1.0.19", fraction: 0.5), .preparing(version: "1.0.19"), .installing, .failed,
+        ]
+        for status in others {
+            XCTAssertEqual(status.menuCommand, .checkForUpdates, "\(status)")
+        }
+    }
 }

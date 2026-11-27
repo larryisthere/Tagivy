@@ -28,6 +28,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
 - Duration, file size, and resolution filters take a minimum and a maximum, such as Duration 1–5 min or Resolution 1080p–4K. Drag either knob to the end of the slider, clear its field, type 0, or click the × beside it to leave that end open; if both ends are left open, the filter is removed when its editor closes. The file size slider starts at 1 MB. Filters saved earlier keep their minimum with no maximum. Resolution filters, grouping, and sorting treat portrait and widescreen videos like standard 16:9 ones: a portrait 1080 × 1920 video counts as 1080p, and a widescreen 3840 × 1608 video as 4K. Date filters keep a single value, labeled Within last.
 - The update button in the bottom-left corner reads Install Update, Downloading Update, or Relaunch to Install without a version number, so it fits a narrow sidebar. Point at it to see which version it installs; VoiceOver reads the version too.
+- Once an update is ready, Check for Updates… in the Tagivy menu becomes Relaunch to Install Update, so you can install it from the menu too.
 
 ### Fixed
 
