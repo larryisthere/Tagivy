@@ -31,7 +31,7 @@ ruby script/check_invariants.rb
 xcodebuild -project VideoTagManager.xcodeproj -scheme VideoTagManager -configuration Debug -derivedDataPath .build/DerivedData test
 ```
 
-CI 在每次 push 和 PR 上运行这两项。不触碰已安装的正式 App、真实资料库和用户原始文件，测试只用合成数据。发布流程见 `docs/release.md`。
+CI（GitHub Actions，Xcode 27 runner）在每个 PR、以及 main 和 `tagivy/beta-*` 的 push 上运行这两项。不触碰已安装的正式 App、真实资料库和用户原始文件，测试只用合成数据。发布流程见 `docs/release.md`。
 
 ## 沟通
 
