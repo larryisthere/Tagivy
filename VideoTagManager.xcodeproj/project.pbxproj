@@ -607,7 +607,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/VideoTagManager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = Q554G4S79A;
 				ENABLE_APP_SANDBOX = YES;
@@ -619,7 +619,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				PRODUCT_BUNDLE_IDENTIFIER = com.larryisthere.tagivy;
 				PRODUCT_NAME = Tagivy;
 				SDKROOT = macosx;
@@ -657,7 +657,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/VideoTagManager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = Q554G4S79A;
 				ENABLE_APP_SANDBOX = YES;
@@ -669,7 +669,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				PRODUCT_BUNDLE_IDENTIFIER = com.larryisthere.tagivy;
 				PRODUCT_NAME = Tagivy;
 				SDKROOT = macosx;
