@@ -4,7 +4,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
-## [1.0.18] - 2026-11-26
+## [1.0.18] - 2026-11-28
 
 ### Added
 
