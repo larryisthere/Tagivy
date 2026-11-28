@@ -72,7 +72,9 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
     private static let itemIdentifier = NSUserInterfaceItemIdentifier("VideoCollectionViewItem")
     private static let groupHeaderIdentifier = NSUserInterfaceItemIdentifier("VideoGroupHeaderView")
+    /// Thumbnail width saved by earlier versions; read once to pick the matching column count.
     private static let gridItemWidthDefaultsKey = "VideoGridItemWidth"
+    private static let gridColumnCountDefaultsKey = "VideoGridColumnCount"
     static let defaultGridItemWidth = 180.0
     static let minimumGridItemWidth = 150.0
     static let maximumGridItemWidth = 280.0
@@ -139,6 +141,12 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var dragExportCaption: DragExportCaption?
     private let filterResultOverlay = FilterResultOverlayView()
     private var scrollObserver: NSObjectProtocol?
+    private var gridFrameObserver: NSObjectProtocol?
+    /// The number of thumbnails per row the user chose. Resizing the window keeps it and resizes the
+    /// thumbnails instead, until they would be narrower than the minimum width.
+    private var preferredColumnCount: Int?
+    /// Called when the column count or the most columns the grid can show changes.
+    var onZoomChanged: (() -> Void)?
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
@@ -198,6 +206,14 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         layout.minimumLineSpacing = 20
         layout.sectionInset = NSEdgeInsets(top: 20, left: Self.contentLeadingInset, bottom: 20, right: 20)
         collectionView.collectionViewLayout = layout
+        collectionView.postsFrameChangedNotifications = true
+        gridFrameObserver = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification,
+            object: collectionView,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.gridWidthDidChange() }
+        }
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.isSelectable = true
@@ -1657,19 +1673,102 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         requestRemoveSelectedVideos()
     }
 
-    func setGridItemWidth(_ width: Double) {
-        guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
-        let clampedWidth = Self.clampedGridItemWidth(width)
-        let glides = GridReflow.shouldGlide(
+    private var availableGridWidth: Double {
+        guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return 0 }
+        return collectionView.bounds.width - layout.sectionInset.left - layout.sectionInset.right
+    }
+
+    private var interitemSpacing: Double {
+        ((collectionView.collectionViewLayout as? NSCollectionViewFlowLayout)?.minimumInteritemSpacing).map(Double.init) ?? 0
+    }
+
+    /// The most thumbnails per row that are still at least the minimum width.
+    var maximumColumnCount: Int {
+        GridColumns.maximumCount(
+            availableWidth: availableGridWidth,
+            minimumItemWidth: Self.minimumGridItemWidth,
+            interitemSpacing: interitemSpacing
+        )
+    }
+
+    /// Thumbnails per row right now.
+    var displayedColumnCount: Int {
+        GridColumns.clamped(preferredColumnCount ?? defaultColumnCount, maximum: maximumColumnCount)
+    }
+
+    /// Actual Size: as many columns as fit at the default thumbnail width.
+    private var defaultColumnCount: Int {
+        GridColumns.count(
+            forItemWidth: Self.defaultGridItemWidth,
+            availableWidth: availableGridWidth,
+            interitemSpacing: interitemSpacing
+        )
+    }
+
+    var canZoomIn: Bool { availableGridWidth > 0 && displayedColumnCount > 1 }
+    var canZoomOut: Bool { availableGridWidth > 0 && displayedColumnCount < maximumColumnCount }
+    var canResetZoom: Bool { availableGridWidth > 0 && displayedColumnCount != defaultColumnCount }
+
+    func zoomIn() {
+        setColumnCount(GridColumns.zoomedIn(from: displayedColumnCount, maximum: maximumColumnCount))
+    }
+
+    func zoomOut() {
+        setColumnCount(GridColumns.zoomedOut(from: displayedColumnCount, maximum: maximumColumnCount))
+    }
+
+    func resetZoom() {
+        setColumnCount(defaultColumnCount)
+    }
+
+    func setColumnCount(_ columns: Int) {
+        guard availableGridWidth > 0 else { return }
+        let columns = GridColumns.clamped(columns, maximum: maximumColumnCount)
+        guard columns != preferredColumnCount else { return }
+        preferredColumnCount = columns
+        defaults.set(columns, forKey: Self.gridColumnCountDefaultsKey)
+        applyColumnLayout(glides: true)
+        onZoomChanged?()
+    }
+
+    /// The first time the grid has a width, the saved column count is restored; a thumbnail width
+    /// saved by an earlier version becomes the column count it gave at this width.
+    private func gridWidthDidChange() {
+        guard availableGridWidth > 0 else { return }
+        if preferredColumnCount == nil {
+            if let saved = defaults.object(forKey: Self.gridColumnCountDefaultsKey) as? Int, saved > 0 {
+                preferredColumnCount = saved
+            } else {
+                preferredColumnCount = GridColumns.count(
+                    forItemWidth: Self.persistedGridItemWidth(defaults: defaults),
+                    availableWidth: availableGridWidth,
+                    interitemSpacing: interitemSpacing
+                )
+            }
+        }
+        applyColumnLayout(glides: false)
+        onZoomChanged?()
+    }
+
+    private func applyColumnLayout(glides allowsGlide: Bool) {
+        guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout,
+              availableGridWidth > 0 else { return }
+        let columns = displayedColumnCount
+        let size = gridItemSize(for: GridColumns.itemWidth(
+            columns: columns,
+            availableWidth: availableGridWidth,
+            interitemSpacing: interitemSpacing
+        ))
+        guard size != layout.itemSize else { return }
+        let glides = allowsGlide && GridReflow.shouldGlide(
             fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
-            toColumns: columnCount(in: layout, itemWidth: clampedWidth),
+            toColumns: columns,
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
         let startFrames = glides ? drawnFramesNearViewport(in: layout) : [:]
-        layout.itemSize = gridItemSize(for: clampedWidth)
+        layout.itemSize = size
         layout.invalidateLayout()
         if glides { glideElements(from: startFrames) }
-        defaults.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
     }
 
     private enum GridElement: Hashable {

@@ -13,6 +13,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ### Changed
 
+- Thumbnail zoom changes the grid one column at a time, as in Photos: the − and + buttons, the slider between them, and View > Zoom In (Command-+) and Zoom Out (Command-−) each add or remove a column, and the thumbnails always fill the row. Resizing the window keeps the number of columns and resizes the thumbnails, adding fewer columns only when thumbnails would get too small. Actual Size (Command-0) returns to as many columns as fit at the default size. The zoom you chose earlier becomes the matching number of columns.
 - The ⌘1–⌘4 hints in the sidebar appear only while you hold Command by itself.
 
 ## [1.0.18] - 2026-11-26

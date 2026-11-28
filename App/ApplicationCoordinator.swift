@@ -671,12 +671,12 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
 
     @objc func zoomInThumbnails() {
         guard libraryCommandsAvailable else { return }
-        libraryViewController.adjustZoom(by: 10)
+        libraryViewController.zoomIn()
     }
 
     @objc func zoomOutThumbnails() {
         guard libraryCommandsAvailable else { return }
-        libraryViewController.adjustZoom(by: -10)
+        libraryViewController.zoomOut()
     }
 
     @objc func resetThumbnailSize() {

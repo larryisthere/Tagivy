@@ -211,6 +211,9 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }
+        videoGridViewController.onZoomChanged = { [weak self] in
+            self?.updateZoomControls()
+        }
         videoGridViewController.onSelectionChanged = { [weak self] videos in
             self?.inspectorViewController.setSelection(videos)
         }
@@ -1327,14 +1330,14 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     private func makeZoomToolbarItem(identifier: NSToolbarItem.Identifier) -> NSToolbarItemGroup {
         let smallButton = makeToolbarIconButton(
-            symbolName: "rectangle.grid.3x2",
+            symbolName: "minus",
             label: String(localized: .toolbarThumbnailDecrease),
             target: self,
             action: #selector(decreaseZoom(_:)),
             buttonType: .momentaryPushIn
         )
         let largeButton = makeToolbarIconButton(
-            symbolName: "square.grid.2x2",
+            symbolName: "plus",
             label: String(localized: .toolbarThumbnailIncrease),
             target: self,
             action: #selector(increaseZoom(_:)),
@@ -1343,18 +1346,14 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         zoomOutButton = smallButton
         zoomInButton = largeButton
 
-        let slider = NSSlider(
-            value: VideoGridViewController.persistedGridItemWidth(),
-            minValue: VideoGridViewController.minimumGridItemWidth,
-            maxValue: VideoGridViewController.maximumGridItemWidth,
-            target: self,
-            action: #selector(changeZoom(_:))
-        )
+        // Positions 1…most columns, set by updateZoomControls() once the grid has a width.
+        let slider = NSSlider(value: 1, minValue: 1, maxValue: 1, target: self, action: #selector(changeZoom(_:)))
         slider.controlSize = .small
         slider.toolTip = String(localized: .toolbarThumbnailSizeAdjust)
         slider.setAccessibilityLabel(String(localized: .toolbarThumbnailSize))
         slider.widthAnchor.constraint(equalToConstant: 70).isActive = true
         zoomSlider = slider
+        updateZoomControls()
 
         let zoomOutItem = NSToolbarItem(itemIdentifier: Self.zoomOutItemIdentifier)
         zoomOutItem.label = String(localized: .toolbarThumbnailDecrease)
@@ -1571,43 +1570,44 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     }
 
     @objc private func changeZoom(_ sender: NSSlider) {
-        videoGridViewController.setGridItemWidth(sender.doubleValue)
+        videoGridViewController.setColumnCount(GridColumns.columns(
+            forSliderValue: sender.doubleValue,
+            maximum: videoGridViewController.maximumColumnCount
+        ))
+        // Snap the knob to the column it chose.
+        updateZoomControls()
     }
 
     @objc private func decreaseZoom(_ sender: NSButton) {
-        adjustZoom(by: -10)
+        zoomOut()
     }
 
     @objc private func increaseZoom(_ sender: NSButton) {
-        adjustZoom(by: 10)
+        zoomIn()
     }
 
-    func adjustZoom(by delta: Double) {
-        guard let slider = zoomSlider else { return }
-        slider.doubleValue = min(slider.maxValue, max(slider.minValue, slider.doubleValue + delta))
-        changeZoom(slider)
-    }
+    func zoomIn() { videoGridViewController.zoomIn() }
+    func zoomOut() { videoGridViewController.zoomOut() }
+    var canZoomIn: Bool { videoGridViewController.canZoomIn }
+    var canZoomOut: Bool { videoGridViewController.canZoomOut }
+    var canResetZoom: Bool { videoGridViewController.canResetZoom }
 
-    var canZoomIn: Bool {
-        guard let slider = zoomSlider else { return false }
-        return slider.doubleValue < slider.maxValue
-    }
+    /// Actual Size: as many columns as fit at the thumbnail size a new library starts with.
+    func resetZoom() { videoGridViewController.resetZoom() }
 
-    var canZoomOut: Bool {
-        guard let slider = zoomSlider else { return false }
-        return slider.doubleValue > slider.minValue
-    }
-
-    var canResetZoom: Bool {
-        guard let slider = zoomSlider else { return false }
-        return slider.doubleValue != VideoGridViewController.defaultGridItemWidth
-    }
-
-    /// Actual Size: back to the thumbnail size a new library starts with.
-    func resetZoom() {
-        guard let slider = zoomSlider else { return }
-        slider.doubleValue = VideoGridViewController.defaultGridItemWidth
-        changeZoom(slider)
+    /// The slider has one stop per column count the grid can show at its current width.
+    private func updateZoomControls() {
+        let maximum = videoGridViewController.maximumColumnCount
+        if let slider = zoomSlider {
+            slider.maxValue = Double(maximum)
+            slider.doubleValue = GridColumns.sliderValue(
+                forColumns: videoGridViewController.displayedColumnCount,
+                maximum: maximum
+            )
+            slider.isEnabled = maximum > 1
+        }
+        zoomInButton?.isEnabled = canZoomIn
+        zoomOutButton?.isEnabled = canZoomOut
     }
 
 }

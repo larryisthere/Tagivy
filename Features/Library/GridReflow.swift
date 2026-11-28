@@ -45,3 +45,50 @@ enum GridReflow {
         layer.add(animation, forKey: glideAnimationKey)
     }
 }
+
+/// Zoom works in whole columns, as in Photos: every step changes the number of thumbnails per row,
+/// and the thumbnails take the width that fills the row exactly, so the grid never ends in a gap.
+enum GridColumns {
+    /// The most columns that fit with every thumbnail at least `minimumItemWidth` wide.
+    static func maximumCount(availableWidth: Double, minimumItemWidth: Double, interitemSpacing: Double) -> Int {
+        GridReflow.columnCount(availableWidth: availableWidth, itemWidth: minimumItemWidth, interitemSpacing: interitemSpacing)
+    }
+
+    /// The column count a thumbnail width gives, the way the flow layout fills a row.
+    static func count(forItemWidth itemWidth: Double, availableWidth: Double, interitemSpacing: Double) -> Int {
+        GridReflow.columnCount(availableWidth: availableWidth, itemWidth: itemWidth, interitemSpacing: interitemSpacing)
+    }
+
+    /// The thumbnail width at which `columns` thumbnails and the spacing between them fill the row.
+    /// Rounded down to whole points so the flow layout never wraps the last one.
+    static func itemWidth(columns: Int, availableWidth: Double, interitemSpacing: Double) -> Double {
+        let columns = max(1, columns)
+        let width = (availableWidth - Double(columns - 1) * interitemSpacing) / Double(columns)
+        return max(1, width.rounded(.down))
+    }
+
+    static func clamped(_ columns: Int, maximum: Int) -> Int {
+        min(max(1, maximum), max(1, columns))
+    }
+
+    /// Zoom In: one column fewer, so the thumbnails get larger.
+    static func zoomedIn(from columns: Int, maximum: Int) -> Int {
+        clamped(columns - 1, maximum: maximum)
+    }
+
+    /// Zoom Out: one column more, so the thumbnails get smaller.
+    static func zoomedOut(from columns: Int, maximum: Int) -> Int {
+        clamped(columns + 1, maximum: maximum)
+    }
+
+    /// The toolbar slider runs from the most columns (left, smallest thumbnails) to one column
+    /// (right, largest). Its value is a position 1…maximum; this maps it to a column count, snapping
+    /// to the nearest whole column.
+    static func columns(forSliderValue value: Double, maximum: Int) -> Int {
+        clamped(maximum + 1 - Int(value.rounded()), maximum: maximum)
+    }
+
+    static func sliderValue(forColumns columns: Int, maximum: Int) -> Double {
+        Double(maximum + 1 - clamped(columns, maximum: maximum))
+    }
+}

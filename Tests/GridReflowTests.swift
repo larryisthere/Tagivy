@@ -42,7 +42,7 @@ final class GridReflowTests: XCTestCase {
     }
 
     @MainActor
-    func testGridGlidesOnlyWhenTheColumnCountChanges() throws {
+    func testResizingDoesNotGlideAndAZoomStepGlides() throws {
         guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion == false else { return }
         let suiteName = "GridReflowTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -83,11 +83,13 @@ final class GridReflowTests: XCTestCase {
                 .flatMap { $0.fromValue as? NSValue }?.sizeValue
         }
 
-        grid.setGridItemWidth(185)
+        // 960 points for thumbnails: a saved 180-point width becomes 4 columns, applied without gliding.
         let before = itemViews().mapValues(\.frame)
+        XCTAssertEqual(grid.displayedColumnCount, 4)
         XCTAssertTrue(itemViews().values.allSatisfy { $0.layer?.animationKeys() == nil })
 
-        grid.setGridItemWidth(250)
+        grid.zoomIn()
+        XCTAssertEqual(grid.displayedColumnCount, 3)
         let after = itemViews()
         XCTAssertGreaterThan(after.values.compactMap(glide(of:)).count, 0)
         for (index, view) in after {
@@ -97,6 +99,119 @@ final class GridReflowTests: XCTestCase {
             XCTAssertEqual(glide(of: view) ?? .zero, travel, "item \(index)")
         }
         XCTAssertNil(glide(of: try XCTUnwrap(after[0])))
+    }
+}
+
+@MainActor
+final class GridColumnZoomTests: XCTestCase {
+    func testItemWidthFillsTheRowExactly() {
+        // 4 × 228 + 3 × 16 = 960
+        XCTAssertEqual(GridColumns.itemWidth(columns: 4, availableWidth: 960, interitemSpacing: 16), 228)
+        XCTAssertEqual(GridColumns.itemWidth(columns: 1, availableWidth: 960, interitemSpacing: 16), 960)
+        // Fractions round down so the last thumbnail never wraps.
+        XCTAssertEqual(GridColumns.itemWidth(columns: 3, availableWidth: 961, interitemSpacing: 16), 309)
+        for columns in 1...6 {
+            let width = GridColumns.itemWidth(columns: columns, availableWidth: 961, interitemSpacing: 16)
+            XCTAssertEqual(GridReflow.columnCount(availableWidth: 961, itemWidth: width, interitemSpacing: 16), columns)
+        }
+    }
+
+    func testMaximumColumnsKeepThumbnailsAtLeastTheMinimumWidth() {
+        XCTAssertEqual(GridColumns.maximumCount(availableWidth: 960, minimumItemWidth: 150, interitemSpacing: 16), 5)
+        XCTAssertEqual(GridColumns.maximumCount(availableWidth: 100, minimumItemWidth: 150, interitemSpacing: 16), 1)
+    }
+
+    func testZoomStepsOneColumnAndStopsAtTheEnds() {
+        XCTAssertEqual(GridColumns.zoomedIn(from: 4, maximum: 5), 3)
+        XCTAssertEqual(GridColumns.zoomedIn(from: 1, maximum: 5), 1)
+        XCTAssertEqual(GridColumns.zoomedOut(from: 4, maximum: 5), 5)
+        XCTAssertEqual(GridColumns.zoomedOut(from: 5, maximum: 5), 5)
+        // A narrower window lowers the maximum; the count follows it down.
+        XCTAssertEqual(GridColumns.zoomedOut(from: 7, maximum: 5), 5)
+    }
+
+    func testSliderRunsFromMostColumnsToOneAndSnaps() {
+        XCTAssertEqual(GridColumns.columns(forSliderValue: 1, maximum: 5), 5)
+        XCTAssertEqual(GridColumns.columns(forSliderValue: 5, maximum: 5), 1)
+        XCTAssertEqual(GridColumns.columns(forSliderValue: 2.4, maximum: 5), 4)
+        XCTAssertEqual(GridColumns.columns(forSliderValue: 2.6, maximum: 5), 3)
+        for columns in 1...5 {
+            XCTAssertEqual(GridColumns.columns(
+                forSliderValue: GridColumns.sliderValue(forColumns: columns, maximum: 5),
+                maximum: 5
+            ), columns)
+        }
+    }
+
+    func testResizingKeepsTheColumnCountAndFillsTheWidth() throws {
+        let suiteName = "GridColumnZoomTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (grid, window) = makeGrid(defaults: defaults, width: 1000)
+        grid.setColumnCount(3)
+        XCTAssertEqual(defaults.integer(forKey: "VideoGridColumnCount"), 3)
+
+        window.setContentSize(NSSize(width: 1300, height: 800))
+        XCTAssertEqual(grid.displayedColumnCount, 3)
+        XCTAssertEqual(try itemWidth(grid), GridColumns.itemWidth(columns: 3, availableWidth: 1260, interitemSpacing: 16))
+
+        // Too narrow for 3 thumbnails of the minimum width: fewer columns, and 3 again when it widens.
+        window.setContentSize(NSSize(width: 400, height: 800))
+        XCTAssertEqual(grid.displayedColumnCount, 2)
+        window.setContentSize(NSSize(width: 1000, height: 800))
+        XCTAssertEqual(grid.displayedColumnCount, 3)
+    }
+
+    func testSavedColumnCountIsRestored() throws {
+        let suiteName = "GridColumnZoomTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(2, forKey: "VideoGridColumnCount")
+        defaults.set(150.0, forKey: "VideoGridItemWidth")
+
+        XCTAssertEqual(makeGrid(defaults: defaults, width: 1000).0.displayedColumnCount, 2)
+    }
+
+    func testActualSizeReturnsToTheDefaultWidthsColumns() throws {
+        let suiteName = "GridColumnZoomTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let grid = makeGrid(defaults: defaults, width: 1000).0
+        XCTAssertEqual(grid.displayedColumnCount, 4)
+        XCTAssertFalse(grid.canResetZoom)
+
+        grid.zoomOut()
+        XCTAssertEqual(grid.displayedColumnCount, 5)
+        XCTAssertFalse(grid.canZoomOut)
+        XCTAssertTrue(grid.canResetZoom)
+
+        grid.resetZoom()
+        XCTAssertEqual(grid.displayedColumnCount, 4)
+    }
+
+    private func itemWidth(_ grid: VideoGridViewController) throws -> Double {
+        let collection = try XCTUnwrap(grid.view.descendants.compactMap { $0 as? NSCollectionView }.first)
+        return try XCTUnwrap(collection.collectionViewLayout as? NSCollectionViewFlowLayout).itemSize.width
+    }
+
+    private func makeGrid(defaults: UserDefaults, width: CGFloat) -> (VideoGridViewController, NSWindow) {
+        let grid = VideoGridViewController(
+            onOpenVideo: { _ in }, onRevealVideos: { _ in }, onCopyPaths: { _ in },
+            onRelinkVideo: { _ in }, onRetryRelinkVideo: { _ in }, onPreviewVideos: { _ in },
+            onSelectionChanged: { _ in }, thumbnailURL: { _ in nil }, resolveVideos: { _ in .empty },
+            onAssignTagID: { _, _ in },
+            onCancelImport: {}, onImportDroppedItems: { _ in }, onRemoveVideos: { _, _ in },
+            onUndoLastMutation: {}, onDismissNotification: {},
+            defaults: defaults
+        )
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: width, height: 800),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false
+        )
+        window.contentViewController = grid
+        window.setContentSize(NSSize(width: width, height: 800))
+        grid.view.layoutSubtreeIfNeeded()
+        return (grid, window)
     }
 }
 
