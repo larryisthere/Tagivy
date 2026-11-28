@@ -37,7 +37,7 @@ final class SettingsTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "SettingsTests-\(UUID().uuidString)")!
 
         let first = makeSettings(defaults: defaults)
-        XCTAssertEqual(first.selectedPane, .importOptions)
+        XCTAssertEqual(first.selectedPane, .general)
 
         _ = first.view
         first.selectedTabViewItemIndex = SettingsPane.allCases.firstIndex(of: .updates)!
@@ -46,8 +46,8 @@ final class SettingsTests: XCTestCase {
     }
 
     func testUnknownSavedPaneFallsBackToTheFirst() {
-        XCTAssertEqual(SettingsPane.initial(saved: "about", in: SettingsPane.allCases), .importOptions)
-        XCTAssertEqual(SettingsPane.initial(saved: nil, in: SettingsPane.allCases), .importOptions)
+        XCTAssertEqual(SettingsPane.initial(saved: "about", in: SettingsPane.allCases), .general)
+        XCTAssertEqual(SettingsPane.initial(saved: nil, in: SettingsPane.allCases), .general)
     }
 
     private func makeSettings(defaults: UserDefaults) -> SettingsTabViewController {
@@ -63,5 +63,18 @@ final class SettingsTests: XCTestCase {
 
     func testWindowsOfferNoTabBar() {
         XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
+        XCTAssertEqual(MainWindowController().window?.tabbingMode, .disallowed)
+    }
+
+    func testFloatOnTopRaisesTheMainWindowLevelAndBack() throws {
+        let controller = MainWindowController()
+        let window = try XCTUnwrap(controller.window)
+        XCTAssertFalse(controller.floatsOnTop)
+
+        controller.floatsOnTop = true
+        XCTAssertEqual(window.level, .floating)
+
+        controller.floatsOnTop = false
+        XCTAssertEqual(window.level, .normal)
     }
 }

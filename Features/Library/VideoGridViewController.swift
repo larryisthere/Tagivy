@@ -630,6 +630,22 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         view.window?.makeFirstResponder(collectionView)
     }
 
+    /// View → Focus Video Grid: the grid takes keyboard focus; with no video selected, the first one is
+    /// selected so the arrow keys and Video menu commands act right away, as in Finder.
+    func focusGrid() {
+        loadViewIfNeeded()
+        if collectionView.selectionIndexPaths.isEmpty,
+           let first = visibleItemIndexPaths().first,
+           let video = video(at: first) {
+            selectedVideoIDs = [video.id]
+            selectionAnchorVideoID = video.id
+            syncCollectionSelectionFromIDs()
+            collectionView.scrollToItems(at: [first], scrollPosition: .nearestHorizontalEdge)
+            notifySelectionChanged()
+        }
+        view.window?.makeFirstResponder(collectionView)
+    }
+
     private func syncCollectionSelectionFromIDs() {
         isSynchronizingSelection = true
         collectionView.selectionIndexPaths = Set(selectedVideoIDs.compactMap(indexPath(forVideoID:)))

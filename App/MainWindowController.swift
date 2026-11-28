@@ -17,7 +17,7 @@ final class MainWindowController: NSWindowController {
         window.titlebarSeparatorStyle = .none
         window.toolbarStyle = .unified
         window.minSize = Self.minimumWindowSize
-        window.tabbingMode = .preferred
+        window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         super.init(window: window)
@@ -26,6 +26,12 @@ final class MainWindowController: NSWindowController {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Window → Float on Top keeps the library window above other apps' windows.
+    var floatsOnTop: Bool {
+        get { window?.level == .floating }
+        set { window?.level = newValue ? .floating : .normal }
     }
 
     func setRootViewController(_ viewController: NSViewController) {

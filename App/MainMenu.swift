@@ -35,7 +35,10 @@ import AppKit
     func resetThumbnailSize()
     func toggleLibrarySidebar()
     func toggleLibraryInspector()
+    func focusLibrarySidebar()
+    func focusVideoGrid()
 
+    func toggleFloatOnTop()
     func showLibraryWindow()
 }
 
@@ -319,6 +322,20 @@ enum MainMenu {
             target: target
         ))
         menu.addItem(.separator())
+        // ⌥⌘1 and ⌥⌘2 follow the panes from left to right, next to ⌘1–⌘4 for the sidebar's presets.
+        menu.addItem(item(
+            String(localized: "menu.view.focusSidebar", defaultValue: "Focus Sidebar"),
+            #selector(MainMenuActions.focusLibrarySidebar),
+            "1", [.command, .option],
+            target: target
+        ))
+        menu.addItem(item(
+            String(localized: "menu.view.focusVideoGrid", defaultValue: "Focus Video Grid"),
+            #selector(MainMenuActions.focusVideoGrid),
+            "2", [.command, .option],
+            target: target
+        ))
+        menu.addItem(.separator())
         // The window gives these two their current title, such as Hide Toolbar or Exit Full Screen.
         menu.addItem(item(
             String(localized: "menu.view.hideToolbar", defaultValue: "Hide Toolbar"),
@@ -347,6 +364,11 @@ enum MainMenu {
             String(localized: "menu.window.zoom", defaultValue: "Zoom"),
             #selector(NSWindow.performZoom(_:)),
             target: nil
+        ))
+        menu.addItem(item(
+            String(localized: "menu.window.floatOnTop", defaultValue: "Float on Top"),
+            #selector(MainMenuActions.toggleFloatOnTop),
+            target: target
         ))
         menu.addItem(.separator())
         // Tagivy has one main window; ⌘0 stays with View → Actual Size.

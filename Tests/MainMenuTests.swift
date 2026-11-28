@@ -48,6 +48,8 @@ final class MainMenuTests: XCTestCase {
             (#selector(MainMenuActions.resetThumbnailSize), Shortcut("0", [.command])),
             (#selector(MainMenuActions.toggleLibrarySidebar), Shortcut("s", [.command, .control])),
             (#selector(MainMenuActions.toggleLibraryInspector), Shortcut("i", [.command, .option])),
+            (#selector(MainMenuActions.focusLibrarySidebar), Shortcut("1", [.command, .option])),
+            (#selector(MainMenuActions.focusVideoGrid), Shortcut("2", [.command, .option])),
             (#selector(NSWindow.toggleToolbarShown(_:)), Shortcut("t", [.command, .option])),
             (#selector(NSWindow.toggleFullScreen(_:)), Shortcut("f", [.command, .control])),
 
@@ -118,6 +120,14 @@ final class MainMenuTests: XCTestCase {
         })
         XCTAssertEqual(item.title, String(localized: "menu.window.showMainWindow", defaultValue: "Show Main Window"))
         // ⌘0 belongs to View → Actual Size.
+        XCTAssertEqual(item.keyEquivalent, "")
+    }
+
+    func testFloatOnTopIsInTheWindowMenuWithoutAShortcut() throws {
+        let menu = MainMenu.make(target: nil, includesCheckForUpdates: false)
+        let item = try XCTUnwrap(MainMenu.windowMenu(in: menu)?.items.first {
+            $0.action == #selector(MainMenuActions.toggleFloatOnTop)
+        })
         XCTAssertEqual(item.keyEquivalent, "")
     }
 

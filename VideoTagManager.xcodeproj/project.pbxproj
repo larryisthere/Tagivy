@@ -48,6 +48,7 @@
 		A0E2000000000000000000B2 /* InspectorTagListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F2 /* InspectorTagListTests.swift */; };
 		A0E2000000000000000000B3 /* ThumbnailRevealTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */; };
 		A0E2000000000000000000B4 /* TagCapsules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F4 /* TagCapsules.swift */; };
+		A0E3000000000000000000A1 /* TagColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E3000000000000000000A2 /* TagColor.swift */; };
 		A0E2000000000000000000B5 /* TagCapsulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F5 /* TagCapsulesTests.swift */; };
 		A0E2000000000000000000B6 /* InspectorTagStateCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */; };
 		A0E2000000000000000000B7 /* GridReflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E2000000000000000000F7 /* GridReflow.swift */; };
@@ -127,6 +128,7 @@
 		A0E2000000000000000000F2 /* InspectorTagListTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagListTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F3 /* ThumbnailRevealTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThumbnailRevealTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F4 /* TagCapsules.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagCapsules.swift; path = Library/TagCapsules.swift; sourceTree = "<group>"; };
+		A0E3000000000000000000A2 /* TagColor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagColor.swift; path = Library/TagColor.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F5 /* TagCapsulesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TagCapsulesTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F6 /* InspectorTagStateCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InspectorTagStateCacheTests.swift; sourceTree = "<group>"; };
 		A0E2000000000000000000F7 /* GridReflow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GridReflow.swift; path = Library/GridReflow.swift; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				A0E1000000000000000000F5 /* EditorExportMenu.swift */,
 				A0E2000000000000000000F1 /* ThumbnailReveal.swift */,
 				A0E2000000000000000000F4 /* TagCapsules.swift */,
+				A0E3000000000000000000A2 /* TagColor.swift */,
 				A0E2000000000000000000F7 /* GridReflow.swift */,
 				A0E3000000000000000000F1 /* FilterResultTransition.swift */,
 				A0F3000000000000000000F1 /* NumericConditionSlider.swift */,
@@ -464,6 +467,7 @@
 				A0E1000000000000000000B5 /* EditorExportMenu.swift in Sources */,
 				A0E2000000000000000000B1 /* ThumbnailReveal.swift in Sources */,
 				A0E2000000000000000000B4 /* TagCapsules.swift in Sources */,
+				A0E3000000000000000000A1 /* TagColor.swift in Sources */,
 				A0E2000000000000000000B7 /* GridReflow.swift in Sources */,
 				A0E3000000000000000000B1 /* FilterResultTransition.swift in Sources */,
 				A0F3000000000000000000B1 /* NumericConditionSlider.swift in Sources */,

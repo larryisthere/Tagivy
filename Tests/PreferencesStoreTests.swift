@@ -80,6 +80,43 @@ final class PreferencesStoreTests: XCTestCase {
         XCTAssertTrue(PreferencesStore(defaults: defaults, isBetaBuild: false).receivesBetaUpdates)
     }
 
+    func testAppearanceDefaultsToAutomaticAndPersists() {
+        let defaults = makeDefaults()
+        let store = PreferencesStore(defaults: defaults)
+        XCTAssertEqual(store.appearance, .automatic)
+
+        store.appearance = .dark
+        XCTAssertEqual(PreferencesStore(defaults: defaults).appearance, .dark)
+
+        store.appearance = .light
+        XCTAssertEqual(PreferencesStore(defaults: defaults).appearance, .light)
+    }
+
+    func testUnknownAppearanceFallsBackToAutomatic() {
+        let defaults = makeDefaults()
+        defaults.set("sepia", forKey: PreferencesStore.Key.appearance)
+
+        XCTAssertEqual(PreferencesStore(defaults: defaults).appearance, .automatic)
+    }
+
+    func testAppearanceMapsToTheAppAppearance() {
+        XCTAssertNil(AppAppearancePreference.automatic.nsAppearance)
+        XCTAssertEqual(AppAppearancePreference.light.nsAppearance?.name, .aqua)
+        XCTAssertEqual(AppAppearancePreference.dark.nsAppearance?.name, .darkAqua)
+    }
+
+    func testFloatOnTopDefaultsOffAndPersists() {
+        let defaults = makeDefaults()
+        let store = PreferencesStore(defaults: defaults)
+        XCTAssertFalse(store.floatsMainWindowOnTop)
+
+        store.floatsMainWindowOnTop = true
+        XCTAssertTrue(PreferencesStore(defaults: defaults).floatsMainWindowOnTop)
+
+        store.floatsMainWindowOnTop = false
+        XCTAssertFalse(PreferencesStore(defaults: defaults).floatsMainWindowOnTop)
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suiteName = "PreferencesStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

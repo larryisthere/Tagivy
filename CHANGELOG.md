@@ -2,7 +2,18 @@
 
 This file records user-visible changes across Tagivy and earlier FileFacet releases.
 
-## [Unreleased]
+## [1.0.19] - Unreleased
+
+### Added
+
+- View > Focus Sidebar (Option-Command-1) and Focus Video Grid (Option-Command-2) move the keyboard focus to that part of the window, bringing the window forward if needed. Focus Sidebar shows a hidden sidebar, and Focus Video Grid selects the first video when none is selected. Like every Tagivy command, you can give them other shortcuts in System Settings > Keyboard > Keyboard Shortcuts > App Shortcuts.
+- Window > Float on Top keeps the Tagivy window in front of other apps' windows. Tagivy remembers the choice the next time it opens.
+- Settings has a General pane with an Appearance option: Automatic follows the system, or choose Light or Dark for Tagivy only. The change applies right away.
+- The Color menu for tags shows each color next to its name.
+
+### Changed
+
+- The ⌘1–⌘4 hints in the sidebar appear only while you hold Command by itself.
 
 ## [1.0.18] - 2026-11-26
 

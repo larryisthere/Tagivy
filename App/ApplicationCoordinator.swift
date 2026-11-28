@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreGraphics
 import QuickLook
 import QuickLookUI
@@ -32,6 +33,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
     private var privacyShield: NSView?
     private var idleTimer: Timer?
     private var modifierFlagsMonitor: Any?
+    private var preferenceSubscriptions: Set<AnyCancellable> = []
 
     private lazy var libraryViewController = LibrarySplitViewController(
         onCancelImport: { [weak self] in self?.libraryAccessCoordinator?.cancelImport() },
@@ -169,6 +171,8 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
 
     private func settingsPaneController(_ pane: SettingsPane) -> NSViewController {
         switch pane {
+        case .general:
+            settingsHostingController(GeneralSettingsView(preferences: preferencesStore))
         case .importOptions:
             settingsHostingController(ImportSettingsView(preferences: preferencesStore))
         case .privacy:
@@ -295,6 +299,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
             self?.libraryViewController.setRelinkingVideoID(videoID)
         }
 
+        applyWindowPreferences()
         installMainMenu()
         startUpdates()
         installModifierFlagsMonitor()
@@ -421,10 +426,10 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
         modifierFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) {
             [weak self] event in
             guard let self else { return event }
-            let commandIsPressed = event.modifierFlags
-                .intersection(.deviceIndependentFlagsMask)
-                .contains(.command)
-            libraryViewController.setPresetShortcutHintsVisible(commandIsPressed)
+            // Only ⌘ alone: with ⌥ added, the number keys focus a pane instead of choosing a preset.
+            let onlyCommandIsPressed = event.modifierFlags
+                .intersection([.command, .option, .control, .shift]) == [.command]
+            libraryViewController.setPresetShortcutHintsVisible(onlyCommandIsPressed)
             return event
         }
     }
@@ -490,6 +495,7 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
         settingsWasKeyBeforePrivacyHide = nil
         let controller = settingsWindowController
         presentedSettingsWindow = controller.window
+        controller.window?.level = windowController.window?.level ?? .normal
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -625,6 +631,42 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
     @objc func toggleLibraryInspector() {
         guard libraryCommandsAvailable else { return }
         libraryViewController.toggleInspector()
+    }
+
+    /// Focus commands also bring the library window forward, for example from the Settings window.
+    private var libraryFocusAvailable: Bool {
+        lockCoordinator.state == .unlocked && libraryViewController.canNavigateLibraryPresets
+    }
+
+    @objc func focusLibrarySidebar() {
+        guard libraryFocusAvailable else { return }
+        showLibraryWindow()
+        libraryViewController.focusSidebar()
+    }
+
+    @objc func focusVideoGrid() {
+        guard libraryFocusAvailable, libraryViewController.canFocusVideoGrid else { return }
+        showLibraryWindow()
+        libraryViewController.focusVideoGrid()
+    }
+
+    @objc func toggleFloatOnTop() {
+        preferencesStore.floatsMainWindowOnTop.toggle()
+    }
+
+    /// Appearance and Float on Top take effect at launch, before the window shows, and whenever they change.
+    private func applyWindowPreferences() {
+        preferencesStore.$appearance
+            .sink { appearance in NSApp.appearance = appearance.nsAppearance }
+            .store(in: &preferenceSubscriptions)
+        preferencesStore.$floatsMainWindowOnTop
+            .sink { [weak self] floats in
+                guard let self else { return }
+                windowController.floatsOnTop = floats
+                // Settings opened from a floating window stays in front of it.
+                presentedSettingsWindow?.level = windowController.window?.level ?? .normal
+            }
+            .store(in: &preferenceSubscriptions)
     }
 
     @objc func zoomInThumbnails() {
@@ -789,6 +831,13 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
                 ? String(localized: "menu.view.showInspector", defaultValue: "Show Inspector")
                 : String(localized: "menu.view.hideInspector", defaultValue: "Hide Inspector")
             return libraryCommandsAvailable
+        case #selector(focusLibrarySidebar):
+            return libraryFocusAvailable
+        case #selector(focusVideoGrid):
+            return libraryFocusAvailable && libraryViewController.canFocusVideoGrid
+        case #selector(toggleFloatOnTop):
+            menuItem.state = preferencesStore.floatsMainWindowOnTop ? .on : .off
+            return true
         case #selector(zoomInThumbnails):
             return libraryCommandsAvailable && libraryViewController.canZoomIn
         case #selector(zoomOutThumbnails):

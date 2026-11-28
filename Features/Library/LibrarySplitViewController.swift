@@ -1539,6 +1539,20 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         item.animator().isCollapsed = collapse
     }
 
+    var canFocusVideoGrid: Bool { showsLibraryGrid }
+
+    /// View → Focus Video Grid.
+    func focusVideoGrid() {
+        guard canFocusVideoGrid else { return }
+        videoGridViewController.focusGrid()
+    }
+
+    /// View → Focus Sidebar shows a hidden sidebar first.
+    func focusSidebar() {
+        if isSidebarCollapsed { toggleSidebar() }
+        sidebarViewController.focusOutline()
+    }
+
     func toggleInspector() {
         guard let item = inspectorSplitViewItem else { return }
         let collapse = !item.isCollapsed
