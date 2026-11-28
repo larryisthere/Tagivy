@@ -45,19 +45,24 @@ def offenders(pattern, allowed: [])
   end.flatten
 end
 
-# Sandbox: nothing beyond user-selected files and app-scoped bookmarks; no network.
-check("App entitlements are only sandbox, user-selected files and app-scoped bookmarks") do
+# Sandbox: user-selected files (read-write, for exports the user saves) and app-scoped bookmarks, plus
+# Sparkle's installer mach services. The app process has no network access; Sparkle's own Downloader
+# XPC service fetches the appcast and updates.
+SPARKLE_MACH_SERVICES = %w[$(PRODUCT_BUNDLE_IDENTIFIER)-spks $(PRODUCT_BUNDLE_IDENTIFIER)-spki].freeze
+
+check("App entitlements are only sandbox, user-selected read-write files, app-scoped bookmarks and Sparkle's installer; no network") do
   entitlements = read("Config/VideoTagManager.entitlements")
-  enabled = entitlements.scan(%r{<key>([^<]+)</key>\s*<true/>}).flatten.sort
+  mach_lookup = "com.apple.security.temporary-exception.mach-lookup.global-name"
+  services = entitlements[%r{<key>#{Regexp.escape(mach_lookup)}</key>\s*<array>(.*?)</array>}m, 1].to_s.scan(%r{<string>([^<]+)</string>}).flatten
+  enabled = entitlements.scan(%r{<key>([^<]+)</key>\s*<true/>}).flatten.sort + (services.empty? ? [] : [mach_lookup])
   declared = entitlements.scan(%r{<key>([^<]+)</key>}).flatten.sort
-  base = %w[com.apple.security.app-sandbox com.apple.security.files.bookmarks.app-scope]
-  user_selected = %w[com.apple.security.files.user-selected.read-only com.apple.security.files.user-selected.read-write]
-  extra = declared - base - user_selected
+  base = %w[com.apple.security.app-sandbox com.apple.security.files.bookmarks.app-scope com.apple.security.files.user-selected.read-write] + [mach_lookup]
+  extra = declared - base
   problems = []
   problems << "missing #{base - enabled}" unless (base - enabled).empty?
-  problems << "needs exactly one of #{user_selected}, found #{enabled & user_selected}" unless (enabled & user_selected).size == 1
   problems << "unexpected entitlements #{extra}" unless extra.empty?
   problems << "declared but not enabled #{declared - enabled}" unless (declared - enabled).empty?
+  problems << "mach services #{services}, expected #{SPARKLE_MACH_SERVICES}" unless services == SPARKLE_MACH_SERVICES
   problems
 end
 
@@ -98,7 +103,7 @@ ALERT_PRESENTERS = [
   "Core/FileAccess/LibraryAccessCoordinator.swift", # relink confirmation
   "Features/Library/InspectorViewController.swift", # remove unavailable videos
   "Features/Library/LibrarySplitViewController.swift", # smart filter save / leave / delete
-  "Features/Library/SidebarViewController.swift", # delete tag
+  "Features/Library/SidebarViewController.swift", # name a new tag
   "Features/Library/VideoGridViewController.swift" # remove records
 ].freeze
 
@@ -120,11 +125,46 @@ check("Logs never make paths, names, tags or error descriptions public") do
   end
 end
 
-check("Project uses system frameworks only (no Swift packages or third-party runtime dependencies)") do
+# The only third-party dependency is Sparkle, pinned to an exact version and used by the updater alone.
+SPARKLE_REPOSITORY = "https://github.com/sparkle-project/Sparkle"
+
+check("Sparkle is the only Swift package, pinned exactly, and only the updater imports it") do
   project = read("VideoTagManager.xcodeproj/project.pbxproj")
+  generator = read("tool/generate_xcode_project.rb")
   problems = []
-  problems << "pbxproj references Swift packages" if project.match?(/XC(Remote|Local)SwiftPackageReference|XCSwiftPackageProductDependency/)
+  repositories = project.scan(/repositoryURL = "?([^";]+)"?;/).flatten.uniq
+  problems << "Swift packages in pbxproj: #{repositories}" unless repositories == [SPARKLE_REPOSITORY]
+  problems << "local Swift packages in pbxproj" if project.include?("XCLocalSwiftPackageReference")
+  products = project.scan(/isa = XCSwiftPackageProductDependency;[^}]*?productName = "?([^";]+)"?;/m).flatten.uniq
+  problems << "package products #{products}" unless products == ["Sparkle"]
+  pinned = project[/requirement = \{[^}]*kind = exactVersion;[^}]*version = "?([^";]+)"?;/m, 1]
+  problems << "Sparkle is not pinned to an exact version" unless pinned
+  in_generator = generator[/"kind" => "exactVersion", "version" => "([^"]+)"/, 1]
+  problems << "Sparkle version: project #{pinned}, generator #{in_generator}" unless pinned && pinned == in_generator
   problems << "Podfile or Cartfile present" if %w[Podfile Cartfile Package.swift].any? { |file| File.exist?(File.join(ROOT, file)) }
+  problems + offenders(/^\s*import\s+Sparkle\b/, allowed: ["App/AppUpdateController.swift"])
+end
+
+check("Updates come from the appcast the release lane publishes, signed with the Sparkle key") do
+  info = read("Config/Info.plist")
+  fastfile = read("fastlane/Fastfile")
+  value = ->(key) { info[%r{<key>#{key}</key>\s*<(?:string|integer)>([^<]*)</}, 1] }
+  constant = ->(name) { fastfile[/^#{name} = "([^"]+)"/, 1] }
+  expected_feed = "https://raw.githubusercontent.com/#{constant.call('DEFAULT_GITHUB_REPOSITORY')}/" \
+                  "#{constant.call('APPCAST_BRANCH')}/#{constant.call('APPCAST_PATH')}"
+  problems = []
+  problems << "SUFeedURL #{value.call('SUFeedURL')}, release lane publishes #{expected_feed}" unless value.call("SUFeedURL") == expected_feed
+  problems << "SUPublicEDKey is not a Sparkle EdDSA public key" unless value.call("SUPublicEDKey").to_s.match?(%r{\A[A-Za-z0-9+/]{43}=\z})
+  %w[SUEnableInstallerLauncherService SUEnableDownloaderService SUVerifyUpdateBeforeExtraction SUEnableAutomaticChecks SUAutomaticallyUpdate].each do |key|
+    problems << "#{key} is not true" unless info.match?(%r{<key>#{key}</key>\s*<true/>})
+  end
+  beta_number_key = read("App/AppConfiguration.swift")[/static let betaNumberInfoKey = "([^"]+)"/, 1]
+  problems << "Info.plist #{beta_number_key} is not $(TAGIVY_BETA_NUMBER)" unless value.call(beta_number_key) == "$(TAGIVY_BETA_NUMBER)"
+  problems << "release lane does not set TAGIVY_BETA_NUMBER to the beta number" unless fastfile.include?("TAGIVY_BETA_NUMBER=\#{beta}")
+  problems << "release lane does not check the built app's #{beta_number_key}" unless fastfile.include?("Print :#{beta_number_key}")
+  beta_in_app = read("App/AppUpdateController.swift")[/static let betaChannel = "([^"]+)"/, 1]
+  beta_in_appcast = read("tool/appcast.rb")[/BETA_CHANNEL = "([^"]+)"/, 1]
+  problems << "beta channel: app #{beta_in_app}, appcast #{beta_in_appcast}" unless beta_in_app && beta_in_app == beta_in_appcast
   problems
 end
 
@@ -205,6 +245,20 @@ check("Every localized string is translated in en and zh-Hans with matching plac
     extra = localizations.keys - %w[en zh-Hans]
     problems << "#{key}: unexpected languages #{extra}" unless extra.empty?
   end
+  problems
+end
+
+require_relative "../tool/release_notes"
+
+check("Beta release notes list only the changelog entries added since the previous beta") do
+  previous = "### Added\n\n- Old feature.\n\n### Fixed\n\n- Old fix.\n"
+  current = "### Added\n\n- Old feature.\n- New feature.\n\n### Fixed\n\n- Old fix.\n"
+  changelog = "## [Unreleased]\n\n## [9.9.9] - 2026-01-01\n\n#{current}\n## [9.9.8]\n\n- Older.\n"
+  problems = []
+  problems << "section #{ReleaseNotes.section(changelog, '9.9.9').inspect}" unless ReleaseNotes.section(changelog, "9.9.9") == current.strip
+  added = ReleaseNotes.added_since(previous, current)
+  problems << "added_since #{added.inspect}" unless added == "### Added\n\n- New feature."
+  problems << "unchanged section is not empty" unless ReleaseNotes.added_since(current, current).empty?
   problems
 end
 

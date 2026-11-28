@@ -1,10 +1,5 @@
 import AppKit
 
-struct InspectorTagDraftSnapshot {
-    let states: [String: TagAssignmentState]
-    let creations: [TagCreationDraft]
-}
-
 enum InspectorBrowsingContext: Equatable {
     case library
     case unavailable
@@ -42,18 +37,6 @@ final class InspectorViewController: NSViewController {
     private let scrollDocument = InspectorScrollDocumentView()
     private let contentStack = NSStackView()
     private lazy var contentWidth = contentStack.widthAnchor.constraint(equalToConstant: 1)
-    private let actionContainer = NSStackView()
-    private let draftStatusLabel = NSTextField(wrappingLabelWithString: "")
-    private lazy var discardButton = NSButton(
-        title: String(localized: .actionCancel),
-        target: self,
-        action: #selector(discardTagChanges)
-    )
-    private lazy var applyButton = NSButton(
-        title: String(localized: .actionApply),
-        target: self,
-        action: #selector(applyTagChanges)
-    )
     private lazy var sectionControl: NSSegmentedControl = {
         let control = NSSegmentedControl(
             labels: [
@@ -75,9 +58,35 @@ final class InspectorViewController: NSViewController {
         field.target = self
         field.action = #selector(searchTags(_:))
         field.sendsSearchStringImmediately = true
-        field.isHidden = true
         return field
     }()
+    private lazy var tagLayoutControl: NSSegmentedControl = {
+        let control = NSSegmentedControl(
+            images: [
+                NSImage(systemSymbolName: "list.bullet", accessibilityDescription: String(localized: "inspector.tagLayout.list", defaultValue: "List")) ?? NSImage(),
+                NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: String(localized: "inspector.tagLayout.compact", defaultValue: "Compact")) ?? NSImage(),
+            ],
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(changeTagLayout(_:))
+        )
+        control.segmentStyle = .roundRect
+        control.setToolTip(String(localized: "inspector.tagLayout.list", defaultValue: "List"), forSegment: 0)
+        control.setToolTip(String(localized: "inspector.tagLayout.compact", defaultValue: "Compact"), forSegment: 1)
+        control.setAccessibilityLabel(String(localized: "inspector.tagLayout", defaultValue: "Tag Layout"))
+        control.selectedSegment = tagLayout == .list ? 0 : 1
+        control.setContentHuggingPriority(.required, for: .horizontal)
+        return control
+    }()
+    private lazy var tagToolbar: NSStackView = {
+        let row = NSStackView(views: [tagSearchField, tagLayoutControl])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 6
+        row.isHidden = true
+        return row
+    }()
+    private var tagLayout = InspectorTagLayout.persisted()
     private let onApplyTagDraft: ([TagCreationDraft], [String: Bool], [String], @escaping (Bool) -> Void) -> Void
     private let loadTagStates: ([String], @escaping ([String: TagAssignmentState]) -> Void) -> Void
     private let filePath: (VideoRecord) -> String?
@@ -89,21 +98,22 @@ final class InspectorViewController: NSViewController {
     private var scannedCandidates: [ScannedVideoCandidate] = []
     private var tags: [TagRecord] = []
     private var tagStates: [String: TagAssignmentState] = [:]
-    private var draftTagStates: [String: TagAssignmentState] = [:]
-    private var draftTagCreations: [TagCreationDraft] = []
     private var tagStateVideoIDs: [String] = []
-    private var loadedTagOrderIDs: [String] = []
     private var tagStateRequestRevision = 0
-    private(set) var isApplyingTagChanges = false
+    private var tagCapsules: [String: TagCapsuleButton] = [:]
+    private var tagCapsuleFocusOrder: [TagCapsuleButton] = []
+    /// Tags the selected videos have come first. The order is set when a selection's states load,
+    /// and clicks within that selection leave rows where they are, so a row never moves under the pointer.
+    private var tagOrderIDs: [String] = []
+    private var isShowingTagList = false
+    private var tagListWasOnScreen = false
     private var tagSearchText = ""
     private var newTagPopover: NSPopover?
     private var collapsedDetailSections: Set<DetailSection> = []
     private var browsingContext: InspectorBrowsingContext = .library
     private var relinkingVideoID: String?
-    var onTagApplicationFinished: ((Bool) -> Void)?
     var onVideoRemoved: ((Int) -> Void)?
     var selectedVideoIDs: [String] { selectedVideos.map(\.id) }
-    var hasPendingTagChanges: Bool { pendingTagAssignments.isEmpty == false }
 
     init(
         onApplyTagDraft: @escaping ([TagCreationDraft], [String: Bool], [String], @escaping (Bool) -> Void) -> Void,
@@ -153,13 +163,11 @@ final class InspectorViewController: NSViewController {
         contentScrollView.documentView = scrollDocument
         contentScrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
         contentScrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        configureActionArea()
         stack.addArrangedSubview(sectionControl)
-        stack.addArrangedSubview(tagSearchField)
+        stack.addArrangedSubview(tagToolbar)
         stack.addArrangedSubview(contentScrollView)
-        stack.addArrangedSubview(actionContainer)
         // The document owns the body padding so the end of the list scrolls clear of the viewport edge.
-        stack.setCustomSpacing(0, after: tagSearchField)
+        stack.setCustomSpacing(0, after: tagToolbar)
         container.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -168,11 +176,9 @@ final class InspectorViewController: NSViewController {
             stack.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor),
             sectionControl.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: Self.horizontalInset),
             sectionControl.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -Self.horizontalInset),
-            tagSearchField.leadingAnchor.constraint(equalTo: sectionControl.leadingAnchor),
-            tagSearchField.trailingAnchor.constraint(equalTo: sectionControl.trailingAnchor),
+            tagToolbar.leadingAnchor.constraint(equalTo: sectionControl.leadingAnchor),
+            tagToolbar.trailingAnchor.constraint(equalTo: sectionControl.trailingAnchor),
             contentScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            actionContainer.leadingAnchor.constraint(equalTo: sectionControl.leadingAnchor),
-            actionContainer.trailingAnchor.constraint(equalTo: sectionControl.trailingAnchor),
         ])
         view = container
         setSelection([])
@@ -184,21 +190,37 @@ final class InspectorViewController: NSViewController {
     }
 
     func setSelection(_ videos: [VideoRecord]) {
-        let previousVideoIDs = selectedVideos.map(\.id)
+        let selectionChanged = selectedVideos.map(\.id) != videos.map(\.id)
         selectedVideos = videos
         selectedVideo = videos.count == 1 ? videos[0] : nil
-        if previousVideoIDs != videos.map(\.id) {
+        if selectionChanged {
             closeNewTagPopover()
-            tagStateRequestRevision += 1
-            tagStates = [:]
-            draftTagStates = [:]
-            draftTagCreations = []
-            tagStateVideoIDs = []
-            loadedTagOrderIDs = []
-            isApplyingTagChanges = false
+        }
+        // Clicking another video deselects the old one before selecting the new one. Hold the tag list
+        // through that momentary empty selection; show the empty state only if it is still empty after.
+        if videos.isEmpty, isShowingTagList, browsingContext != .scanResults, mode == .tags {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.selectedVideos.isEmpty else { return }
+                self.renderSelection()
+            }
+            return
+        }
+        // The tag list does not depend on which videos are selected; only the check marks do.
+        if keepsTagListAcrossSelection {
+            if selectionChanged {
+                refreshTagAssignments()
+            }
+            return
         }
         renderSelection()
         scheduleInitialTagStateLoadIfNeeded()
+    }
+
+    private var keepsTagListAcrossSelection: Bool {
+        isShowingTagList
+            && browsingContext != .scanResults
+            && mode == .tags
+            && selectedVideos.isEmpty == false
     }
 
     func setScannedCandidates(_ candidates: [ScannedVideoCandidate]) {
@@ -229,46 +251,89 @@ final class InspectorViewController: NSViewController {
     }
 
     func setTags(_ tags: [TagRecord]) {
+        let listChanged = InspectorTagList.entries(tags) != InspectorTagList.entries(self.tags)
         self.tags = tags
-        renderSelection()
+        if listChanged || keepsTagListAcrossSelection == false {
+            renderSelection()
+        }
         scheduleInitialTagStateLoadIfNeeded()
     }
 
     func refreshTagAssignments() {
         let videoIDs = selectedVideos.map(\.id)
-        guard mode == .tags,
-              videoIDs.isEmpty == false,
-              hasPendingTagChanges == false,
-              isApplyingTagChanges == false else { return }
+        guard mode == .tags, videoIDs.isEmpty == false else {
+            // Assignments changed while Tags isn't showing them: forget the cached states so they load again.
+            tagStateRequestRevision += 1
+            tagStateVideoIDs = []
+            return
+        }
         tagStateRequestRevision += 1
         let requestRevision = tagStateRequestRevision
         loadTagStates(videoIDs) { [weak self] states in
             guard let self,
                   self.tagStateRequestRevision == requestRevision,
                   self.selectedVideos.map(\.id) == videoIDs else { return }
+            let selectionChanged = self.tagStateVideoIDs != videoIDs
             self.tagStates = states
-            self.draftTagStates = states
             self.tagStateVideoIDs = videoIDs
-            self.loadedTagOrderIDs = self.tags
-                .enumerated()
-                .sorted { lhs, rhs in
-                    let lhsIsSelected = (states[lhs.element.id] ?? .off) != .off
-                    let rhsIsSelected = (states[rhs.element.id] ?? .off) != .off
-                    if lhsIsSelected != rhsIsSelected {
-                        return lhsIsSelected
-                    }
-                    return lhs.offset < rhs.offset
+            if selectionChanged {
+                self.tagOrderIDs = InspectorTagList.order(self.tags, states: states).map(\.id)
+            }
+            if self.keepsTagListAcrossSelection {
+                self.updateTagCapsuleStates()
+                if selectionChanged {
+                    self.rebuildTagListMovingCapsules()
                 }
-                .map(\.element.id)
-            self.renderSelection()
+            } else {
+                self.renderSelection()
+            }
+        }
+    }
+
+    private var orderedTags: [TagRecord] {
+        let ordered = Set(tagOrderIDs)
+        let tagsByID = Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0) })
+        // Tags created after the order was set show first, where the new tag is easy to find.
+        return tags.filter { ordered.contains($0.id) == false } + tagOrderIDs.compactMap { tagsByID[$0] }
+    }
+
+    /// Rebuilds the tag list and slides every capsule from where it was to where it is now, so a
+    /// new order or layout reads as tags moving rather than the list reloading.
+    private func rebuildTagListMovingCapsules() {
+        let focusedTagID = (view.window?.firstResponder as? TagCapsuleButton)?.tagRecord.id
+        let previousFrames = tagCapsules.mapValues { $0.convert($0.bounds, to: nil) }
+        renderSelection()
+        view.layoutSubtreeIfNeeded()
+        for (tagID, capsule) in tagCapsules {
+            guard let previousFrame = previousFrames[tagID], let layer = capsule.layer else { continue }
+            let currentFrame = capsule.convert(capsule.bounds, to: nil)
+            let dx = previousFrame.minX - currentFrame.minX
+            let windowDY = previousFrame.minY - currentFrame.minY
+            let dy = capsule.superview?.isFlipped == true ? -windowDY : windowDY
+            guard dx != 0 || dy != 0 else { continue }
+            let slide = CABasicAnimation(keyPath: "transform")
+            slide.fromValue = CATransform3DMakeTranslation(dx, dy, 0)
+            slide.toValue = CATransform3DIdentity
+            slide.duration = InspectorTagList.reorderDuration
+            slide.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(slide, forKey: "reorder")
+        }
+        if let focusedTagID, let capsule = tagCapsules[focusedTagID] {
+            view.window?.makeFirstResponder(capsule)
+        }
+    }
+
+    private func updateTagCapsuleStates() {
+        for (tagID, capsule) in tagCapsules {
+            capsule.state = InspectorTagList.controlState(tagStates[tagID] ?? .off)
         }
     }
 
     private func renderSelection() {
         loadViewIfNeeded()
+        tagListWasOnScreen = isShowingTagList
         defer {
             updateTagSearchFieldVisibility()
-            updateActionArea()
         }
         clearContent()
         contentStack.spacing = mode == .resolve ? 16 : 9
@@ -946,56 +1011,80 @@ final class InspectorViewController: NSViewController {
 
     private func addTagControls() {
         guard selectedVideos.isEmpty == false else { return }
-        guard tagStateVideoIDs == selectedVideos.map(\.id) else {
+        // Check marks of another selection may only stay while the list they belong to is already on
+        // screen and about to be updated; a list that appears fresh waits for its own states.
+        guard tagStateVideoIDs == selectedVideos.map(\.id) || tagListWasOnScreen else {
             addSecondaryText(String(localized: .tagLoading))
             return
         }
-        let orderedTagIDs = Set(loadedTagOrderIDs)
-        let tagsByID = Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0) })
-        let newlyAvailableTags = tags.filter { orderedTagIDs.contains($0.id) == false }
-        let loadedTags = loadedTagOrderIDs.compactMap { tagsByID[$0] }
-        let assignableTags = newlyAvailableTags + loadedTags
-        let hasExactMatch = assignableTags.contains {
-            $0.name.compare(tagSearchText, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        } || draftTagCreations.contains {
+        isShowingTagList = true
+        let hasExactMatch = tags.contains {
             $0.name.compare(tagSearchText, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
         }
         if tagSearchText.isEmpty == false, hasExactMatch == false {
             addCreateTagButton(title: tagSearchText)
         }
-        let visibleTags = assignableTags.filter {
+        let visibleTags = orderedTags.filter {
             tagSearchText.isEmpty || $0.name.localizedCaseInsensitiveContains(tagSearchText)
         }
-        let visibleCreations = draftTagCreations.reversed().filter {
-            tagSearchText.isEmpty || $0.name.localizedCaseInsensitiveContains(tagSearchText)
-        }
-        for creation in visibleCreations {
-            addPendingTagRow(creation)
-        }
-        for tag in visibleTags {
-            let button = TagCheckbox(tag: tag, target: self, action: #selector(toggleTag(_:)))
-            button.title = tag.name
-            button.setButtonType(.switch)
-            button.allowsMixedState = true
-            switch draftTagStates[tag.id] ?? .off {
-            case .off: button.state = .off
-            case .mixed: button.state = .mixed
-            case .on: button.state = .on
+        switch tagLayout {
+        case .list:
+            addTagCapsules(visibleTags, oneItemPerRow: true)
+        case .compact:
+            for group in InspectorTagList.groups(visibleTags, allTags: tags) {
+                if let parent = group.parent {
+                    addTagGroupHeader(tagPath(for: parent))
+                }
+                addTagCapsules(group.tags, oneItemPerRow: false)
             }
-            button.isEnabled = isApplyingTagChanges == false
-            button.lineBreakMode = .byTruncatingTail
-            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            contentStack.addArrangedSubview(button)
-            button.widthAnchor.constraint(lessThanOrEqualTo: contentStack.widthAnchor).isActive = true
         }
-        if tagSearchText.isEmpty, assignableTags.isEmpty, draftTagCreations.isEmpty {
+        if tagSearchText.isEmpty, tags.isEmpty {
             addSecondaryText(String(localized: .tagEmpty))
-        } else if tagSearchText.isEmpty == false,
-                  visibleTags.isEmpty,
-                  visibleCreations.isEmpty,
-                  hasExactMatch {
+        } else if tagSearchText.isEmpty == false, visibleTags.isEmpty, hasExactMatch {
             addSecondaryText(String(localized: .tagNoMatches))
         }
+    }
+
+    private func addTagGroupHeader(_ title: String) {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        contentStack.addArrangedSubview(label)
+        label.widthAnchor.constraint(lessThanOrEqualTo: contentStack.widthAnchor).isActive = true
+        contentStack.setCustomSpacing(5, after: label)
+    }
+
+    private func addTagCapsules(_ tags: [TagRecord], oneItemPerRow: Bool) {
+        guard tags.isEmpty == false else { return }
+        let capsules = tags.map { tag in
+            let capsule = TagCapsuleButton(tag: tag, target: self, action: #selector(toggleTag(_:)))
+            capsule.toolTip = tagPath(for: tag)
+            capsule.state = InspectorTagList.controlState(tagStates[tag.id] ?? .off)
+            capsule.onMoveFocus = { [weak self] capsule, step in self?.moveTagFocus(from: capsule, by: step) }
+            tagCapsules[tag.id] = capsule
+            return capsule
+        }
+        tagCapsuleFocusOrder.append(contentsOf: capsules)
+        let flow = TagCapsuleFlowView(items: capsules, oneItemPerRow: oneItemPerRow)
+        contentStack.addArrangedSubview(flow)
+        flow.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+    }
+
+    private func moveTagFocus(from capsule: TagCapsuleButton, by step: Int) {
+        guard let index = tagCapsuleFocusOrder.firstIndex(where: { $0 === capsule }) else { return }
+        let target = index + step
+        guard tagCapsuleFocusOrder.indices.contains(target) else { return }
+        let next = tagCapsuleFocusOrder[target]
+        view.window?.makeFirstResponder(next)
+        next.scrollToVisible(next.bounds.insetBy(dx: 0, dy: -8))
+    }
+
+    @objc private func changeTagLayout(_ sender: NSSegmentedControl) {
+        tagLayout = sender.selectedSegment == 0 ? .list : .compact
+        tagLayout.persist()
+        rebuildTagListMovingCapsules()
     }
 
     private func addCreateTagButton(title: String) {
@@ -1012,89 +1101,39 @@ final class InspectorViewController: NSViewController {
         button.contentTintColor = .controlAccentColor
         button.toolTip = String(localized: .tagActionCreate)
         button.setAccessibilityLabel(String(localized: .accessibilityNewTagNamed(title)))
-        button.isEnabled = isApplyingTagChanges == false
         contentStack.addArrangedSubview(button)
         button.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
     }
 
-    private func addPendingTagRow(_ creation: TagCreationDraft) {
-        let checkbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-        checkbox.state = .on
-        checkbox.isEnabled = false
-
-        let nameLabel = NSTextField(labelWithString: creation.name)
-        nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let pathLabel = NSTextField(labelWithString: parentName(for: creation.parentID))
-        pathLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        pathLabel.textColor = .tertiaryLabelColor
-        pathLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        let pendingLabel = NSTextField(labelWithString: String(localized: .tagPending))
-        pendingLabel.font = .systemFont(
-            ofSize: NSFont.smallSystemFontSize,
-            weight: .semibold
-        )
-        pendingLabel.textColor = .controlAccentColor
-        pendingLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        let image = NSImage(
-            systemSymbolName: "xmark",
-            accessibilityDescription: String(localized: .accessibilityRemovePendingTag)
-        ) ?? NSImage()
-        let removeButton = NSButton(image: image, target: self, action: #selector(removePendingTag(_:)))
-        removeButton.title = ""
-        removeButton.isBordered = false
-        removeButton.controlSize = .small
-        removeButton.contentTintColor = .secondaryLabelColor
-        removeButton.identifier = NSUserInterfaceItemIdentifier(creation.id)
-        removeButton.toolTip = String(localized: .accessibilityRemovePendingTag)
-        removeButton.setAccessibilityLabel(
-            String(localized: .accessibilityRemovePendingTagNamed(creation.name))
-        )
-        removeButton.isEnabled = isApplyingTagChanges == false
-
-        let row = NSStackView(views: [checkbox, nameLabel, pathLabel, pendingLabel, removeButton])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 7
-        contentStack.addArrangedSubview(row)
-        row.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-    }
-
     @objc private func changeSection(_ sender: NSSegmentedControl) {
         closeNewTagPopover()
-        guard mode == .tags else {
-            renderSelection()
+        renderSelection()
+        scheduleInitialTagStateLoadIfNeeded()
+    }
+
+    @objc private func toggleTag(_ sender: TagCapsuleButton) {
+        let tagID = sender.tagRecord.id
+        let videoIDs = selectedVideos.map(\.id)
+        let previousState = tagStates[tagID] ?? .off
+        // Check marks still belong to the previous selection until its states load.
+        guard videoIDs.isEmpty == false, tagStateVideoIDs == videoIDs else {
+            sender.state = InspectorTagList.controlState(previousState)
             return
         }
-        showTagLoadingState()
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.mode == .tags else { return }
-            if self.tagStateVideoIDs == self.selectedVideos.map(\.id) {
-                self.renderSelection()
-            } else {
+        let nextState = InspectorTagList.toggledState(previousState)
+        tagStates[tagID] = nextState
+        sender.state = InspectorTagList.controlState(nextState)
+        // A load that started before this change would bring back the old check mark.
+        tagStateRequestRevision += 1
+        onApplyTagDraft([], [tagID: nextState == .on], videoIDs) { [weak self] succeeded in
+            // Show what was actually saved; a captured earlier state can be stale after quick repeat clicks.
+            guard succeeded == false, let self else { return }
+            if self.mode == .tags, self.selectedVideos.isEmpty == false {
                 self.refreshTagAssignments()
+            } else {
+                // Not on screen now: forget the optimistic states so Tags loads them again when shown.
+                self.tagStateVideoIDs = []
             }
-        }
-    }
-
-    @objc private func toggleTag(_ sender: TagCheckbox) {
-        guard selectedVideos.isEmpty == false, isApplyingTagChanges == false else { return }
-        let previousState = draftTagStates[sender.tagRecord.id] ?? .off
-        let nextState: TagAssignmentState = previousState == .on ? .off : .on
-        draftTagStates[sender.tagRecord.id] = nextState
-        sender.state = nextState == .on ? .on : .off
-        updateActionArea()
-    }
-
-    @objc private func discardTagChanges() {
-        discardPendingTagChanges()
-    }
-
-    @objc private func applyTagChanges() {
-        applyPendingTagChanges { [weak self] succeeded in
-            self?.onTagApplicationFinished?(succeeded)
         }
     }
 
@@ -1107,15 +1146,27 @@ final class InspectorViewController: NSViewController {
         showNewTagPopover(relativeTo: sender.bounds, of: sender, suggestedName: tagSearchText)
     }
 
-    @objc private func removePendingTag(_ sender: NSButton) {
-        guard let id = sender.identifier?.rawValue, isApplyingTagChanges == false else { return }
-        draftTagCreations.removeAll { $0.id == id }
-        draftTagStates.removeValue(forKey: id)
-        renderSelection()
+    /// Add Tags in the Video menu: shows the Tags section and puts the cursor in its search field,
+    /// where typing finds a tag or offers to create it.
+    var canFocusTagInput: Bool {
+        browsingContext == .library && selectedVideos.isEmpty == false
+    }
+
+    func focusTagInput() {
+        guard canFocusTagInput else { return }
+        if sectionControl.selectedSegment != 0 {
+            sectionControl.selectedSegment = 0
+            closeNewTagPopover()
+            renderSelection()
+            scheduleInitialTagStateLoadIfNeeded()
+        }
+        guard tagToolbar.isHidden == false else { return }
+        view.window?.makeFirstResponder(tagSearchField)
+        tagSearchField.selectText(nil)
     }
 
     var canBeginCreatingTag: Bool {
-        mode == .tags && selectedVideos.isEmpty == false && isApplyingTagChanges == false
+        mode == .tags && selectedVideos.isEmpty == false
     }
 
     func beginCreatingTag() {
@@ -1137,12 +1188,9 @@ final class InspectorViewController: NSViewController {
             parentOptions: parentTagOptions
         )
         controller.onCancel = { [weak self] in self?.closeNewTagPopover() }
-        controller.onStage = { [weak self] name, parentID in
+        controller.onCreate = { [weak self] name, parentID in
             guard let self else { return String(localized: .tagCreateFailed) }
             let duplicateExists = self.tags.contains {
-                $0.parentID == parentID
-                    && $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-            } || self.draftTagCreations.contains {
                 $0.parentID == parentID
                     && $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
             }
@@ -1150,12 +1198,11 @@ final class InspectorViewController: NSViewController {
                 return String(localized: .tagCreateDuplicate)
             }
             let creation = TagCreationDraft(id: UUID().uuidString, name: name, parentID: parentID)
-            self.draftTagCreations.append(creation)
-            self.draftTagStates[creation.id] = .on
             self.tagSearchText = ""
             self.tagSearchField.stringValue = ""
             self.closeNewTagPopover()
             self.renderSelection()
+            self.onApplyTagDraft([creation], [creation.id: true], self.selectedVideos.map(\.id)) { _ in }
             return nil
         }
         let popover = NSPopover()
@@ -1190,13 +1237,6 @@ final class InspectorViewController: NSViewController {
         return names.joined(separator: " › ")
     }
 
-    private func parentName(for parentID: String?) -> String {
-        guard let parentID, let parent = tags.first(where: { $0.id == parentID }) else {
-            return String(localized: .tagCreateTopLevel)
-        }
-        return tagPath(for: parent)
-    }
-
     @objc private func copyFilename() {
         guard let filename = selectedVideo?.filename else { return }
         NSPasteboard.general.clearContents()
@@ -1212,168 +1252,17 @@ final class InspectorViewController: NSViewController {
         }
     }
 
-    private func showTagLoadingState() {
-        clearContent()
-        if selectedVideos.isEmpty {
-            addSecondaryText(String(localized: .inspectorEmpty))
-        } else {
-            addSecondaryText(String(localized: .tagLoading))
-        }
-        updateScrollDocumentSize()
-        updateTagSearchFieldVisibility()
-        updateActionArea()
-    }
-
-    func discardPendingTagChanges() {
-        guard isApplyingTagChanges == false else { return }
-        closeNewTagPopover()
-        draftTagCreations = []
-        draftTagStates = tagStates
-        renderSelection()
-    }
-
-    func takePendingTagChanges() -> InspectorTagDraftSnapshot? {
-        guard hasPendingTagChanges, isApplyingTagChanges == false else { return nil }
-        let snapshot = InspectorTagDraftSnapshot(
-            states: draftTagStates,
-            creations: draftTagCreations
-        )
-        discardPendingTagChanges()
-        return snapshot
-    }
-
-    func restorePendingTagChanges(_ snapshot: InspectorTagDraftSnapshot) {
-        guard isApplyingTagChanges == false else { return }
-        draftTagStates = snapshot.states
-        draftTagCreations = snapshot.creations
-        renderSelection()
-    }
-
-    func applyPendingTagChanges(completion: @escaping (Bool) -> Void) {
-        let assignments = pendingTagAssignments
-        let creations = draftTagCreations
-        let videoIDs = selectedVideos.map(\.id)
-        guard assignments.isEmpty == false || creations.isEmpty == false else {
-            completion(true)
-            return
-        }
-        guard videoIDs.isEmpty == false, isApplyingTagChanges == false else {
-            completion(false)
-            return
-        }
-        closeNewTagPopover()
-        isApplyingTagChanges = true
-        updateActionArea()
-        onApplyTagDraft(creations, assignments, videoIDs) { [weak self] succeeded in
-            guard let self else { return }
-            self.isApplyingTagChanges = false
-            if succeeded {
-                self.draftTagCreations = []
-                self.tagStates = [:]
-                self.draftTagStates = [:]
-                self.tagStateVideoIDs = []
-                self.loadedTagOrderIDs = []
-            }
-            self.renderSelection()
-            completion(succeeded)
-        }
-    }
-
-    private var pendingTagAssignments: [String: Bool] {
-        var assignments: [String: Bool] = [:]
-        for tag in tags {
-            let savedState = tagStates[tag.id] ?? .off
-            let draftState = draftTagStates[tag.id] ?? .off
-            guard savedState != draftState else { continue }
-            switch draftState {
-            case .on: assignments[tag.id] = true
-            case .off: assignments[tag.id] = false
-            case .mixed: break
-            }
-        }
-        for creation in draftTagCreations {
-            assignments[creation.id] = true
-        }
-        return assignments
-    }
-
-    private func configureActionArea() {
-        actionContainer.orientation = .vertical
-        actionContainer.alignment = .leading
-        actionContainer.spacing = 8
-        actionContainer.edgeInsets.bottom = Self.documentBottomInset
-
-        let separator = NSBox()
-        separator.boxType = .separator
-        actionContainer.addArrangedSubview(separator)
-        separator.widthAnchor.constraint(equalTo: actionContainer.widthAnchor).isActive = true
-
-        draftStatusLabel.font = .systemFont(ofSize: 11)
-        draftStatusLabel.textColor = .secondaryLabelColor
-        actionContainer.addArrangedSubview(draftStatusLabel)
-        draftStatusLabel.widthAnchor.constraint(equalTo: actionContainer.widthAnchor).isActive = true
-
-        discardButton.controlSize = .regular
-        discardButton.font = .systemFont(ofSize: NSFont.systemFontSize)
-        applyButton.controlSize = .regular
-        applyButton.font = .systemFont(ofSize: NSFont.systemFontSize)
-        applyButton.keyEquivalent = "\r"
-        applyButton.keyEquivalentModifierMask = [.command]
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let buttonRow = NSStackView(views: [spacer, discardButton, applyButton])
-        buttonRow.orientation = .horizontal
-        buttonRow.alignment = .centerY
-        buttonRow.spacing = 8
-        actionContainer.addArrangedSubview(buttonRow)
-        buttonRow.widthAnchor.constraint(equalTo: actionContainer.widthAnchor).isActive = true
-    }
-
-    private func updateActionArea() {
-        guard isViewLoaded else { return }
-        let tagContentAvailable = mode == .tags
-            && selectedVideos.isEmpty == false
-            && tagStateVideoIDs == selectedVideos.map(\.id)
-        actionContainer.isHidden = tagContentAvailable == false
-        guard tagContentAvailable else { return }
-        let assignments = pendingTagAssignments
-        let isDirty = assignments.isEmpty == false || draftTagCreations.isEmpty == false
-        discardButton.isEnabled = isDirty && isApplyingTagChanges == false
-        applyButton.isEnabled = isDirty && isApplyingTagChanges == false
-        if isApplyingTagChanges {
-            draftStatusLabel.stringValue = String(localized: .tagDraftApplying)
-            return
-        }
-        guard isDirty else {
-            draftStatusLabel.stringValue = String(localized: .tagDraftInstruction)
-            return
-        }
-        let creations = draftTagCreations.count
-        let additions = assignments.values.filter { $0 }.count
-        let removals = assignments.values.filter { $0 == false }.count
-        var parts: [String] = []
-        if creations > 0 {
-            parts.append(String(localized: .tagDraftCreate(creations)))
-        }
-        if additions > 0 {
-            parts.append(String(localized: .tagDraftAdd(additions)))
-        }
-        if removals > 0 {
-            parts.append(String(localized: .tagDraftRemove(removals)))
-        }
-        draftStatusLabel.stringValue = String(
-            localized: .tagDraftPending(AppLocalization.list(parts))
-        )
-    }
-
     private func updateTagSearchFieldVisibility() {
         guard isViewLoaded else { return }
-        tagSearchField.isHidden = browsingContext == .scanResults
+        tagToolbar.isHidden = browsingContext == .scanResults
             || mode != .tags
             || selectedVideos.isEmpty
     }
 
     private func clearContent() {
+        tagCapsules = [:]
+        tagCapsuleFocusOrder = []
+        isShowingTagList = false
         contentStack.arrangedSubviews.forEach {
             contentStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
@@ -1390,8 +1279,9 @@ final class InspectorViewController: NSViewController {
         let width = min(documentWidth, clipWidth - Self.horizontalInset)
         guard width > 0 else { return }
         contentWidth.constant = width
-        for case let help as InspectorWrappingHelpLabel in contentStack.arrangedSubviews {
-            help.updateMeasuredWidth(width)
+        for view in contentStack.arrangedSubviews {
+            (view as? InspectorWrappingHelpLabel)?.updateMeasuredWidth(width)
+            (view as? TagCapsuleFlowView)?.updateMeasuredWidth(width)
         }
         let height = ceil(contentStack.fittingSize.height) + Self.documentTopInset + Self.documentBottomInset
         let size = NSSize(width: clipWidth, height: height)
@@ -1561,18 +1451,6 @@ private final class InspectorResolvePrimaryButton: NSButton {
     }
 }
 
-private final class TagCheckbox: NSButton {
-    let tagRecord: TagRecord
-    init(tag: TagRecord, target: AnyObject?, action: Selector?) {
-        self.tagRecord = tag
-        super.init(frame: .zero)
-        self.target = target
-        self.action = action
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
-
 private struct NewTagParentOption {
     let id: String
     let title: String
@@ -1581,7 +1459,7 @@ private struct NewTagParentOption {
 @MainActor
 private final class NewTagPopoverViewController: NSViewController {
     var onCancel: (() -> Void)?
-    var onStage: ((String, String?) -> String?)?
+    var onCreate: ((String, String?) -> String?)?
 
     private let suggestedName: String
     private let parentOptions: [NewTagParentOption]
@@ -1616,7 +1494,7 @@ private final class NewTagPopoverViewController: NSViewController {
         nameField.stringValue = suggestedName
         nameField.placeholderString = String(localized: .tagCreateNamePlaceholder)
         nameField.target = self
-        nameField.action = #selector(stageTag)
+        nameField.action = #selector(createTag)
         addFormRow(title: String(localized: .tagCreateName), control: nameField, to: stack)
 
         parentPopup.addItem(withTitle: String(localized: .tagCreateTopLevelNoParent))
@@ -1646,15 +1524,15 @@ private final class NewTagPopoverViewController: NSViewController {
             target: self,
             action: #selector(cancel)
         )
-        let stageButton = NSButton(
-            title: String(localized: .actionStageDraft),
+        let createButton = NSButton(
+            title: String(localized: .tagActionCreate),
             target: self,
-            action: #selector(stageTag)
+            action: #selector(createTag)
         )
-        stageButton.keyEquivalent = "\r"
+        createButton.keyEquivalent = "\r"
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let buttons = NSStackView(views: [spacer, cancelButton, stageButton])
+        let buttons = NSStackView(views: [spacer, cancelButton, createButton])
         buttons.orientation = .horizontal
         buttons.alignment = .centerY
         buttons.spacing = 8
@@ -1695,14 +1573,14 @@ private final class NewTagPopoverViewController: NSViewController {
         onCancel?()
     }
 
-    @objc private func stageTag() {
+    @objc private func createTag() {
         let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name.isEmpty == false else {
             showError(String(localized: .tagValidationEnterName))
             return
         }
         let parentID = parentPopup.selectedItem?.representedObject as? String
-        if let error = onStage?(name, parentID) {
+        if let error = onCreate?(name, parentID) {
             showError(error)
         }
     }
@@ -1711,5 +1589,68 @@ private final class NewTagPopoverViewController: NSViewController {
         errorLabel.stringValue = message
         errorLabel.isHidden = false
         nameField.selectText(nil)
+    }
+}
+
+enum InspectorTagList {
+    struct Entry: Equatable {
+        let id: String
+        let name: String
+    }
+
+    static let reorderDuration: CFTimeInterval = 0.25
+
+    /// Tags any of the selected videos have, then the rest, each in library order.
+    static func order(_ tags: [TagRecord], states: [String: TagAssignmentState]) -> [TagRecord] {
+        let assigned = tags.filter { (states[$0.id] ?? .off) != .off }
+        let unassigned = tags.filter { (states[$0.id] ?? .off) == .off }
+        return assigned + unassigned
+    }
+
+    struct Group {
+        let parent: TagRecord?
+        let tags: [TagRecord]
+    }
+
+    /// Splits ordered tags by parent for the compact layout: top-level tags first, then each parent's
+    /// children under it, parents in library order. Order inside a group follows the given order.
+    static func groups(_ orderedTags: [TagRecord], allTags: [TagRecord]) -> [Group] {
+        let parentIDs = allTags.map(\.id)
+        let byParent = Dictionary(grouping: orderedTags, by: \.parentID)
+        let tagsByID = Dictionary(uniqueKeysWithValues: allTags.map { ($0.id, $0) })
+        var groups: [Group] = []
+        if let topLevel = byParent[nil] {
+            groups.append(Group(parent: nil, tags: topLevel))
+        }
+        for parentID in parentIDs {
+            guard let children = byParent[parentID] else { continue }
+            groups.append(Group(parent: tagsByID[parentID], tags: children))
+        }
+        // Children whose parent is missing still show, at the top level.
+        let orphans = orderedTags.filter { tag in tag.parentID.map { tagsByID[$0] == nil } ?? false }
+        if orphans.isEmpty == false {
+            if let first = groups.first, first.parent == nil {
+                groups[0] = Group(parent: nil, tags: first.tags + orphans)
+            } else {
+                groups.insert(Group(parent: nil, tags: orphans), at: 0)
+            }
+        }
+        return groups
+    }
+
+    static func entries(_ tags: [TagRecord]) -> [Entry] {
+        tags.map { Entry(id: $0.id, name: $0.name) }
+    }
+
+    static func toggledState(_ state: TagAssignmentState) -> TagAssignmentState {
+        state == .on ? .off : .on
+    }
+
+    static func controlState(_ state: TagAssignmentState) -> NSControl.StateValue {
+        switch state {
+        case .off: .off
+        case .mixed: .mixed
+        case .on: .on
+        }
     }
 }

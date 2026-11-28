@@ -42,6 +42,7 @@ final class PreferencesStore: ObservableObject {
         static let idleLockInterval = "idleLockInterval"
         static let folderImportPreference = "folderImportPreference"
         static let includeSelectedFolderAsRootTag = "includeSelectedFolderAsRootTag"
+        static let receivesBetaUpdates = "receivesBetaUpdates"
     }
 
     private let defaults: UserDefaults
@@ -62,7 +63,13 @@ final class PreferencesStore: ObservableObject {
         }
     }
 
-    init(defaults: UserDefaults = .standard) {
+    @Published var receivesBetaUpdates: Bool {
+        didSet { defaults.set(receivesBetaUpdates, forKey: Key.receivesBetaUpdates) }
+    }
+
+    /// Running a beta build turns on receiving betas once and remembers it, so testers keep getting betas
+    /// (and releases) until they turn it off, even after an update moves them to a release build.
+    init(defaults: UserDefaults = .standard, isBetaBuild: Bool = AppConfiguration.isBetaBuild) {
         self.defaults = defaults
         authenticationEnabled = defaults.object(forKey: Key.authenticationEnabled) as? Bool ?? false
         idleLockInterval = IdleLockInterval(
@@ -74,6 +81,10 @@ final class PreferencesStore: ObservableObject {
         includeSelectedFolderAsRootTag = defaults.object(
             forKey: Key.includeSelectedFolderAsRootTag
         ) as? Bool ?? false
+        if defaults.object(forKey: Key.receivesBetaUpdates) == nil, isBetaBuild {
+            defaults.set(true, forKey: Key.receivesBetaUpdates)
+        }
+        receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? false
     }
 
     func setAuthenticationEnabled(_ enabled: Bool) {

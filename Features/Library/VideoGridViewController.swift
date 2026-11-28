@@ -78,6 +78,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     static let maximumGridItemWidth = 280.0
     private static let thumbnailHeightRatio = 0.55
     private static let gridItemChromeHeight = 64.0
+    private let defaults: UserDefaults
 
     private struct GroupSection {
         let id: String
@@ -101,13 +102,14 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private let scrollViewport = NSView()
     private var scrollView = NSScrollView()
     private let onOpenVideo: (VideoRecord) -> Void
-    private let onRevealVideo: (VideoRecord) -> Void
-    private let onCopyPath: (VideoRecord) -> Void
+    private let onRevealVideos: ([VideoRecord]) -> Void
+    private let onCopyPaths: ([VideoRecord]) -> Void
     private let onRelinkVideo: (VideoRecord) -> Void
     private let onRetryRelinkVideo: (String) -> Void
     private let onPreviewVideos: ([VideoRecord]) -> Void
     var onSelectionChanged: ([VideoRecord]) -> Void
     private let thumbnailURL: (VideoRecord) -> URL?
+    private let resolveVideos: ([VideoRecord]) -> ResolvedVideos
     private let onAssignTagID: (String, [String]) -> Void
     private let onCancelImport: () -> Void
     private let onImportDroppedItems: ([URL]) -> Void
@@ -131,34 +133,45 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var selectionAnchorVideoID: String?
     private var selectionGestureMode: SelectionGestureMode = .replacing
     private var isSynchronizingSelection = false
+    private var draggedItemViews: [VideoCollectionItemView] = []
+    private var draggedExportIndexPaths = Set<IndexPath>()
+    private var draggedSkippedIndexPaths = Set<IndexPath>()
+    private var dragExportCaption: DragExportCaption?
+    private let filterResultOverlay = FilterResultOverlayView()
+    private var scrollObserver: NSObjectProtocol?
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
     private let emptyTitleLabel = NSTextField(labelWithString: String(localized: .importEmptyTitle))
     private let emptyDetailLabel = NSTextField(wrappingLabelWithString: String(localized: .importEmptyDetail))
     init(
         onOpenVideo: @escaping (VideoRecord) -> Void,
-        onRevealVideo: @escaping (VideoRecord) -> Void,
-        onCopyPath: @escaping (VideoRecord) -> Void,
+        onRevealVideos: @escaping ([VideoRecord]) -> Void,
+        onCopyPaths: @escaping ([VideoRecord]) -> Void,
         onRelinkVideo: @escaping (VideoRecord) -> Void,
         onRetryRelinkVideo: @escaping (String) -> Void,
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         onSelectionChanged: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
+        resolveVideos: @escaping ([VideoRecord]) -> ResolvedVideos,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onCancelImport: @escaping () -> Void,
         onImportDroppedItems: @escaping ([URL]) -> Void,
         onRemoveVideos: @escaping ([String], @escaping (Bool) -> Void) -> Void,
         onUndoLastMutation: @escaping () -> Void,
-        onDismissNotification: @escaping () -> Void
+        onDismissNotification: @escaping () -> Void,
+        defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
         self.onOpenVideo = onOpenVideo
-        self.onRevealVideo = onRevealVideo
-        self.onCopyPath = onCopyPath
+        self.onRevealVideos = onRevealVideos
+        self.onCopyPaths = onCopyPaths
         self.onRelinkVideo = onRelinkVideo
         self.onRetryRelinkVideo = onRetryRelinkVideo
         self.onPreviewVideos = onPreviewVideos
         self.onSelectionChanged = onSelectionChanged
         self.thumbnailURL = thumbnailURL
+        self.resolveVideos = resolveVideos
         self.onAssignTagID = onAssignTagID
         self.onCancelImport = onCancelImport
         self.onImportDroppedItems = onImportDroppedItems
@@ -180,7 +193,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         }
 
         let layout = NSCollectionViewFlowLayout()
-        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth())
+        layout.itemSize = gridItemSize(for: Self.persistedGridItemWidth(defaults: defaults))
         layout.minimumInteritemSpacing = 16
         layout.minimumLineSpacing = 20
         layout.sectionInset = NSEdgeInsets(top: 20, left: Self.contentLeadingInset, bottom: 20, right: 20)
@@ -197,6 +210,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             withIdentifier: Self.groupHeaderIdentifier
         )
         collectionView.registerForDraggedTypes([SidebarViewController.tagPasteboardType])
+        // Other apps receive copies; dragging out never moves or deletes the original video.
+        collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
         collectionView.onDoubleClickItem = { [weak self] indexPath in
             self?.openVideo(at: indexPath)
         }
@@ -212,8 +227,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         collectionView.onRemoveSelection = { [weak self] in
             self?.requestRemoveSelectedVideos()
         }
+        collectionView.onOpenSelection = { [weak self] in
+            self?.openSelectedVideos()
+        }
+        collectionView.onSelectAll = { [weak self] in
+            self?.selectAllVisibleVideos()
+        }
 
         scrollViewport.translatesAutoresizingMaskIntoConstraints = false
+        // Installed once and kept above the grid, so a filter change never alters the view tree.
+        filterResultOverlay.frame = scrollViewport.bounds
+        scrollViewport.addSubview(filterResultOverlay)
         installScrollView(scrollView)
 
         emptyState.translatesAutoresizingMaskIntoConstraints = false
@@ -283,7 +307,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         // The viewport is already below the rule bar and any active status.
         scroll.automaticallyAdjustsContentInsets = false
         scroll.contentView.clipsToBounds = true
-        scrollViewport.addSubview(scroll)
+        scroll.contentView.postsBoundsChangedNotifications = true
+        scrollObserver.map(NotificationCenter.default.removeObserver)
+        // Snapshots of leaving thumbnails sit above the grid and would not scroll with it.
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scroll.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.filterResultOverlay.removeSnapshots() }
+        }
+        scrollViewport.addSubview(scroll, positioned: .below, relativeTo: filterResultOverlay)
         scroll.documentView = collectionView
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: scrollViewport.leadingAnchor),
@@ -446,13 +480,14 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                 isUnknown: false
             )
         case .resolution:
-            guard let width = video.width, width > 0 else {
+            guard let width = video.width, let height = video.height, width > 0, height > 0 else {
                 return unknownBucket(
                     id: "resolution-unknown",
                     title: String(localized: "grouping.section.resolutionUnknown", defaultValue: "Resolution Unknown")
                 )
             }
-            if width >= 3840 {
+            let tier = ResolutionTier.value(width: width, height: height)
+            if tier >= 2160 {
                 return GroupBucket(
                     id: "resolution-4k",
                     title: String(localized: "grouping.section.resolution4K", defaultValue: "4K or Higher"),
@@ -460,7 +495,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                     isUnknown: false
                 )
             }
-            if width >= 1920 {
+            if tier >= 1080 {
                 return GroupBucket(
                     id: "resolution-full-hd",
                     title: String(localized: "grouping.section.resolutionFullHD", defaultValue: "Full HD"),
@@ -575,6 +610,24 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             })
         }
         return indexPaths
+    }
+
+    /// ⌘A: every video the grid shows, leaving collapsed groups out like a Shift-click range does.
+    func selectAllVisibleVideos() {
+        selectedVideoIDs = Set(visibleItemIndexPaths().compactMap { video(at: $0)?.id })
+        syncCollectionSelectionFromIDs()
+        notifySelectionChanged()
+    }
+
+    var hasVisibleVideos: Bool {
+        visibleItemIndexPaths().isEmpty == false
+    }
+
+    /// Select All from the sidebar: the grid takes keyboard focus too, so the next key acts on the
+    /// selected videos rather than on the sidebar row.
+    func selectAllVisibleVideosAndFocus() {
+        selectAllVisibleVideos()
+        view.window?.makeFirstResponder(collectionView)
     }
 
     private func syncCollectionSelectionFromIDs() {
@@ -807,13 +860,17 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         scrollTopWithoutStatus?.isActive = true
     }
 
-    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false) {
+    func setVideos(_ videos: [VideoRecord], resetBrowsingState: Bool = false, isFilterChange: Bool = false) {
         loadViewIfNeeded()
         if !resetBrowsingState, self.videos.map(\.id) == videos.map(\.id),
            zip(self.videos, videos).allSatisfy({ groupBucket(for: $0.0).id == groupBucket(for: $0.1).id }) {
             for video in videos { updateVideo(video, refreshThumbnail: false) }
             return
         }
+        var transition = beginFilterResultTransition(
+            isFilterChange: isFilterChange,
+            newIDs: Set(videos.map(\.id))
+        )
         selectedVideoIDs = resetBrowsingState ? [] : selectedVideoIDs.intersection(videos.map(\.id))
         self.videos = videos
         if resetBrowsingState {
@@ -824,14 +881,183 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             self.selectionAnchorVideoID = nil
         }
         rebuildSections()
+        transition = transition.flatMap { snapshotLeavingThumbnails($0, resetsScroll: resetBrowsingState) }
         reloadCollectionDataPreservingSelection()
         if resetBrowsingState {
             scrollView.contentView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
         scrollView.hasVerticalScroller = videos.isEmpty == false
+        transition.map(finishFilterResultTransition)
         updateEmptyState()
         notifySelectionChanged()
+    }
+
+    // MARK: - Filter result transition
+
+    private struct PendingFilterResultTransition {
+        let newIDs: Set<String>
+        let departing: [(id: String, view: NSView)]
+        /// Where each departing thumbnail was drawn, in the overlay's coordinates.
+        let startFrames: [String: NSRect]
+        /// Position of the first departing thumbnail in the old display order.
+        let firstDepartingIndex: Int
+        var snapshots: [String: CALayer] = [:]
+
+        var departingIDs: [String] { departing.map(\.id) }
+    }
+
+    /// Stops what an earlier filter change left running, then records where the on-screen thumbnails
+    /// are so the coming reload can be animated, or starts a crossfade when motion is reduced.
+    private func beginFilterResultTransition(isFilterChange: Bool, newIDs: Set<String>) -> PendingFilterResultTransition? {
+        cancelFilterResultTransition()
+        let canAnimate = isFilterChange && view.window != nil && view.isHiddenOrHasHiddenAncestor == false
+        let departing = canAnimate ? onScreenItemViews() : []
+        let style = FilterResultTransition.style(
+            isFilterChange: canAnimate,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+            oldVisibleIDs: departing.map(\.id),
+            newIDs: newIDs
+        )
+        switch style {
+        case .instant:
+            return nil
+        case .crossfade:
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = FilterResultTransition.reducedMotionCrossfadeDuration
+            scrollView.contentView.layer?.add(fade, forKey: kCATransition)
+            return nil
+        case .animated:
+            break
+        }
+        let overlay = filterResultOverlay
+        var startFrames: [String: NSRect] = [:]
+        for (id, itemView) in departing {
+            let offset = itemView.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            startFrames[id] = overlay.convert(itemView.frame.offsetBy(dx: offset.width, dy: offset.height), from: collectionView)
+        }
+        let departingIDs = Set(departing.map(\.id))
+        return PendingFilterResultTransition(
+            newIDs: newIDs,
+            departing: departing,
+            startFrames: startFrames,
+            firstDepartingIndex: displayOrder().firstIndex(where: departingIDs.contains) ?? 0
+        )
+    }
+
+    /// Runs after the sections hold the new result but before the grid reloads, while the item
+    /// views still show the old one. Snapshots only the thumbnails expected to leave the screen,
+    /// and gives up before any snapshot when the change is expected to land without motion.
+    private func snapshotLeavingThumbnails(
+        _ pending: PendingFilterResultTransition,
+        resetsScroll: Bool
+    ) -> PendingFilterResultTransition? {
+        guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return nil }
+        let newOrder = displayOrder()
+        let window = FilterResultTransition.expectedOnScreenRange(
+            firstOldIndex: resetsScroll ? 0 : pending.firstDepartingIndex,
+            onScreenCount: pending.departing.count,
+            newCount: newOrder.count
+        )
+        guard FilterResultTransition.plan(
+            oldVisibleIDs: pending.departingIDs,
+            newVisibleIDs: Array(newOrder[window]),
+            newIDs: pending.newIDs
+        ) != nil else { return nil }
+        let newIndices = Dictionary(newOrder.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        let leaving = Set(FilterResultTransition.idsExpectedToLeaveScreen(
+            oldVisibleIDs: pending.departingIDs,
+            newIndices: newIndices,
+            expectedOnScreen: window,
+            margin: columnCount(in: layout, itemWidth: layout.itemSize.width)
+        ))
+        var result = pending
+        let scale = view.window?.backingScaleFactor ?? 2
+        for (id, itemView) in pending.departing where leaving.contains(id) {
+            guard let frame = pending.startFrames[id], let layer = itemView.layer,
+                  let image = FilterResultTransition.snapshot(of: layer, scale: scale) else { continue }
+            let snapshot = CALayer()
+            snapshot.frame = frame
+            snapshot.contents = image
+            snapshot.contentsScale = scale
+            result.snapshots[id] = snapshot
+        }
+        return result
+    }
+
+    /// Runs after the grid has reloaded with the new result.
+    private func finishFilterResultTransition(_ pending: PendingFilterResultTransition) {
+        // Settle the scroll position first; a later clamp would drop the snapshots added below.
+        scrollView.layoutSubtreeIfNeeded()
+        collectionView.layoutSubtreeIfNeeded()
+        let arriving = onScreenItemViews()
+        guard let plan = FilterResultTransition.plan(
+            oldVisibleIDs: pending.departingIDs,
+            newVisibleIDs: arriving.map(\.id),
+            newIDs: pending.newIDs
+        ) else { return }
+        let overlay = filterResultOverlay
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let arrivingViews = Dictionary(arriving.map { ($0.id, $0.view) }, uniquingKeysWith: { first, _ in first })
+
+        for id in plan.removed {
+            guard let snapshot = pending.snapshots[id] else { continue }
+            overlay.layer?.addSublayer(snapshot)
+            FilterResultTransition.fadeOut(snapshot)
+        }
+        for id in plan.staying {
+            guard let start = pending.startFrames[id] else { continue }
+            if let itemView = arrivingViews[id], let layer = itemView.layer {
+                let end = overlay.convert(itemView.frame, from: collectionView)
+                GridReflow.glide(layer, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+            } else if let snapshot = pending.snapshots[id] {
+                // Still in the result but moved off screen, or into a collapsed group: show it leaving.
+                overlay.layer?.addSublayer(snapshot)
+                if let path = indexPath(forVideoID: id),
+                   let attributes = collectionView.layoutAttributesForItem(at: path) {
+                    let end = overlay.convert(attributes.frame, from: collectionView)
+                    snapshot.frame = end
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    CATransaction.setCompletionBlock { snapshot.removeFromSuperlayer() }
+                    GridReflow.glide(snapshot, from: CGSize(width: start.minX - end.minX, height: start.minY - end.minY))
+                    CATransaction.commit()
+                } else {
+                    FilterResultTransition.fadeOut(snapshot)
+                }
+            }
+        }
+        let insertedViews = Set(plan.inserted.compactMap { arrivingViews[$0].map(ObjectIdentifier.init) })
+        for item in collectionView.visibleItems() where insertedViews.contains(ObjectIdentifier(item.view)) {
+            (item as? VideoCollectionViewItem)?.fadeInAsNewResult()
+        }
+    }
+
+    /// Lands an earlier filter change at once, so the next one starts from a settled grid.
+    private func cancelFilterResultTransition() {
+        filterResultOverlay.removeSnapshots()
+        for item in collectionView.visibleItems() {
+            (item as? VideoCollectionViewItem)?.cancelNewResultFade()
+        }
+    }
+
+    /// Video IDs in the order the grid shows them, skipping collapsed groups.
+    private func displayOrder() -> [String] {
+        sections.filter { collapsedGroupIDs.contains($0.id) == false }.flatMap { $0.videos.map(\.id) }
+    }
+
+    /// Thumbnails that are at least partly on screen, with the video each one shows.
+    private func onScreenItemViews() -> [(id: String, view: NSView)] {
+        let visibleRect = collectionView.visibleRect
+        return collectionView.visibleItems().compactMap { item in
+            guard item.view.frame.intersects(visibleRect),
+                  let path = collectionView.indexPath(for: item),
+                  let video = video(at: path) else { return nil }
+            return (video.id, item.view)
+        }
     }
 
     func updateVideo(_ video: VideoRecord, refreshThumbnail: Bool = true) {
@@ -996,9 +1222,60 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             ? selectedVideos().map(\.id)
             : video(at: indexPath).map { [$0.id] } ?? []
         guard selectedIDs.isEmpty == false else { return nil }
+        // Writers are requested just before the collection view hides the dragged items, so pin them now.
+        if let itemView = collectionView.item(at: indexPath)?.view as? VideoCollectionItemView,
+           draggedItemViews.contains(where: { $0 === itemView }) == false {
+            itemView.staysVisibleWhileDragged = true
+            draggedItemViews.append(itemView)
+        }
         let item = NSPasteboardItem()
         item.setString(selectedIDs.joined(separator: "\n"), forType: SidebarViewController.videoPasteboardType)
+        if let video = video(at: indexPath), let resolved = resolveVideos([video]).ready.first {
+            item.setString(resolved.url.absoluteString, forType: .fileURL)
+            draggedExportIndexPaths.insert(indexPath)
+        } else {
+            draggedSkippedIndexPaths.insert(indexPath)
+        }
         return item
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt screenPoint: NSPoint,
+        forItemsAt indexPaths: Set<IndexPath>
+    ) {
+        for itemView in indexPaths.compactMap({ collectionView.item(at: $0)?.view as? VideoCollectionItemView })
+        where draggedItemViews.contains(where: { $0 === itemView }) == false {
+            itemView.staysVisibleWhileDragged = true
+            draggedItemViews.append(itemView)
+        }
+        if draggedExportIndexPaths.isEmpty == false || draggedSkippedIndexPaths.isEmpty == false {
+            dragExportCaption = DragExportCaption(
+                exportCount: draggedExportIndexPaths.count,
+                skippedCount: draggedSkippedIndexPaths.count,
+                session: session,
+                view: collectionView
+            )
+        }
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        dragOperation operation: NSDragOperation
+    ) {
+        draggedExportIndexPaths = []
+        draggedSkippedIndexPaths = []
+        dragExportCaption?.stop()
+        dragExportCaption = nil
+        let views = draggedItemViews
+        draggedItemViews = []
+        // The collection view restores the source items right after this call, so release them on the next turn.
+        DispatchQueue.main.async {
+            views.forEach { $0.staysVisibleWhileDragged = false }
+        }
     }
 
     func collectionView(
@@ -1043,10 +1320,94 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         onOpenVideo(video)
     }
 
-    private func previewSelection() {
-        let selectedVideos = selectedVideos().filter { $0.availability == .available }
+    // MARK: Commands on the selection, shared by the shortcut menu, the Video menu, and keys in the grid
+
+    /// Selected videos whose files are on hand; open, Quick Look, Show in Finder, and Copy Pathname use these.
+    var selectedVideosThatCanBeOpened: [VideoRecord] {
+        selectedVideos().filter { $0.availability == .available }
+    }
+
+    /// The grid has keyboard focus, so Command-Delete in the menu means removing the selected videos.
+    var hasKeyboardFocus: Bool {
+        guard isViewLoaded, let window = view.window else { return false }
+        return window.firstResponder === collectionView
+    }
+
+    /// Selected videos that Export to Editing App includes: on this Mac or in iCloud.
+    var selectedVideosThatCanBeExported: [VideoRecord] {
+        selectedVideos().filter(ResolvedVideos.canHandOut)
+    }
+
+    /// Opening many videos at once asks first, as Finder does.
+    func openSelectedVideos() {
+        let videos = selectedVideosThatCanBeOpened
+        guard videos.isEmpty == false else { return }
+        guard OpenVideosConfirmation.isNeeded(count: videos.count), let window = view.window else {
+            videos.forEach(onOpenVideo)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = String(
+            format: String(localized: "video.open.confirm.title", defaultValue: "Open %lld videos?"),
+            videos.count
+        )
+        alert.addButton(withTitle: String(localized: "video.open.confirm.action", defaultValue: "Open"))
+        alert.addButton(withTitle: String(localized: .actionCancel))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            videos.forEach { self?.onOpenVideo($0) }
+        }
+    }
+
+    func previewSelection() {
+        let selectedVideos = selectedVideosThatCanBeOpened
         guard selectedVideos.isEmpty == false else { return }
         onPreviewVideos(selectedVideos)
+    }
+
+    func revealSelectedVideos() {
+        let selectedVideos = selectedVideosThatCanBeOpened
+        guard selectedVideos.isEmpty == false else { return }
+        onRevealVideos(selectedVideos)
+    }
+
+    func copySelectedVideoPaths() {
+        let selectedVideos = selectedVideosThatCanBeOpened
+        guard selectedVideos.isEmpty == false else { return }
+        onCopyPaths(selectedVideos)
+    }
+
+    func exportSelectedVideos(format: NLEExportFormat) {
+        let selected = selectedVideos()
+        guard selected.isEmpty == false else { return }
+        onExportToEditor(.videos(selected), format)
+    }
+
+    /// The remove command's title for the current selection, matching the shortcut menu.
+    var removeSelectedVideosTitle: String? {
+        let selected = selectedVideos()
+        guard selected.isEmpty == false else { return nil }
+        return Self.removeTitle(
+            count: selected.count,
+            unavailable: selected.contains(where: ResolvedVideos.canHandOut) == false
+        )
+    }
+
+    private static func removeTitle(count: Int, unavailable: Bool) -> String {
+        if unavailable {
+            return count > 1
+                ? String(
+                    format: String(
+                        localized: "unavailable.remove.action.multiple",
+                        defaultValue: "Remove %lld Videos from Tagivy…"
+                    ),
+                    count
+                )
+                : String(localized: "unavailable.remove.action", defaultValue: "Remove from Tagivy…")
+        }
+        return count > 1
+            ? String(localized: .videoRemoveMenuMultiple(count))
+            : String(localized: .videoRemoveMenuSingle)
     }
 
     private func contextMenu(for indexPath: IndexPath) -> NSMenu? {
@@ -1060,32 +1421,38 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
         let selected = selectedVideos()
         if selected.isEmpty == false,
-           selected.allSatisfy({ $0.availability != .available }) {
+           selected.contains(where: ResolvedVideos.canHandOut) == false {
             return unavailableContextMenu(for: selected)
         }
         let menu = NSMenu()
         menu.autoenablesItems = false
+        let canOpen = selectedVideosThatCanBeOpened.isEmpty == false
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionOpen),
             action: #selector(openVideoFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
         ))
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionReveal),
             action: #selector(revealVideoFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
         ))
         menu.addItem(makeContextMenuItem(
             title: String(localized: .videoActionCopyPath),
             action: #selector(copyPathFromContextMenu(_:)),
-            video: video
+            isEnabled: canOpen
+        ))
+        menu.addItem(.separator())
+        menu.addItem(EditorExportMenu.item(
+            scope: nil,
+            isEnabled: true,
+            target: self,
+            action: #selector(exportToEditorFromContextMenu(_:))
         ))
         menu.addItem(.separator())
         let selectedCount = selectedVideoIDs.count
         let removeItem = NSMenuItem(
-            title: selectedCount > 1
-                ? String(localized: .videoRemoveMenuMultiple(selectedCount))
-                : String(localized: .videoRemoveMenuSingle),
+            title: Self.removeTitle(count: selectedCount, unavailable: false),
             action: #selector(removeVideosFromContextMenu(_:)),
             keyEquivalent: "\u{8}"
         )
@@ -1094,6 +1461,11 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         removeItem.isEnabled = selectedCount > 0
         menu.addItem(removeItem)
         return menu
+    }
+
+    @objc private func exportToEditorFromContextMenu(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? NLEExportMenuChoice else { return }
+        exportSelectedVideos(format: choice.format)
     }
 
     private func unavailableContextMenu(for selected: [VideoRecord]) -> NSMenu {
@@ -1118,20 +1490,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             menu.addItem(.separator())
         }
 
-        let removeTitle = selected.count > 1
-            ? String(
-                format: String(
-                    localized: "unavailable.remove.action.multiple",
-                    defaultValue: "Remove %lld Videos from Tagivy…"
-                ),
-                selected.count
-            )
-            : String(
-                localized: "unavailable.remove.action",
-                defaultValue: "Remove from Tagivy…"
-            )
         let removeItem = NSMenuItem(
-            title: removeTitle,
+            title: Self.removeTitle(count: selected.count, unavailable: true),
             action: #selector(removeVideosFromContextMenu(_:)),
             keyEquivalent: "\u{8}"
         )
@@ -1142,7 +1502,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         return menu
     }
 
-    private func requestRemoveSelectedVideos() {
+    func requestRemoveSelectedVideos() {
         let selected = selectedVideos()
         guard selected.isEmpty == false, let window = view.window else { return }
         let isUnavailableSelection = selected.allSatisfy { $0.availability != .available }
@@ -1247,11 +1607,10 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
         return true
     }
 
-    private func makeContextMenuItem(title: String, action: Selector, video: VideoRecord) -> NSMenuItem {
+    private func makeContextMenuItem(title: String, action: Selector, isEnabled: Bool) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
-        item.representedObject = video.id
-        item.isEnabled = video.availability == .available
+        item.isEnabled = isEnabled
         return item
     }
 
@@ -1261,15 +1620,15 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     }
 
     @objc private func openVideoFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onOpenVideo(video) }
+        openSelectedVideos()
     }
 
     @objc private func revealVideoFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onRevealVideo(video) }
+        revealSelectedVideos()
     }
 
     @objc private func copyPathFromContextMenu(_ sender: NSMenuItem) {
-        if let video = video(from: sender) { onCopyPath(video) }
+        copySelectedVideoPaths()
     }
 
     @objc private func relinkVideoFromContextMenu(_ sender: NSMenuItem) {
@@ -1284,17 +1643,84 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
 
     func setGridItemWidth(_ width: Double) {
         guard let layout = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout else { return }
-        let clampedWidth = min(Self.maximumGridItemWidth, max(Self.minimumGridItemWidth, width))
+        let clampedWidth = Self.clampedGridItemWidth(width)
+        let glides = GridReflow.shouldGlide(
+            fromColumns: columnCount(in: layout, itemWidth: layout.itemSize.width),
+            toColumns: columnCount(in: layout, itemWidth: clampedWidth),
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        let startFrames = glides ? drawnFramesNearViewport(in: layout) : [:]
         layout.itemSize = gridItemSize(for: clampedWidth)
         layout.invalidateLayout()
-        UserDefaults.standard.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+        if glides { glideElements(from: startFrames) }
+        defaults.set(clampedWidth, forKey: Self.gridItemWidthDefaultsKey)
+    }
+
+    private enum GridElement: Hashable {
+        case item(IndexPath)
+        case header(IndexPath)
+    }
+
+    /// Frames as drawn now, for items and headers on screen and within a screen above or below it,
+    /// so the ones that scroll into view during the glide also come from where they were.
+    private func drawnFramesNearViewport(in layout: NSCollectionViewFlowLayout) -> [GridElement: NSRect] {
+        let visibleRect = collectionView.visibleRect
+        var frames: [GridElement: NSRect] = [:]
+        for attributes in layout.layoutAttributesForElements(in: visibleRect.insetBy(dx: 0, dy: -visibleRect.height)) {
+            guard let indexPath = attributes.indexPath else { continue }
+            switch attributes.representedElementCategory {
+            case .item:
+                frames[.item(indexPath)] = attributes.frame
+            case .supplementaryView where attributes.representedElementKind == NSCollectionView.elementKindSectionHeader:
+                frames[.header(indexPath)] = attributes.frame
+            default:
+                break
+            }
+        }
+        for (element, view) in elementViews() {
+            let offset = view.layer.map(GridReflow.currentOffset(of:)) ?? .zero
+            frames[element] = view.frame.offsetBy(dx: offset.width, dy: offset.height)
+        }
+        return frames
+    }
+
+    private func glideElements(from startFrames: [GridElement: NSRect]) {
+        collectionView.layoutSubtreeIfNeeded()
+        for (element, view) in elementViews() {
+            guard let layer = view.layer else { continue }
+            let start = startFrames[element] ?? view.frame
+            GridReflow.glide(layer, from: CGSize(width: start.minX - view.frame.minX, height: start.minY - view.frame.minY))
+        }
+    }
+
+    private func elementViews() -> [(GridElement, NSView)] {
+        let items = collectionView.visibleItems().compactMap { item in
+            collectionView.indexPath(for: item).map { (GridElement.item($0), item.view) }
+        }
+        let headerKind = NSCollectionView.elementKindSectionHeader
+        let headers = collectionView.indexPathsForVisibleSupplementaryElements(ofKind: headerKind).compactMap { indexPath in
+            collectionView.supplementaryView(forElementKind: headerKind, at: indexPath).map { (GridElement.header(indexPath), $0) }
+        }
+        return items + headers
+    }
+
+    private func columnCount(in layout: NSCollectionViewFlowLayout, itemWidth: Double) -> Int {
+        GridReflow.columnCount(
+            availableWidth: collectionView.bounds.width - layout.sectionInset.left - layout.sectionInset.right,
+            itemWidth: itemWidth,
+            interitemSpacing: layout.minimumInteritemSpacing
+        )
     }
 
     static func persistedGridItemWidth(defaults: UserDefaults = .standard) -> Double {
         guard let storedWidth = defaults.object(forKey: gridItemWidthDefaultsKey) as? NSNumber else {
             return defaultGridItemWidth
         }
-        return min(maximumGridItemWidth, max(minimumGridItemWidth, storedWidth.doubleValue))
+        return clampedGridItemWidth(storedWidth.doubleValue)
+    }
+
+    private static func clampedGridItemWidth(_ width: Double) -> Double {
+        min(maximumGridItemWidth, max(minimumGridItemWidth, width))
     }
 
     private func gridItemSize(for width: Double) -> NSSize {
@@ -1624,6 +2050,143 @@ private final class ImportStatusView: NSView {
     }
 }
 
+/// Tells the user, on the image that follows the pointer, how many videos the drag exports and, if any,
+/// how many it leaves out because their files cannot be reached.
+@MainActor
+final class DragExportCaption: NSObject {
+    private let text: String
+    private weak var session: NSDraggingSession?
+    private weak var view: NSView?
+    private var original: (frame: NSRect, components: [NSDraggingImageComponent])?
+    private var isShown = false
+    private var timer: Timer?
+
+    /// Shows the caption only while the pointer is outside Tagivy, where the drag can only be an export.
+    /// Drags inside Tagivy, such as assigning or moving tags, keep their usual image.
+    init(exportCount: Int, skippedCount: Int, session: NSDraggingSession, view: NSView) {
+        if skippedCount == 0 {
+            text = String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption.all", comment: "Caption on a drag out of Tagivy"),
+                exportCount
+            )
+        } else if exportCount == 0 {
+            text = String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption.none", comment: "Caption on a drag whose videos are all unavailable"),
+                skippedCount
+            )
+        } else {
+            text = String.localizedStringWithFormat(
+                NSLocalizedString("drag.exportCaption", comment: "Caption on a drag that leaves out unavailable videos"),
+                exportCount,
+                skippedCount
+            )
+        }
+        self.session = session
+        self.view = view
+        super.init()
+        // Drag tracking runs the main run loop in event tracking mode, so the timer is added to common modes.
+        let timer = Timer(timeInterval: 0.1, target: self, selector: #selector(update), userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    @objc private func update() {
+        let shouldShow = Self.isOutsideApp(NSEvent.mouseLocation)
+        guard shouldShow != isShown, let session, let view else { return }
+        isShown = shouldShow
+        let caption = shouldShow ? Self.captionImage(text) : nil
+        var isUpdated = false
+        session.enumerateDraggingItems(
+            options: [],
+            for: view,
+            classes: [NSPasteboardItem.self],
+            searchOptions: [:]
+        ) { item, _, stop in
+            guard isUpdated == false else { return }
+            isUpdated = true
+            stop.pointee = true
+            if original == nil {
+                original = (item.draggingFrame, item.imageComponents ?? [])
+            }
+            guard let original else { return }
+            guard let caption else {
+                item.draggingFrame = original.frame
+                let components = original.components
+                item.imageComponentsProvider = { components }
+                return
+            }
+            let frame = original.frame
+            let snapshot = view.bitmapImageRepForCachingDisplay(in: frame)
+            if let snapshot { view.cacheDisplay(in: frame, to: snapshot) }
+            let gap: CGFloat = 6
+            let size = NSSize(
+                width: max(frame.width, caption.size.width),
+                height: frame.height + gap + caption.size.height
+            )
+            let image = NSImage(size: size, flipped: false) { _ in
+                snapshot?.draw(
+                    in: NSRect(
+                        x: (size.width - frame.width) / 2,
+                        y: caption.size.height + gap,
+                        width: frame.width,
+                        height: frame.height
+                    )
+                )
+                caption.draw(at: NSPoint(x: (size.width - caption.size.width) / 2, y: 0), from: .zero, operation: .sourceOver, fraction: 1)
+                return true
+            }
+            let originY = view.isFlipped ? frame.minY : frame.maxY - size.height
+            item.setDraggingFrame(
+                NSRect(x: frame.midX - size.width / 2, y: originY, width: size.width, height: size.height),
+                contents: image
+            )
+        }
+    }
+
+    private static func isOutsideApp(_ screenPoint: NSPoint) -> Bool {
+        NSApp.windows.contains { $0.isVisible && $0.frame.contains(screenPoint) } == false
+    }
+
+    private static func captionImage(_ text: String) -> NSImage {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let symbol = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium).applying(.init(paletteColors: [.white])))
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        let symbolWidth: CGFloat = symbol == nil ? 0 : 18
+        let padding = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+        let size = NSSize(
+            width: ceil(padding.left + symbolWidth + textSize.width + padding.right),
+            height: ceil(padding.top + textSize.height + padding.bottom)
+        )
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor.black.withAlphaComponent(0.78).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: size.height / 2, yRadius: size.height / 2).fill()
+            if let symbol {
+                let symbolSize = symbol.size
+                symbol.draw(in: NSRect(
+                    x: padding.left,
+                    y: (size.height - symbolSize.height) / 2,
+                    width: symbolSize.width,
+                    height: symbolSize.height
+                ))
+            }
+            (text as NSString).draw(
+                at: NSPoint(x: padding.left + symbolWidth, y: padding.bottom),
+                withAttributes: attributes
+            )
+            return true
+        }
+    }
+}
+
 @MainActor
 private final class VideoImportDropView: NSView {
     var onImportDroppedItems: (([URL]) -> Void)?
@@ -1665,6 +2228,10 @@ private final class VideoImportDropView: NSView {
     }
 
     private func importPlan(from sender: NSDraggingInfo) -> VideoImportPlan {
+        // Drags that start inside Tagivy carry videos that are already in the library.
+        if sender.draggingSource != nil {
+            return VideoImportPlan(acceptedRoots: [], roots: [])
+        }
         let sequenceNumber = sender.draggingSequenceNumber
         if cachedDraggingSequenceNumber == sequenceNumber, let cachedImportPlan {
             return cachedImportPlan
@@ -1697,6 +2264,13 @@ private final class VideoCollectionView: NSCollectionView {
     var onPreviewSelection: (() -> Void)?
     var onSelectionGesture: ((IndexPath?, NSEvent.ModifierFlags) -> Bool)?
     var onRemoveSelection: (() -> Void)?
+    var onOpenSelection: (() -> Void)?
+    var onSelectAll: (() -> Void)?
+
+    override func selectAll(_ sender: Any?) {
+        guard let onSelectAll else { return super.selectAll(sender) }
+        onSelectAll()
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -1724,6 +2298,10 @@ private final class VideoCollectionView: NSCollectionView {
             onRemoveSelection?()
             return
         }
+        if VideoGridOpenKey.matches(event) {
+            onOpenSelection?()
+            return
+        }
         let disallowedModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
         if event.charactersIgnoringModifiers == " ",
            event.modifierFlags.intersection(disallowedModifiers).isEmpty {
@@ -1741,17 +2319,44 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private let detailLabel = NSTextField(labelWithString: "")
     private var isHovered = false
     private var imageTask: Task<Void, Never>?
+    private var isLoadingImage = false
     private var imageRequest = UUID()
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
+    private var placeholderWait = ThumbnailWait()
+    /// Set while a new filter result stays hidden waiting for its image; the image then shows
+    /// at once and the whole item fades in, so the placeholder never fades in first.
+    private var awaitsImageToFadeInUntil: CFTimeInterval = 0
+    private var awaitsImageToFadeIn: Bool { CACurrentMediaTime() < awaitsImageToFadeInUntil }
+
+    /// Lands a fade-in left by an earlier filter change at full opacity.
+    func cancelNewResultFade() {
+        awaitsImageToFadeInUntil = 0
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+    }
+
+    func fadeInAsNewResult() {
+        guard let layer = view.layer else { return }
+        if thumbnailView.image != nil || isLoadingImage == false {
+            FilterResultTransition.fadeIn(layer)
+        } else {
+            awaitsImageToFadeInUntil = CACurrentMediaTime() + FilterResultTransition.longestImageWait
+            FilterResultTransition.fadeInAwaitingImage(layer)
+        }
+    }
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        view.layer?.removeAnimation(forKey: GridReflow.glideAnimationKey)
+        view.layer?.removeAnimation(forKey: FilterResultTransition.insertionAnimationKey)
+        awaitsImageToFadeInUntil = 0
         imageTask?.cancel()
+        imageTask = nil
+        isLoadingImage = false
         imageRequest = UUID()
         configuredVideo = nil
         configuredURL = nil
-        thumbnailView.image = nil
+        thumbnailView.setImage(nil, reveal: .immediate)
         isHovered = false
         updateSelectionAppearance()
     }
@@ -1809,7 +2414,8 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         let needsImage = refreshThumbnail || configuredVideo?.id != video.id || configuredURL != thumbnailURL
             || configuredVideo?.thumbnailStatus != video.thumbnailStatus
             || configuredVideo?.contentFingerprint != video.contentFingerprint
-        if configuredVideo?.id != video.id {
+        let isSameVideo = configuredVideo?.id == video.id
+        if isSameVideo == false {
             isHovered = false
             updateSelectionAppearance()
         }
@@ -1819,13 +2425,38 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
             imageTask?.cancel()
             let request = UUID()
             imageRequest = request
-            thumbnailView.image = nil
+            let previewMayStillArrive = video.thumbnailStatus == .pending
+            // A refreshed thumbnail of the same video replaces the old image instead of
+            // dropping back to the placeholder first.
+            if isSameVideo == false {
+                // A reload hands views to other videos; one already shown elsewhere keeps its
+                // image instead of flashing the placeholder while the cache answers.
+                thumbnailView.setImage(thumbnailURL.flatMap(ShownThumbnails.image(at:)), reveal: .immediate)
+                placeholderWait = ThumbnailWait()
+            }
             if let thumbnailURL {
+                thumbnailView.showsMissingPreview = false
+                isLoadingImage = true
                 imageTask = Task { [weak self] in
                     let image = await DecodedVideoThumbnailCache.shared.image(at: thumbnailURL)
                     guard !Task.isCancelled, let self, imageRequest == request else { return }
-                    thumbnailView.image = image
+                    isLoadingImage = false
+                    let reveal: ThumbnailReveal = awaitsImageToFadeIn
+                        ? .immediate
+                        : thumbnailView.image == nil ? placeholderWait.reveal : .fade
+                    if let image { ShownThumbnails.remember(image, at: thumbnailURL) }
+                    thumbnailView.setImage(image, reveal: reveal)
+                    thumbnailView.showsMissingPreview = image == nil && previewMayStillArrive == false
+                    if awaitsImageToFadeIn, let layer = view.layer {
+                        awaitsImageToFadeInUntil = 0
+                        FilterResultTransition.fadeIn(layer, after: 0)
+                    }
                 }
+            } else {
+                imageTask = nil
+                isLoadingImage = false
+                thumbnailView.setImage(nil, reveal: .immediate)
+                thumbnailView.showsMissingPreview = previewMayStillArrive == false
             }
         }
         thumbnailView.setStatus(video.accessPresentation)
@@ -1863,11 +2494,30 @@ private final class VideoThumbnailView: NSView {
     private let offlineBadgeView = NSView()
     private let statusIcon = NSImageView()
 
-    var image: CGImage? {
-        didSet {
-            placeholderView.isHidden = image != nil
-            updateImageLayer()
-        }
+    private(set) var image: CGImage?
+
+    /// The film symbol marks a video that has no preview. While one may still arrive the
+    /// placeholder stays a plain fill, so the thumbnail fades in over nothing distracting.
+    var showsMissingPreview = false {
+        didSet { updatePlaceholder() }
+    }
+
+    func setImage(_ newImage: CGImage?, reveal: ThumbnailReveal) {
+        guard newImage !== image else { return }
+        (newImage == nil ? ThumbnailReveal.immediate : reveal).prepare(layer)
+        image = newImage
+        updatePlaceholder()
+        updateImageLayer()
+    }
+
+    private func updatePlaceholder() {
+        placeholderView.isHidden = image != nil || showsMissingPreview == false
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
     }
 
     func setStatus(_ status: VideoThumbnailStatus) {
@@ -1895,6 +2545,7 @@ private final class VideoThumbnailView: NSView {
         placeholderView.symbolConfiguration = .init(pointSize: 34, weight: .light)
         placeholderView.contentTintColor = .secondaryLabelColor
         placeholderView.imageScaling = .scaleProportionallyUpOrDown
+        placeholderView.isHidden = true
         addSubview(placeholderView)
 
         offlineOverlayView.translatesAutoresizingMaskIntoConstraints = false
@@ -1960,6 +2611,25 @@ private final class VideoThumbnailView: NSView {
 @MainActor
 private final class VideoCollectionItemView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
+    /// Keeps a dragged item in place. NSCollectionView otherwise fades the source items out while
+    /// they are dragged and back in on drop, which reads as reordering, and the grid does not reorder.
+    var staysVisibleWhileDragged = false {
+        didSet {
+            guard staysVisibleWhileDragged else { return }
+            super.isHidden = false
+            super.alphaValue = 1
+        }
+    }
+
+    override var isHidden: Bool {
+        get { super.isHidden }
+        set { super.isHidden = staysVisibleWhileDragged ? false : newValue }
+    }
+
+    override var alphaValue: CGFloat {
+        get { super.alphaValue }
+        set { super.alphaValue = staysVisibleWhileDragged ? 1 : newValue }
+    }
     private var hoverTrackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
@@ -2004,6 +2674,25 @@ private final class VideoCollectionItemView: NSView {
     }
 }
 
+/// Thumbnails already decoded and shown, readable on the main actor without file I/O. They are the
+/// same images the decoded cache holds, so this adds references rather than memory.
+@MainActor
+private enum ShownThumbnails {
+    private static let cache: NSCache<NSURL, CGImage> = {
+        let cache = NSCache<NSURL, CGImage>()
+        cache.totalCostLimit = 64 * 1_024 * 1_024
+        return cache
+    }()
+
+    static func image(at url: URL) -> CGImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    static func remember(_ image: CGImage, at url: URL) {
+        cache.setObject(image, forKey: url as NSURL, cost: image.bytesPerRow * image.height)
+    }
+}
+
 // File I/O and eager JPEG decoding stay on this actor, away from AppKit's main actor.
 private actor DecodedVideoThumbnailCache {
     static let shared = DecodedVideoThumbnailCache()
@@ -2027,5 +2716,14 @@ private actor DecodedVideoThumbnailCache {
               ] as CFDictionary), !Task.isCancelled else { return nil }
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
         return image
+    }
+}
+
+/// How many videos Open sends to the player without asking first.
+enum OpenVideosConfirmation {
+    static let threshold = 10
+
+    static func isNeeded(count: Int) -> Bool {
+        count > threshold
     }
 }

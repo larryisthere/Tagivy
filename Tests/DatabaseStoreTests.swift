@@ -40,6 +40,47 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(library?.rootBookmarkData, Data())
     }
 
+    // Real libraries hold sources stored without access data whose videos are also reached through
+    // a source that has it. Only those duplicates are removed; a video's only record is kept.
+    func testRemovesSourcesWithoutAccessOnlyWhenAnotherSourceReachesTheirVideos() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        for id in ["valid", "covered", "only", "stale-cover", "empty-unused"] {
+            try await store.saveSourceAuthorization(makeSource(id: id, name: id))
+        }
+        let volume = Data("volume".utf8)
+        func video(_ path: String, _ identity: String) -> DiscoveredVideo {
+            makeDiscoveredVideo(path: path, size: 10, volumeIdentifier: volume,
+                                fileResourceIdentifier: Data(identity.utf8))
+        }
+        _ = try await store.importVideos(sourceID: "valid", discoveredVideos: [video("Shared.mp4", "shared"), video("Gone.mp4", "gone")])
+        _ = try await store.importVideos(sourceID: "covered", discoveredVideos: [video("Shared.mp4", "shared")])
+        _ = try await store.importVideos(sourceID: "only", discoveredVideos: [video("Only.mp4", "only")])
+        _ = try await store.importVideos(sourceID: "stale-cover", discoveredVideos: [video("Gone.mp4", "gone")])
+        try executeSQL(
+            at: fixture.databaseURL,
+            sql: """
+            UPDATE source_authorizations SET root_bookmark_data = X''
+            WHERE id IN ('covered', 'only', 'stale-cover', 'empty-unused');
+            UPDATE source_authorizations SET scans_descendants = 1 WHERE id = 'empty-unused';
+            UPDATE video_locations SET is_available = 0
+            WHERE source_id = 'valid' AND relative_path = 'Gone.mp4';
+            """
+        )
+
+        let removed = try await store.removeRedundantSourcesWithoutAccess()
+        let remaining = try await store.fetchSourceAuthorizations().map(\.id)
+        let locations = try await store.fetchVideoLocations(includeUnavailable: true)
+        let videos = try await store.fetchVideos(libraryID: LibraryRecord.primaryID)
+
+        XCTAssertEqual(Set(removed), ["covered", "empty-unused"])
+        XCTAssertEqual(Set(remaining), ["valid", "only", "stale-cover"])
+        XCTAssertFalse(locations.contains { $0.sourceID == "covered" })
+        XCTAssertEqual(videos.count, 3)
+    }
+
     func testVersionTwoMigrationPreservesVideosAndTagRelations() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
@@ -258,6 +299,90 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(states[targetID], .on)
     }
 
+    func testColoringSeveralTagsIsOneStepThatUndoRestores() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let keptID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "留", parentID: nil)
+        try await store.setTagColor(id: secondID, color: "blue")
+        try await store.setTagColor(id: keptID, color: "green")
+        let snapshot = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+
+        try await store.setTagColor(ids: [firstID, secondID], color: "red")
+        var colors = try await tagColors(in: store)
+        XCTAssertEqual(colors[firstID], "red")
+        XCTAssertEqual(colors[secondID], "red")
+        XCTAssertEqual(colors[keptID], "green")
+
+        try await store.restoreTagState(snapshot)
+        colors = try await tagColors(in: store)
+        XCTAssertEqual(colors[firstID], .some(nil))
+        XCTAssertEqual(colors[secondID], "blue")
+        XCTAssertEqual(colors[keptID], "green")
+    }
+
+    func testMergingSeveralTagsMovesTheirVideosAndChildrenAndUndoBringsThemBack() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let videos = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: [
+                makeDiscoveredVideo(path: "A.mp4", size: 10),
+                makeDiscoveredVideo(path: "B.mp4", size: 20),
+                makeDiscoveredVideo(path: "C.mp4", size: 30),
+            ]
+        )
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let firstChildID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一之子", parentID: firstID)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let targetID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "目标", parentID: nil)
+        try await store.setTagAssignment(tagID: firstID, videoIDs: [videos[0].id], enabled: true)
+        try await store.setTagAssignment(tagID: secondID, videoIDs: [videos[1].id], enabled: true)
+        try await store.setTagAssignment(tagID: targetID, videoIDs: [videos[2].id], enabled: true)
+        let snapshot = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+
+        try await store.mergeTags(sourceIDs: [firstID, secondID], targetID: targetID)
+        let merged = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(merged.map(\.id)), [firstChildID, targetID])
+        XCTAssertEqual(merged.first(where: { $0.id == firstChildID })?.parentID, targetID)
+        let states = try await store.tagAssignmentStates(videoIDs: videos.map(\.id), tags: merged)
+        XCTAssertEqual(states[targetID], .on)
+
+        try await store.restoreTagState(snapshot)
+        let restored = try await store.captureTagState(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(restored.tags.map(\.id)), Set(snapshot.tags.map(\.id)))
+        XCTAssertEqual(restored.tags.first(where: { $0.id == firstChildID })?.parentID, firstID)
+        XCTAssertEqual(restored.relations, snapshot.relations)
+    }
+
+    func testMergingIntoATagInsideASourceChangesNothing() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let nestedID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二之子", parentID: secondID)
+
+        do {
+            try await store.mergeTags(sourceIDs: [firstID, secondID], targetID: nestedID)
+            XCTFail("Merging into a tag nested in a source should fail")
+        } catch {}
+
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(Set(tags.map(\.id)), [firstID, secondID, nestedID])
+    }
+
+    private func tagColors(in store: DatabaseStore) async throws -> [String: String?] {
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        return Dictionary(uniqueKeysWithValues: tags.map { ($0.id, $0.color) })
+    }
+
     func testMovingTagKeepsSiblingOrderContiguous() async throws {
         let fixture = try DatabaseFixture()
         defer { fixture.remove() }
@@ -272,6 +397,22 @@ final class DatabaseStoreTests: XCTestCase {
         let userTags = try await store.fetchTags(libraryID: LibraryRecord.primaryID).filter { $0.source == "user" }
         XCTAssertEqual(userTags.map(\.id), [third, first, second])
         XCTAssertEqual(userTags.map(\.sortOrder), [0, 1, 2])
+    }
+
+    func testDeletingSeveralTagsRemovesEachSubtreeAndKeepsTheRest() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let firstID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一", parentID: nil)
+        let childID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "一之子", parentID: firstID)
+        let secondID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "二", parentID: nil)
+        let keptID = try await store.createTag(libraryID: LibraryRecord.primaryID, name: "留", parentID: nil)
+
+        try await store.deleteTags(ids: [firstID, childID, secondID])
+
+        let remaining = try await store.fetchTags(libraryID: LibraryRecord.primaryID).map(\.id)
+        XCTAssertEqual(remaining, [keptID])
     }
 
     func testDeletingParentRemovesSubtreeAndSnapshotRestoresTagState() async throws {
@@ -380,6 +521,177 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(untagged.map(\.filename), ["Beta.mov"])
         XCTAssertEqual(Set(inherited.map(\.filename)), Set(["Alpha.mp4", "Gamma.mkv"]))
         XCTAssertEqual(intersection.map(\.filename), ["Gamma.mkv"])
+    }
+
+    func testNumericRangesIncludeBothEdgesAndLeaveAMissingBoundOpen() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, size: Int64, duration: Double, width: Int, height: Int)] = [
+            ("Short.mp4", 100, 10, 1280, 720),
+            ("Mid.mp4", 200, 60, 1920, 1080),
+            ("Long.mp4", 300, 300, 3840, 2160),
+            ("Epic.mp4", 400, 3600, 7680, 4320),
+            ("PortraitHD.mp4", 500, 5000, 1080, 1920),
+            ("Portrait4K.mp4", 600, 5000, 2160, 3840),
+            ("Scope4K.mp4", 700, 5000, 3840, 1608),
+            ("ScopeHD.mp4", 800, 5000, 1920, 800),
+            ("DCI4K.mp4", 900, 5000, 4096, 1716),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: $0.size) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: """
+                UPDATE videos SET duration = \(sample.duration), width = \(sample.width), height = \(sample.height)
+                WHERE filename = '\(sample.name)'
+                """
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let between = try await matches(.durationRange(min: 60, max: 300))
+        let atMost = try await matches(.durationRange(min: nil, max: 60))
+        let atLeast = try await matches(.durationRange(min: 300, max: nil))
+        let sizeBetween = try await matches(.fileSizeRange(min: 200, max: 300))
+        let sizeAtMost = try await matches(.fileSizeRange(min: nil, max: 100))
+        let resolutionBetween = try await matches(.resolutionTierRange(min: 1080, max: 2160))
+        let resolutionAtLeast = try await matches(.resolutionTierRange(min: 2160, max: nil))
+        let fullHDOrMore = try await matches(.resolutionTierRange(min: 1080, max: nil))
+        let belowFullHD = try await matches(.resolutionTierRange(min: nil, max: 1079))
+        let exact = try await matches(.resolutionTierRange(min: 4320, max: 4320))
+        let open = try await matches(.durationRange(min: nil, max: nil))
+
+        XCTAssertEqual(between, ["Mid.mp4", "Long.mp4"])
+        XCTAssertEqual(atMost, ["Short.mp4", "Mid.mp4"])
+        XCTAssertEqual(atLeast, [
+            "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
+        XCTAssertEqual(sizeBetween, ["Mid.mp4", "Long.mp4"])
+        XCTAssertEqual(sizeAtMost, ["Short.mp4"])
+        XCTAssertEqual(resolutionBetween, [
+            "Mid.mp4", "Long.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
+        XCTAssertEqual(resolutionAtLeast, ["Long.mp4", "Epic.mp4", "Portrait4K.mp4", "Scope4K.mp4", "DCI4K.mp4"])
+        XCTAssertEqual(fullHDOrMore, [
+            "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4", "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
+        XCTAssertEqual(belowFullHD, ["Short.mp4"])
+        XCTAssertEqual(exact, ["Epic.mp4"])
+        XCTAssertEqual(open, [
+            "Short.mp4", "Mid.mp4", "Long.mp4", "Epic.mp4", "PortraitHD.mp4", "Portrait4K.mp4",
+            "Scope4K.mp4", "ScopeHD.mp4", "DCI4K.mp4",
+        ])
+    }
+
+    func testDurationRangeMatchesDurationsAsTheyAreShownInWholeSeconds() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, duration: Double)] = [
+            ("Below.mp4", 59.4),
+            ("RoundsUpToMin.mp4", 59.5),
+            ("RoundsDownToMax.mp4", 300.4),
+            ("RoundsUpPastMax.mp4", 300.5),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: 10) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: "UPDATE videos SET duration = \(sample.duration) WHERE filename = '\(sample.name)'"
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let between = try await matches(.durationRange(min: 60, max: 300))
+        let atMost = try await matches(.durationRange(min: nil, max: 300))
+        let atLeast = try await matches(.durationRange(min: 60, max: nil))
+
+        XCTAssertEqual(between, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
+        XCTAssertEqual(atMost, ["Below.mp4", "RoundsUpToMin.mp4", "RoundsDownToMax.mp4"])
+        XCTAssertEqual(atLeast, ["RoundsUpToMin.mp4", "RoundsDownToMax.mp4", "RoundsUpPastMax.mp4"])
+    }
+
+    func testResolutionUpperBoundCoversItsWholeTier() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let samples: [(name: String, width: Int, height: Int)] = [
+            ("UHD.mp4", 3840, 2160),
+            ("DCI4K.mp4", 4096, 2160),
+            ("DCIScope.mp4", 4096, 1716),
+            ("DCI2K.mp4", 2048, 1080),
+            ("QHD.mp4", 2560, 1440),
+            ("UHD8K.mp4", 7680, 4320),
+            ("Huge.mp4", 15360, 8640),
+        ]
+        _ = try await store.importTestVideos(
+            libraryID: LibraryRecord.primaryID,
+            discoveredVideos: samples.map { makeDiscoveredVideo(path: $0.name, size: 10) }
+        )
+        for sample in samples {
+            try executeSQL(
+                at: fixture.databaseURL,
+                sql: "UPDATE videos SET width = \(sample.width), height = \(sample.height) WHERE filename = '\(sample.name)'"
+            )
+        }
+        func matches(_ condition: LibraryFilterCondition) async throws -> Set<String> {
+            let videos = try await store.fetchVideos(
+                libraryID: LibraryRecord.primaryID,
+                query: LibraryQueryRequest(
+                    baseFilter: .all,
+                    temporaryFilenameSearch: "",
+                    rule: LibraryQueryRule(conditions: [condition])
+                ),
+                now: Date()
+            )
+            return Set(videos.map(\.filename))
+        }
+
+        let upTo1080p = try await matches(.resolutionTierRange(min: nil, max: 1080))
+        let upTo4K = try await matches(.resolutionTierRange(min: nil, max: 2160))
+        let fullHDTo4K = try await matches(.resolutionTierRange(min: 1080, max: 2160))
+        let atLeast4K = try await matches(.resolutionTierRange(min: 2160, max: nil))
+        let upTo8K = try await matches(.resolutionTierRange(min: nil, max: 4320))
+        let exactly4K = try await matches(.resolutionTierRange(min: 2160, max: 2160))
+
+        XCTAssertEqual(upTo1080p, ["DCI2K.mp4"])
+        XCTAssertEqual(upTo4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "DCI2K.mp4", "QHD.mp4"])
+        XCTAssertEqual(fullHDTo4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "DCI2K.mp4", "QHD.mp4"])
+        XCTAssertEqual(atLeast4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4", "UHD8K.mp4", "Huge.mp4"])
+        XCTAssertEqual(upTo8K, Set(samples.map(\.name)))
+        XCTAssertEqual(exactly4K, ["UHD.mp4", "DCI4K.mp4", "DCIScope.mp4"])
     }
 
     func testFinderTagImportRunsOncePerVideoAndKeepsExistingAssignments() async throws {
@@ -929,6 +1241,57 @@ final class DatabaseStoreTests: XCTestCase {
         XCTAssertEqual(filtered.count, 5_000)
         XCTAssertLessThan(importDuration, 10, "10,000 条首次导入应在测试机上于 10 秒内完成")
         XCTAssertLessThan(filterDuration, 0.2, "10,000 条标签筛选目标为 200 毫秒")
+    }
+
+    @MainActor
+    func testUndoAfterSmartCollectionChangeRevertsThatChangeOnly() async throws {
+        let fixture = try DatabaseFixture()
+        defer { fixture.remove() }
+        let store = try DatabaseStore(databaseURL: fixture.databaseURL)
+        try await store.saveLibrary(makeLibraryRecord())
+        let coordinator = LibraryAccessCoordinator(database: store)
+        func settle(_ condition: () async throws -> Bool) async throws {
+            var attempts = 0
+            while try await condition() == false, attempts < 500 {
+                attempts += 1
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            let satisfied = try await condition()
+            XCTAssertTrue(satisfied)
+        }
+        func collections() async throws -> [SmartCollectionRecord] {
+            try await store.fetchSmartCollections(libraryID: LibraryRecord.primaryID)
+        }
+        func created(_ name: String) async throws -> SmartCollectionRecord {
+            var record: SmartCollectionRecord?
+            coordinator.createSmartCollection(name: name, rule: .standard) { record = $0 }
+            try await settle { record != nil }
+            try await settle { coordinator.canUndoLastMutation }
+            return try XCTUnwrap(record)
+        }
+
+        coordinator.createTag(name: "Earlier", parentID: nil)
+        try await settle { coordinator.canUndoLastMutation }
+
+        // Creating, renaming and deleting a smart filter each undo themselves, never the earlier tag change.
+        let first = try await created("First")
+        coordinator.undoLastMutation()
+        try await settle { try await collections().isEmpty && coordinator.canUndoLastMutation == false }
+
+        let second = try await created("Second")
+        coordinator.updateSmartCollection(id: second.id, name: "Renamed") { _ in }
+        try await settle { try await collections().map(\.name) == ["Renamed"] && coordinator.canUndoLastMutation }
+        coordinator.undoLastMutation()
+        try await settle { try await collections().map(\.name) == ["Second"] }
+
+        coordinator.deleteSmartCollection(id: second.id) { _ in }
+        try await settle { try await collections().isEmpty && coordinator.canUndoLastMutation }
+        coordinator.undoLastMutation()
+        try await settle { try await collections().map(\.id) == [second.id] }
+
+        XCTAssertNotEqual(first.id, second.id)
+        let tags = try await store.fetchTags(libraryID: LibraryRecord.primaryID)
+        XCTAssertEqual(tags.map(\.name), ["Earlier"])
     }
 
     func testCancelledImportLeavesExistingVideosAvailable() async throws {

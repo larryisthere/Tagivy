@@ -34,7 +34,7 @@ Tagivy is designed for people who keep videos locally and want a flexible way to
 - **Hierarchical video tags** — build multi-level tag trees, batch-edit assignments, merge tags, add colors, and organize tags with drag and drop.
 - **Smart filters and collections** — combine tags, filename, dates, media properties, and sorting, then save a reusable Smart Collection with live results.
 - **Files stay where they are** — Tagivy reads original videos without moving, renaming, modifying, or deleting them.
-- **Local-first and private** — the library index, tags, access permissions, and thumbnails stay on your Mac. Tagivy makes no network requests by default.
+- **Local-first and private** — the library index, tags, access permissions, and thumbnails stay on your Mac. The only network access is checking GitHub for Tagivy updates, which you can turn off in Settings.
 - **Native macOS workflow** — use Quick Look, open videos in your default player, reveal files in Finder, and protect the library with optional system authentication.
 
 If Tagivy fits your workflow, [star the repository](https://github.com/larryisthere/Tagivy) to support its development and find it again.
@@ -92,6 +92,20 @@ Repeated imports are safe: the same file keeps a single library record, includin
 - Authorized external-drive locations restore automatically after reconnection
 - Missing and deleted files are reconciled without changing the originals
 
+## Use with editing apps
+
+Export a tag, a smart filter, or selected videos straight into your editing app, with your tags as bins or keywords. For any other app, drag videos out of Tagivy.
+
+| App | How |
+|---|---|
+| Final Cut Pro | Export with Final Cut Pro (.fcpxml), then File › Import › XML: tags become keywords |
+| Adobe Premiere Pro | Export with Premiere Pro / DaVinci Resolve (.xml), then File › Import: tags become bins |
+| DaVinci Resolve | Export with Premiere Pro / DaVinci Resolve (.xml), then File › Import › Media from File: tags become bins |
+| JianYing (剪映, the China edition of CapCut) | Export with JianYing (.fcpxml), then 更多 › 导入PR或FCP工程: a timeline |
+| iMovie, CapCut and other apps | Drag and drop |
+
+See [Use Tagivy videos in editing apps](docs/editing-apps.md) for step-by-step instructions.
+
 ## Download and install
 
 ### Requirements
@@ -125,7 +139,7 @@ Media playback and preview availability can depend on the codecs supported by th
 
 ## Privacy and file safety
 
-- Tagivy makes no network requests by default.
+- The only network access is Sparkle checking GitHub Releases for Tagivy updates, which you can turn off in Settings > Updates. The app process itself has no network permission.
 - Tags, the file index, access permissions, and thumbnails are stored locally.
 - Logs exclude full file paths, filenames, tag contents, and bookmark data.
 - Original videos are opened with read-only access.
@@ -149,7 +163,7 @@ Yes. Videos, folders, and mixed selections share one library, tag tree, search s
 
 ### Does Tagivy upload library data?
 
-No. Tagivy makes no network requests by default, and library data stays on the Mac.
+No. The only network access is checking for Tagivy updates, and library data stays on the Mac.
 
 ### What happens when a video moves?
 
@@ -183,7 +197,7 @@ Run `ruby script/check_invariants.rb` to check project-wide rules locally. Bundl
 - `Core/` — database, file access, scanning, media, and security services
 - `Features/` — library, settings, and app-lock interfaces
 - `Tests/` — automated checks for core models and services
-- `script/check_invariants.rb` — project-wide rules (sandbox, read-only originals, no network, logging privacy, localization) checked in CI
+- `script/check_invariants.rb` — project-wide rules (sandbox, read-only originals, no network outside the updater, logging privacy, localization) checked in CI
 - `docs/release.md` — local, GitHub, and App Store release workflows
 
 Automated checks validate only their stated assertions. Product logic, interaction, and UI remain subject to user acceptance.

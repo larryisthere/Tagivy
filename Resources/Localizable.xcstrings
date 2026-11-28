@@ -1,6 +1,48 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "filter.durationAtLeast" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Duration ≥ %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时长 ≥ %@" } } } },
+    "filter.resolutionAtLeast" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution ≥ %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率 ≥ %@" } } } },
+    "filter.durationRange" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Duration %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时长 %@" } } } },
+    "filter.durationAtMost" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Duration ≤ %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时长 ≤ %@" } } } },
+    "filter.fileSizeRange" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Size %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "大小 %@" } } } },
+    "filter.fileSizeAtMost" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Size ≤ %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "大小 ≤ %@" } } } },
+    "filter.resolutionRange" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率 %@" } } } },
+    "filter.resolutionAtMost" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution ≤ %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率 ≤ %@" } } } },
+    "filter.range.any" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Any" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不限" } } } },
+    "filter.range.min" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Min" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最小" } } } },
+    "filter.range.max" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Max" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最大" } } } },
+    "filter.resolution.hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Portrait 1080×1920 counts as 1080p, and widescreen 3840×1608 as 4K." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "竖屏 1080×1920 算 1080p，宽银幕 3840×1608 算 4K。" } } } },
+    "filter.range.clearMin" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No Minimum" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不限最小值" } } } },
+    "filter.range.clearMax" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No Maximum" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不限最大值" } } } },
+    "filter.field.withinLast" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Within last" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近" } } } },
+    "filter.unit.days" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ days" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 天" } } } },
+    "filter.unit.hours" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ hr" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 小时" } } } },
+    "filter.unit.minutes" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ min" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 分钟" } } } },
+    "filter.unit.seconds" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ s" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 秒" } } } },
+    "menu.checkForUpdates" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check for Updates…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检查更新…" } } } },
+    "menu.relaunchToInstallUpdate" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Relaunch to Install Update" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新启动以安装更新" } } } },
+    "settings.updates" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Updates" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新" } } } },
+    "settings.updates.checkAutomatically" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check for updates automatically" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动检查更新" } } } },
+    "settings.updates.downloadAutomatically" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Download updates in the background" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在后台下载更新" } } } },
+    "settings.updates.downloadAutomaticallyHelp" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "When an update is ready, a relaunch button appears in the bottom-left corner. If you don't relaunch, the update installs when you quit Tagivy." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新下载好后，左下角会出现重启按钮；不重启的话，退出 Tagivy 时自动安装。" } } } },
+    "settings.updates.promptHelp" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "New versions appear in the bottom-left corner. Click to download, install and relaunch." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有新版本时会显示在左下角，点击即可下载、安装并重启。" } } } },
+    "settings.updates.beta" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Receive beta versions" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收测试版" } } } },
+    "settings.updates.betaHelp" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Betas bring new features before their release and may be less stable. If a beta has already downloaded, turning this off still installs it when you quit; after that you get only releases." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "测试版会提前带来新功能，可能不够稳定。关闭时如果测试版已经下载好，退出时仍会安装它，之后只接收正式版。" } } } },
+    "update.checking" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking for updates…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查更新…" } } } },
+    "update.upToDate" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tagivy is up to date" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已是最新版本" } } } },
+    "update.failed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Update failed. Try again later." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新失败，请稍后再试" } } } },
+    "update.install" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Install Update" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装更新" } } } },
+    "update.installVersion" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Download and install Tagivy %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载并安装 Tagivy %@" } } } },
+    "update.downloading" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloading Update…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在下载更新…" } } } },
+    "update.downloadingVersion" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloading Tagivy %@…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在下载 Tagivy %@…" } } } },
+    "update.preparing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Preparing update…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在准备更新…" } } } },
+    "update.relaunch" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Relaunch to Install" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新启动以安装" } } } },
+    "update.relaunchVersion" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Relaunch Tagivy to install %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新启动 Tagivy 以安装 %@" } } } },
+    "update.installing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Installing update…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在安装更新…" } } } },
+    "inspector.tagLayout" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tag Layout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标签布局" } } } },
+    "inspector.tagLayout.compact" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Compact" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "紧凑" } } } },
+    "inspector.tagLayout.list" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "List" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "列表" } } } },
     "recovery.stopped" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -333,9 +375,7 @@
     "filter.clear" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除" } } } },
     "filter.clearTooltip" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear search, filters, and sort" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除搜索、筛选和排序" } } } },
     "filter.createdDays" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Created in last %lld days" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近 %lld 天创建" } } } },
-    "filter.days" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld days" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 天" } } } },
     "filter.deletedTag" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Deleted Tag" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已删除标签" } } } },
-    "filter.duration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Duration ≥ %lld min" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时长 ≥ %lld 分钟" } } } },
     "filter.editor.condition" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Filter" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑筛选" } } } },
     "filter.editor.filename" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Filename Filter" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑文件名筛选" } } } },
     "filter.editor.match" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Filter Relationship" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "筛选条件关系" } } } },
@@ -354,7 +394,6 @@
     "filter.heading" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Filter" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "筛选" } } } },
     "filter.matchAll" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Match All Conditions" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "匹配全部条件" } } } },
     "filter.matchAny" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Match Any Condition" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "匹配任一条件" } } } },
-    "filter.minutes" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld min" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 分钟" } } } },
     "filter.modified" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Rule Modified" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规则已修改" } } } },
     "filter.noTags" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No tags available" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无可用标签" } } } },
     "filter.offlineCannotSave" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Offline status is checked at runtime and cannot be saved as a smart collection." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "离线状态需要实时检查，无法保存为智能分类。" } } } },
@@ -362,16 +401,29 @@
     "filter.operator.any" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Include Any" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "包含任一" } } } },
     "filter.operator.exclude" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Exclude" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "排除" } } } },
     "filter.remove" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } } } },
-    "filter.removeCondition" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Filter" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除筛选" } } } },
     "filter.requiredTags" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tags include %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标签包含 %@" } } } },
-    "filter.resolution1080" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution ≥ 1080p" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率 ≥ 1080p" } } } },
-    "filter.resolution4K" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution ≥ 4K" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率 ≥ 4K" } } } },
     "filter.revert" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Revert" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还原" } } } },
     "filter.saveAs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save As…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "另存为…" } } } },
     "filter.saveSmartCollection" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save as Smart Collection…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "存为智能分类…" } } } },
     "filter.searchShortcutTooltip" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search filenames (⌘F)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索文件名（⌘F）" } } } },
     "menu.addFilterCondition" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Filter Condition" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加筛选条件" } } } },
     "menu.searchFilenames" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search Filenames" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索文件名" } } } },
+    "menu.video" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Video" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "视频" } } } },
+    "menu.video.quickLook" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick Look" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快速查看" } } } },
+    "menu.video.addTags" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Tags" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加标签" } } } },
+    "menu.view.zoomIn" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom In" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "放大" } } } },
+    "menu.view.zoomOut" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom Out" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缩小" } } } },
+    "menu.view.actualSize" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Actual Size" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实际大小" } } } },
+    "menu.view.showSidebar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Sidebar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示边栏" } } } },
+    "menu.view.hideSidebar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Sidebar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏边栏" } } } },
+    "menu.view.showInspector" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Inspector" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示检查器" } } } },
+    "menu.view.hideInspector" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Inspector" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏检查器" } } } },
+    "menu.view.hideToolbar" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Toolbar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏工具栏" } } } },
+    "menu.view.enterFullScreen" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter Full Screen" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入全屏幕" } } } },
+    "menu.window.zoom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缩放" } } } },
+    "menu.window.bringAllToFront" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bring All to Front" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "前置全部窗口" } } } },
+    "video.open.confirm.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open %lld videos?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确定要打开 %lld 个视频吗？" } } } },
+    "video.open.confirm.action" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开" } } } },
     "filter.scope" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scope: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "范围：%@" } } } },
     "filter.sort.added" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Date Added" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "加入日期" } } } },
     "filter.sort.az" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A to Z" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "A 到 Z" } } } },
@@ -383,7 +435,6 @@
     "filter.sort.modified" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Date Modified" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "修改日期" } } } },
     "filter.sort.newest" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Newest First" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最新优先" } } } },
     "filter.sort.oldest" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Oldest First" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最早优先" } } } },
-    "filter.sort.reset" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset to Default" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复默认排序" } } } },
     "filter.sort.resolution" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分辨率" } } } },
     "filter.sort.smallest" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Smallest First" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从小到大" } } } },
     "filter.sort.za" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Z to A" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Z 到 A" } } } },
@@ -461,23 +512,6 @@
         }
       }
     },
-    "about.dataAndVideos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Data and Videos"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "数据与视频"
-          }
-        }
-      }
-    },
     "about.localReadOnly" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -491,23 +525,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地保存 · 原视频只读"
-          }
-        }
-      }
-    },
-    "about.minimumSystem" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Minimum System Requirement"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最低系统要求"
           }
         }
       }
@@ -614,40 +631,6 @@
         }
       }
     },
-    "accessibility.removePendingTag" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove pending tag"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除待新建标签"
-          }
-        }
-      }
-    },
-    "accessibility.removePendingTagNamed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove pending tag “%@”"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除待新建标签“%@”"
-          }
-        }
-      }
-    },
     "accessibility.tagCollapse" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -712,23 +695,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "视频"
-          }
-        }
-      }
-    },
-    "action.apply" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apply"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用"
           }
         }
       }
@@ -831,23 +797,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
-          }
-        }
-      }
-    },
-    "action.stageDraft" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add to Draft"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加入草稿"
           }
         }
       }
@@ -3434,6 +3383,40 @@
         }
       }
     },
+    "menu.hide" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏 %@"
+          }
+        }
+      }
+    },
+    "menu.hideOthers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Others"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏其他"
+          }
+        }
+      }
+    },
     "menu.minimize" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3468,6 +3451,40 @@
         }
       }
     },
+    "menu.services" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Services"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务"
+          }
+        }
+      }
+    },
+    "menu.showAll" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部显示"
+          }
+        }
+      }
+    },
     "menu.settings" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3481,6 +3498,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置…"
+          }
+        }
+      }
+    },
+    "menu.cut" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cut"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪切"
+          }
+        }
+      }
+    },
+    "menu.copy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝"
+          }
+        }
+      }
+    },
+    "menu.paste" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴"
+          }
+        }
+      }
+    },
+    "menu.selectAll" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全选"
           }
         }
       }
@@ -3567,19 +3648,19 @@
         }
       }
     },
-    "menu.window.showLibrary" : {
+    "menu.window.showMainWindow" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show Library"
+            "value" : "Show Main Window"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示资料库"
+            "value" : "显示主窗口"
           }
         }
       }
@@ -3735,23 +3816,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "settings.about" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "About"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于"
           }
         }
       }
@@ -4068,13 +4132,30 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete…"
+            "value" : "Delete"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除…"
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "tag.action.deleteMultiple" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete %lld Tags"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除 %lld 个标签"
           }
         }
       }
@@ -4323,13 +4404,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The new tag will be added to the current draft. Apply the draft to create the tag and add it to the selected videos."
+            "value" : "The new tag is added to the selected videos right away."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新标签将加入当前草稿。点击“应用”后创建标签并添加到当前视频。"
+            "value" : "新标签会立即添加到当前选中的视频。"
           }
         }
       }
@@ -4368,23 +4449,6 @@
         }
       }
     },
-    "tag.create.topLevel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Top Level"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "顶级"
-          }
-        }
-      }
-    },
     "tag.create.topLevelNoParent" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4402,192 +4466,36 @@
         }
       }
     },
-    "tag.delete.detail" : {
+    "tag.deleted.multiple" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Video files will remain on your Mac. Related tag assignments will be removed."
+            "value" : "Deleted %lld Tags"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频文件不会被删除，相关标签关系会被移除。"
+            "value" : "已删除 %lld 个标签"
           }
         }
       }
     },
-    "tag.delete.title" : {
+    "tag.deleted.single" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete “%@” and All Child Tags?"
+            "value" : "Deleted “%@”"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除“%@”及其全部子标签？"
-          }
-        }
-      }
-    },
-    "tag.draft.add" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "添加 %lld 个标签"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "tag.draft.applying" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Applying tags…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在应用标签…"
-          }
-        }
-      }
-    },
-    "tag.draft.create" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Create %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Create %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "新建 %lld 个标签"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "tag.draft.instruction" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select tags, then click Apply to save your changes."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "勾选标签后，点击“应用”保存更改。"
-          }
-        }
-      }
-    },
-    "tag.draft.pending" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@. Changes have not been applied."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@，尚未应用。"
-          }
-        }
-      }
-    },
-    "tag.draft.remove" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Remove %lld tag"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Remove %lld tags"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "移除 %lld 个标签"
-                }
-              }
-            }
+            "value" : "已删除“%@”"
           }
         }
       }
@@ -4656,23 +4564,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的标签。"
-          }
-        }
-      }
-    },
-    "tag.pending" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pending"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "待新建"
           }
         }
       }
@@ -5051,70 +4942,19 @@
         }
       }
     },
-    "unsavedTags.detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The selected videos have tag changes that have not been applied."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前视频的标签还有未应用的修改。"
-          }
-        }
-      }
-    },
-    "unsavedTags.discard" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Discard Changes"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "放弃更改"
-          }
-        }
-      }
-    },
-    "unsavedTags.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apply Tag Changes?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用标签更改？"
-          }
-        }
-      }
-    },
     "video.action.copyPath" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy Full Path"
+            "value" : "Copy Pathname"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制完整路径"
+            "value" : "拷贝路径名称"
           }
         }
       }
@@ -5148,7 +4988,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Finder 中显示"
+            "value" : "在访达中显示"
           }
         }
       }
@@ -5297,6 +5137,126 @@
         }
       }
     },
+    "drag.exportCaption.all" : {
+      "comment" : "Caption on a drag out of Tagivy",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exporting %lld video"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exporting %lld videos"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将导出 %lld 个视频"
+          }
+        }
+      }
+    },
+    "drag.exportCaption.none" : {
+      "comment" : "Caption on a drag whose videos are all unavailable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No videos to export (%lld unavailable)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No videos to export (%lld unavailable)"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可导出的视频（%lld 个不可用）"
+          }
+        }
+      }
+    },
+    "drag.exportCaption" : {
+      "comment" : "Caption on a drag that leaves out unavailable videos",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporting %#@exported@, excluding %#@skipped@ unavailable"
+          },
+          "substitutions" : {
+            "exported" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg video"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg videos"
+                    }
+                  }
+                }
+              }
+            },
+            "skipped" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将导出 %1$lld 个视频，不包含不可用的 %2$lld 个视频"
+          }
+        }
+      }
+    },
     "video.result.removed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5362,6 +5322,350 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移出视频"
+          }
+        }
+      }
+    },
+    "export.editor.menu" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export to Editing App"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出到剪辑软件"
+          }
+        }
+      }
+    },
+    "export.editor.selectionName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Selected Video (%lld)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Selected Videos (%lld)"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "已选视频（%lld 个）"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "export.editor.nothing.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Videos to Export"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可导出的视频"
+          }
+        }
+      }
+    },
+    "export.editor.nothing.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These videos are unavailable right now. Reconnect them and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些视频目前不可用。重新连接后再试。"
+          }
+        }
+      }
+    },
+    "export.editor.format.premiere" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premiere Pro / DaVinci Resolve (.xml)…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premiere Pro / DaVinci Resolve（.xml）…"
+          }
+        }
+      }
+    },
+    "export.editor.format.capCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JianYing (.fcpxml)…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪映（.fcpxml）…"
+          }
+        }
+      }
+    },
+    "export.editor.format.finalCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final Cut Pro (.fcpxml)…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final Cut Pro（.fcpxml）…"
+          }
+        }
+      }
+    },
+    "export.editor.skipped" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unavailable video wasn’t exported."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unavailable videos weren’t exported."
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld 个不可用视频未导出。"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "export.editor.failed.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t Export"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法导出"
+          }
+        }
+      }
+    },
+    "export.editor.failed.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file couldn’t be saved there. Choose another location and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选位置无法写入。请选择其他位置后重试。"
+          }
+        }
+      }
+    },
+    "export.editor.done.premiere" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Premiere Pro, choose File › Import. In DaVinci Resolve, choose File › Import › Media from File. Then select this file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Premiere Pro 中选择“文件 › 导入”；在 DaVinci Resolve 中选择“文件 › 导入 › Media from File”。然后选择此文件。"
+          }
+        }
+      }
+    },
+    "export.editor.done.capCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In JianYing, choose 更多 › 导入PR或FCP工程 (More › Import PR or FCP Project) on the home screen and select this file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在剪映首页选择“更多 › 导入PR或FCP工程”，然后选择此文件。"
+          }
+        }
+      }
+    },
+    "export.editor.done.finalCut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Final Cut Pro, choose File › Import › XML and select this file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Final Cut Pro 中选择“文件 › 导入 › XML”，然后选择此文件。"
+          }
+        }
+      }
+    },
+    "export.editor.done.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exported %lld Video"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Exported %lld Videos"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "已导出 %lld 个视频"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "export.editor.done.reveal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示"
+          }
+        }
+      }
+    },
+    "export.editor.selectedTagsName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Selected Tags (%lld)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Selected Tags (%lld)"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "已选标签（%lld 个）"
+                }
+              }
+            }
           }
         }
       }

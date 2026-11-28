@@ -33,6 +33,85 @@ struct LibraryImportSummary: Equatable, Sendable {
     let createdFolderTagCount: Int
 }
 
+/// Which videos a drag out of Tagivy or an export to an editing app is about.
+enum VideoScope: Equatable, Sendable {
+    /// Tags chosen together; an export makes each its own bin.
+    case tags([TagRecord])
+    case smartCollection(SmartCollectionRecord)
+    case videos([VideoRecord])
+}
+
+struct ResolvedVideo: Equatable, Sendable {
+    let record: VideoRecord
+    let url: URL
+}
+
+/// The videos in one or more scopes that other apps can be told about, and how many could not be reached.
+/// Videos not yet downloaded from iCloud are included: downloading them is up to the app that receives them.
+struct ResolvedVideos: Equatable, Sendable {
+    let ready: [ResolvedVideo]
+    /// Videos in scope whose files cannot be reached, such as videos on a disconnected drive
+    /// or videos the library no longer finds.
+    let skippedCount: Int
+
+    static let empty = ResolvedVideos(ready: [], skippedCount: 0)
+
+    /// Each video once, in scope order. `url` gives the file of a reachable video, nil otherwise.
+    @MainActor
+    static func resolve(
+        _ scopes: [VideoScope],
+        fetch: (LibraryQueryRequest) async throws -> [VideoRecord],
+        url: (VideoRecord) -> URL?
+    ) async throws -> ResolvedVideos {
+        var candidates: [VideoRecord] = []
+        for scope in scopes {
+            switch scope {
+            case let .tags(tags):
+                for tag in tags {
+                    candidates += try await fetch(request(LibraryQueryRule(requiredTagIDs: [tag.id])))
+                }
+            case let .smartCollection(collection):
+                candidates += try await fetch(request(collection.rule))
+            case let .videos(videos):
+                candidates += videos
+            }
+        }
+        return resolve(candidates, url: url)
+    }
+
+    /// Videos the library no longer finds are listed only under Unavailable, and that query is the one that
+    /// also returns them; they belong to the scope, so they are counted as skipped instead of vanishing.
+    private static func request(_ rule: LibraryQueryRule) -> LibraryQueryRequest {
+        LibraryQueryRequest(baseFilter: .unavailable, temporaryFilenameSearch: "", rule: rule)
+    }
+
+    static func resolve(_ candidates: [VideoRecord], url: (VideoRecord) -> URL?) -> ResolvedVideos {
+        var seen = Set<String>()
+        var ready: [ResolvedVideo] = []
+        var skippedCount = 0
+        for video in candidates where seen.insert(video.id).inserted {
+            if let url = url(video) {
+                ready.append(ResolvedVideo(record: video, url: url))
+            } else {
+                skippedCount += 1
+            }
+        }
+        return ResolvedVideos(ready: ready, skippedCount: skippedCount)
+    }
+
+    /// A video's file can be handed out when it is on this Mac or in iCloud; offline and missing videos are not.
+    static func canHandOut(_ presented: VideoRecord) -> Bool {
+        switch presented.accessPresentation {
+        case .none, .cloud: true
+        case .offline, .accessNeedsVerification, .unavailable: false
+        }
+    }
+
+    static func handoutURL(for presented: VideoRecord, knownURL: URL?) -> URL? {
+        canHandOut(presented) ? knownURL : nil
+    }
+}
+
 struct LibraryScanNotice: Equatable, Sendable {
     let title: String
     let detail: String
@@ -119,7 +198,7 @@ private struct PendingImportSource {
 
 private struct VideoAccessResolution: Sendable {
     let resolvedURLs: [String: URL]
-    let cloudPlaceholderIDs: Set<String>
+    let cloudPlaceholderURLs: [String: URL]
     let offlineSourceNames: [String: String]
     let accessLostSourceNames: [String: String]
     let reachableSourceIDs: Set<String>
@@ -127,9 +206,20 @@ private struct VideoAccessResolution: Sendable {
     let confirmedMissingLocations: [VideoLocationRecord]
 }
 
+struct TagMutationUndoID: Equatable {
+    private let value = UUID()
+}
+
 private enum LastUndoMutation {
-    case tag
+    case tag(TagMutationUndoID)
     case videoRemoval(VideoRemovalSnapshot)
+    case smartCollection
+}
+
+/// What undoing a smart filter change writes back.
+private enum SmartCollectionRestore: Sendable {
+    case remove(id: String)
+    case save(SmartCollectionRecord)
 }
 
 private enum RelinkConfirmationChoice {
@@ -330,19 +420,22 @@ final class LibraryAccessCoordinator {
     var mediaPriorityVideoIDs: (() -> [String])?
     private var pendingMediaVideos: [String: VideoRecord] = [:]
     private var deferredMediaVideos = DeferredMediaVideos()
-    private var cloudPlaceholderIDs: Set<String> = []
+    private var cloudPlaceholderURLs: [String: URL] = [:]
     private var queryTask: Task<Void, Never>?
     private var smartCollectionTask: Task<Void, Never>?
     private var tagMutationTask: Task<Void, Never>?
     private var pendingTagMutationCount = 0
+    private var pendingSmartCollectionMutationCount = 0
     private var tagStateRevision = 0
     private var tags: [TagRecord] = []
     private var smartCollections: [SmartCollectionRecord] = []
     private var currentFilter: LibraryFilter = .all
     private var currentSearch = ""
     private var currentRule = LibraryQueryRule.standard
+    private var currentQueryGeneration = 0
 
-    var onVideosChanged: (([VideoRecord]) -> Void)?
+    /// The videos for the current query, and the generation of the query they were fetched under.
+    var onVideosChanged: (([VideoRecord], Int) -> Void)?
     var onSidebarFilterCountsChanged: ((SidebarFilterCounts) -> Void)?
     var onFilterChangedBySystem: ((LibraryFilter) -> Void)?
     var onVideoChanged: ((VideoRecord) -> Void)?
@@ -359,10 +452,13 @@ final class LibraryAccessCoordinator {
     var onRelinkingVideoChanged: ((String?) -> Void)?
     var onVideoRemovalUndoDiscarded: (() -> Void)?
     private let undoManager = UndoManager()
-    private var lastUndoMutation: LastUndoMutation?
+    private var lastUndoMutation: LastUndoMutation? {
+        didSet { onUndoHistoryChanged?() }
+    }
+    var onUndoHistoryChanged: (() -> Void)?
 
     var canUndoLastMutation: Bool {
-        pendingTagMutationCount == 0 && undoManager.canUndo
+        pendingTagMutationCount == 0 && pendingSmartCollectionMutationCount == 0 && undoManager.canUndo
     }
 
     var canUndoVideoRemoval: Bool {
@@ -568,7 +664,7 @@ final class LibraryAccessCoordinator {
                 if maintenanceReplay.takePending() { scheduleMaintenance() }
                 publishRecoveryStatus()
                 if let locations = try? await database.fetchVideoLocations() {
-                    scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: cloudPlaceholderIDs)
+                    scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: Set(cloudPlaceholderURLs.keys))
                 }
                 try? await refreshVisibleVideosNow()
                 // Recovery associates existing locations; it does not enqueue content reads.
@@ -590,6 +686,13 @@ final class LibraryAccessCoordinator {
                     _ = await previousCleanupTask?.value
                     guard let self else { return }
                     do {
+                        let redundantSourceIDs = try await database.removeRedundantSourcesWithoutAccess()
+                        for sourceID in redundantSourceIDs { disconnectSource(sourceID) }
+                        if redundantSourceIDs.isEmpty == false {
+                            AppLogger.library.info(
+                                "Removed sources without access data covered by other sources: \(redundantSourceIDs.count, privacy: .public)"
+                            )
+                        }
                         let removedSourceIDs = try await database.removeUnreferencedSourceAuthorizations()
                         for sourceID in removedSourceIDs { disconnectSource(sourceID) }
                         if let mediaService {
@@ -611,6 +714,8 @@ final class LibraryAccessCoordinator {
                     sourceDisplayNames[source.id] = source.displayName
                     sourceScansDescendants[source.id] = source.scansDescendants
                     sourceScanPolicyExplicit[source.id] = source.scanPolicyExplicit
+                    // Without access data the folder cannot be opened; its videos stay listed for recovery.
+                    guard source.rootBookmarkData.isEmpty == false else { continue }
                     do {
                         var isStale = false
                         let url = try URL(
@@ -1441,7 +1546,8 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func applyQuery(_ query: LibraryQueryRequest, debounceSearch: Bool = false) {
+    func applyQuery(_ query: LibraryQueryRequest, debounceSearch: Bool = false, generation: Int) {
+        currentQueryGeneration = generation
         if currentFilter != query.baseFilter && recoveryTask == nil { recoveryStatus.message = nil }
         currentFilter = query.baseFilter
         publishRecoveryStatus()
@@ -1459,18 +1565,20 @@ final class LibraryAccessCoordinator {
     ) {
         let now = Date()
         let nextOrder = (smartCollections.map(\.sortOrder).max() ?? -1) + 1
-        persistSmartCollection(
-            SmartCollectionRecord(
-                id: UUID().uuidString,
-                libraryID: LibraryRecord.primaryID,
-                name: name,
-                rule: rule.normalized(),
-                sortOrder: nextOrder,
-                createdAt: now,
-                updatedAt: now
-            ),
-            completion: completion
+        let record = SmartCollectionRecord(
+            id: UUID().uuidString,
+            libraryID: LibraryRecord.primaryID,
+            name: name,
+            rule: rule.normalized(),
+            sortOrder: nextOrder,
+            createdAt: now,
+            updatedAt: now
         )
+        mutateSmartCollection(restore: .remove(id: record.id)) { database in
+            try await database.saveSmartCollection(record)
+        } completion: { [weak self] succeeded in
+            completion(succeeded ? self?.smartCollections.first(where: { $0.id == record.id }) : nil)
+        }
     }
 
     func updateSmartCollection(
@@ -1479,59 +1587,97 @@ final class LibraryAccessCoordinator {
         rule: LibraryQueryRule? = nil,
         completion: @escaping (SmartCollectionRecord?) -> Void
     ) {
-        guard var record = smartCollections.first(where: { $0.id == id }) else {
+        guard let previous = smartCollections.first(where: { $0.id == id }) else {
             completion(nil)
             return
         }
+        var record = previous
         if let name { record.name = name }
         if let rule { record.rule = rule.normalized() }
         record.updatedAt = Date()
-        persistSmartCollection(record, completion: completion)
-    }
-
-    func deleteSmartCollection(id: String, completion: @escaping (Bool) -> Void) {
-        let previousTask = smartCollectionTask
-        smartCollectionTask = Task { [weak self] in
-            _ = await previousTask?.value
-            guard let self else {
-                completion(false)
-                return
-            }
-            do {
-                try await database.deleteSmartCollection(id: id)
-                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
-                completion(true)
-            } catch {
-                AppLogger.database.error(
-                    "Smart collection deletion failed with category: \(String(describing: type(of: error)), privacy: .public)"
-                )
-                onOperationError?(String(localized: .errorDatabaseOperation))
-                completion(false)
-            }
+        let updated = record
+        mutateSmartCollection(restore: .save(previous)) { database in
+            try await database.saveSmartCollection(updated)
+        } completion: { [weak self] succeeded in
+            completion(succeeded ? self?.smartCollections.first(where: { $0.id == id }) : nil)
         }
     }
 
-    private func persistSmartCollection(
-        _ record: SmartCollectionRecord,
-        completion: @escaping (SmartCollectionRecord?) -> Void
+    func deleteSmartCollection(id: String, completion: @escaping (Bool) -> Void) {
+        let restore = smartCollections.first(where: { $0.id == id }).map(SmartCollectionRestore.save)
+        mutateSmartCollection(restore: restore) { database in
+            try await database.deleteSmartCollection(id: id)
+        } completion: { succeeded in
+            completion(succeeded)
+        }
+    }
+
+    /// Smart filter changes are undoable like tag changes: each replaces the previous undo, so ⌘Z after
+    /// one reverts it and never reaches an earlier, unrelated change.
+    private func mutateSmartCollection(
+        restore: SmartCollectionRestore?,
+        operation: @escaping @Sendable (DatabaseStore) async throws -> Void,
+        completion: @escaping (Bool) -> Void
     ) {
+        let database = self.database
         let previousTask = smartCollectionTask
+        pendingSmartCollectionMutationCount += 1
         smartCollectionTask = Task { [weak self] in
             _ = await previousTask?.value
             guard let self else {
-                completion(nil)
+                completion(false)
                 return
             }
+            defer { pendingSmartCollectionMutationCount -= 1 }
             do {
-                try await database.saveSmartCollection(record)
-                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
-                completion(smartCollections.first(where: { $0.id == record.id }))
+                try await operation(database)
             } catch {
                 AppLogger.database.error(
-                    "Smart collection persistence failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                    "Smart collection change failed with category: \(String(describing: type(of: error)), privacy: .public)"
                 )
                 onOperationError?(String(localized: .errorDatabaseOperation))
-                completion(nil)
+                completion(false)
+                return
+            }
+            invalidateUndoHistory()
+            if let restore {
+                undoManager.registerUndo(withTarget: self) { target in
+                    target.restoreSmartCollection(restore)
+                }
+                lastUndoMutation = .smartCollection
+            }
+            do {
+                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+            } catch {
+                AppLogger.database.error(
+                    "Smart collection refresh failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                onOperationError?(String(localized: .errorDatabaseOperation))
+            }
+            completion(true)
+        }
+    }
+
+    private func restoreSmartCollection(_ restore: SmartCollectionRestore) {
+        let database = self.database
+        let previousTask = smartCollectionTask
+        pendingSmartCollectionMutationCount += 1
+        smartCollectionTask = Task { [weak self] in
+            _ = await previousTask?.value
+            guard let self else { return }
+            defer { pendingSmartCollectionMutationCount -= 1 }
+            do {
+                switch restore {
+                case let .remove(id): try await database.deleteSmartCollection(id: id)
+                case let .save(record): try await database.saveSmartCollection(record)
+                }
+                invalidateUndoHistory()
+                try await refreshSmartCollections(libraryID: LibraryRecord.primaryID)
+            } catch {
+                AppLogger.database.error(
+                    "Smart collection undo failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                onOperationError?(String(localized: .errorUndo))
             }
         }
     }
@@ -1573,6 +1719,58 @@ final class LibraryAccessCoordinator {
         resolvedVideoURLs[video.id]
     }
 
+    /// The videos in the scopes, as a drag out of Tagivy or an export to an editing app hands them over.
+    func resolveVideos(in scopes: [VideoScope]) async throws -> ResolvedVideos {
+        let database = database
+        return try await ResolvedVideos.resolve(
+            scopes,
+            fetch: { try await database.fetchVideos(libraryID: LibraryRecord.primaryID, query: $0) },
+            url: handoutURL(for:)
+        )
+    }
+
+    /// Resolves videos already loaded, such as the grid selection, without reading the library.
+    func resolveVideos(_ videos: [VideoRecord]) -> ResolvedVideos {
+        ResolvedVideos.resolve(videos, url: handoutURL(for:))
+    }
+
+    private func handoutURL(for video: VideoRecord) -> URL? {
+        ResolvedVideos.handoutURL(
+            for: presentedVideo(video),
+            knownURL: resolvedVideoURLs[video.id] ?? cloudPlaceholderURLs[video.id]
+        )
+    }
+
+    /// What an editing app will receive when the scope is exported, read from the library at this moment.
+    func nleExportPlan(for scope: VideoScope, name: String, completion: @escaping (NLEExportPlan?) -> Void) {
+        Task {
+            do {
+                let grouping: NLEExportGrouping
+                switch scope {
+                case let .tags(tags):
+                    grouping = .chosenTags(tags.map(\.id))
+                case .smartCollection, .videos:
+                    grouping = .videoTags(untaggedName: String(localized: .libraryUntagged))
+                }
+                let videos = try await resolveVideos(in: [scope])
+                let tagState = try await database.captureTagState(libraryID: LibraryRecord.primaryID)
+                completion(NLEExportPlanBuilder.plan(
+                    name: name,
+                    grouping: grouping,
+                    tags: tagState.tags,
+                    relations: tagState.relations,
+                    videos: videos.ready,
+                    skippedCount: videos.skippedCount
+                ))
+            } catch {
+                AppLogger.library.error(
+                    "Export plan failed with category: \(String(describing: type(of: error)), privacy: .public)"
+                )
+                completion(nil)
+            }
+        }
+    }
+
     func displayPath(for video: VideoRecord) -> String? {
         resolvedVideoURLs[video.id]?.path ?? lastKnownVideoPaths[video.id]
     }
@@ -1598,10 +1796,15 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func deleteTag(_ tag: TagRecord) {
-        mutateTags(actionName: String(localized: .tagActionDelete)) { database in
-            try await database.deleteTag(id: tag.id)
-        }
+    /// `onUndoable` runs once the deletion is done and can be undone with the given ID.
+    func deleteTags(_ tags: [TagRecord], onUndoable: ((TagMutationUndoID) -> Void)? = nil) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
+        mutateTags(
+            actionName: String(localized: .tagActionDelete),
+            operation: { database in try await database.deleteTags(ids: tagIDs) },
+            onUndoable: onUndoable
+        )
     }
 
     func moveTags(_ tags: [TagRecord], parentID: String?, sortOrder: Int) {
@@ -1614,15 +1817,21 @@ final class LibraryAccessCoordinator {
         }
     }
 
-    func setTagColor(_ tag: TagRecord, color: String?) {
+    /// One undo step restores every tag's previous color.
+    func setTagColor(_ tags: [TagRecord], color: String?) {
+        let tagIDs = tags.map(\.id)
+        guard tagIDs.isEmpty == false else { return }
         mutateTags(actionName: String(localized: .tagActionSetColor)) { database in
-            try await database.setTagColor(id: tag.id, color: color)
+            try await database.setTagColor(ids: tagIDs, color: color)
         }
     }
 
-    func mergeTag(_ source: TagRecord, into target: TagRecord) {
+    /// One undo step brings back every merged tag.
+    func mergeTags(_ sources: [TagRecord], into target: TagRecord) {
+        let sourceIDs = sources.map(\.id)
+        guard sourceIDs.isEmpty == false else { return }
         mutateTags(actionName: String(localized: .tagActionMerge)) { database in
-            try await database.mergeTag(sourceID: source.id, targetID: target.id)
+            try await database.mergeTags(sourceIDs: sourceIDs, targetID: target.id)
         }
     }
 
@@ -1660,7 +1869,17 @@ final class LibraryAccessCoordinator {
         videoIDs: [String],
         completion: ((Bool) -> Void)? = nil
     ) {
-        mutateTags(actionName: String(localized: .tagActionApply)) { database in
+        let actionName: String
+        if creations.isEmpty == false {
+            actionName = String(localized: .tagActionCreate)
+        } else if assignments.values.allSatisfy({ $0 }) {
+            actionName = String(localized: .tagActionAdd)
+        } else if assignments.values.allSatisfy({ $0 == false }) {
+            actionName = String(localized: .tagActionRemove)
+        } else {
+            actionName = String(localized: .tagActionApply)
+        }
+        mutateTags(actionName: actionName) { database in
             try await database.applyTagDraft(
                 libraryID: LibraryRecord.primaryID,
                 creations: creations,
@@ -1791,7 +2010,7 @@ final class LibraryAccessCoordinator {
                 let allowAvailableRecord = RelocationRelinkEligibility.allowsAvailableRecord(
                     reason: video.unavailableReason,
                     hasRuntimeConflict: relocationConflictVideoIDs.contains(video.id),
-                    hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderIDs.contains(video.id)
+                    hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderURLs[video.id] != nil
                 )
                 if let existingVideoID = try await database.existingRelinkVideoID(
                     id: video.id,
@@ -1894,7 +2113,7 @@ final class LibraryAccessCoordinator {
                     allowAvailableRecord: allowAvailableRecord && RelocationRelinkEligibility.allowsAvailableRecord(
                         reason: video.unavailableReason,
                         hasRuntimeConflict: relocationConflictVideoIDs.contains(video.id),
-                        hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderIDs.contains(video.id)
+                        hasUsableLocation: resolvedVideoURLs[video.id] != nil || cloudPlaceholderURLs[video.id] != nil
                     ),
                     allowContentMismatch: allowContentMismatch
                 )
@@ -2135,7 +2354,31 @@ final class LibraryAccessCoordinator {
 
     func undoLastMutation() {
         guard canUndoLastMutation else { return }
+        let undoneTagMutation: Bool
+        if case .tag = lastUndoMutation { undoneTagMutation = true } else { undoneTagMutation = false }
         undoManager.undo()
+        if undoneTagMutation { lastUndoMutation = nil }
+    }
+
+    /// Whether this tag change is still the one the next undo would revert, possibly once queued work finishes.
+    func isLatestUndoableTagMutation(_ id: TagMutationUndoID) -> Bool {
+        guard case .tag(let lastID) = lastUndoMutation else { return false }
+        return lastID == id && undoManager.canUndo
+    }
+
+    /// Undoes this tag change, after any tag work queued behind it, unless that work replaced it.
+    func undoTagMutation(_ id: TagMutationUndoID) {
+        guard isLatestUndoableTagMutation(id) else { return }
+        guard pendingTagMutationCount == 0 else {
+            Task { [weak self] in
+                while let self, self.pendingTagMutationCount > 0, let task = self.tagMutationTask {
+                    await task.value
+                }
+                self?.undoTagMutation(id)
+            }
+            return
+        }
+        undoLastMutation()
     }
 
     func discardVideoRemovalUndo() {
@@ -2412,7 +2655,7 @@ final class LibraryAccessCoordinator {
 
     private func restoreAccessibleProtectedVideos() async throws {
         let locations = try await database.fetchVideoLocations(includeUnavailable: true)
-        var restoredIDs = Set(resolvedVideoURLs.keys).union(cloudPlaceholderIDs)
+        var restoredIDs = Set(resolvedVideoURLs.keys).union(cloudPlaceholderURLs.keys)
         // Only previously lost positions are checked. Healthy positions keep normal startup behavior.
         for location in locations where location.requiresRecoveryVerification {
             try Task.checkCancellation()
@@ -2669,7 +2912,7 @@ final class LibraryAccessCoordinator {
 
     private func refreshSourceURLsFromBookmarks() async {
         let bookmarks = sourceBookmarks
-        for (sourceID, bookmark) in bookmarks {
+        for (sourceID, bookmark) in bookmarks where bookmark.isEmpty == false {
             var phase = "resolve"
             do {
                 var isStale = false
@@ -2749,10 +2992,10 @@ final class LibraryAccessCoordinator {
         try await database.confirmMissingLocations(resolution.confirmedMissingLocations)
         try Task.checkCancellation()
         resolvedVideoURLs = resolution.resolvedURLs
-        cloudPlaceholderIDs = resolution.cloudPlaceholderIDs
+        cloudPlaceholderURLs = resolution.cloudPlaceholderURLs
         relocationConflictVideoIDs = Set(locations.compactMap { location in
             guard resolution.resolvedURLs[location.videoID] == nil,
-                  !resolution.cloudPlaceholderIDs.contains(location.videoID),
+                  resolution.cloudPlaceholderURLs[location.videoID] == nil,
                   let path = location.lastKnownPath,
                   conflicts.contains(location.sourceID + "|" + path) else { return nil }
             return location.videoID
@@ -2768,7 +3011,7 @@ final class LibraryAccessCoordinator {
         accessLostSourceNameByVideoID = resolution.accessLostSourceNames
         reachableSourceIDs = resolution.reachableSourceIDs
         if recoveryTask == nil {
-            scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: cloudPlaceholderIDs)
+            scheduleIndexedRelocationCapture(locations: locations, resolved: resolvedVideoURLs, cloud: Set(cloudPlaceholderURLs.keys))
             drainReadyDeferredMedia()
         }
     }
@@ -2938,10 +3181,14 @@ final class LibraryAccessCoordinator {
         }
         return VideoAccessResolution(
             resolvedURLs: resolvedURLs,
-            cloudPlaceholderIDs: Set(cloudURLs.compactMap { id, urls in
-                if let resolved = resolvedURLs[id], !urls.contains(resolved.standardizedFileURL) { return nil }
-                return id
-            }),
+            cloudPlaceholderURLs: cloudURLs.reduce(into: [:]) { placeholders, entry in
+                let (id, urls) = entry
+                if let resolved = resolvedURLs[id] {
+                    if urls.contains(resolved.standardizedFileURL) { placeholders[id] = resolved }
+                } else if let url = urls.min(by: { $0.path < $1.path }) {
+                    placeholders[id] = url
+                }
+            },
             offlineSourceNames: offlineSourceNames,
             accessLostSourceNames: accessLostSourceNames,
             reachableSourceIDs: reachableSourceIDs,
@@ -3241,7 +3488,8 @@ final class LibraryAccessCoordinator {
     private func mutateTags(
         actionName: String,
         operation: @escaping @Sendable (DatabaseStore) async throws -> Void,
-        completion: ((Bool) -> Void)? = nil
+        completion: ((Bool) -> Void)? = nil,
+        onUndoable: ((TagMutationUndoID) -> Void)? = nil
     ) {
         let database = self.database
         let previousTask = tagMutationTask
@@ -3266,7 +3514,9 @@ final class LibraryAccessCoordinator {
                         target.restoreTagState(snapshot)
                     }
                     undoManager.setActionName(actionName)
-                    lastUndoMutation = .tag
+                    let undoID = TagMutationUndoID()
+                    lastUndoMutation = .tag(undoID)
+                    onUndoable?(undoID)
                 }
             } catch {
                 completion?(false)
@@ -3302,6 +3552,7 @@ final class LibraryAccessCoordinator {
         let filter = currentFilter
         let search = currentSearch
         let rule = currentRule
+        let generation = currentQueryGeneration
         queryTask = Task {
             do {
                 if debounceNanoseconds > 0 { try await Task.sleep(nanoseconds: debounceNanoseconds) }
@@ -3318,7 +3569,8 @@ final class LibraryAccessCoordinator {
                 onVideosChanged?(
                     filter == .unavailable
                         ? orderedUnavailableVideos(videos)
-                        : videos
+                        : videos,
+                    generation
                 )
             } catch is CancellationError {
                 return
@@ -3354,6 +3606,7 @@ final class LibraryAccessCoordinator {
     private func publishVisibleVideosNow() async throws {
         queryTask?.cancel()
         let filter = currentFilter
+        let generation = currentQueryGeneration
         let records = try await database.fetchVideos(
             libraryID: LibraryRecord.primaryID,
             query: LibraryQueryRequest(
@@ -3366,7 +3619,8 @@ final class LibraryAccessCoordinator {
         onVideosChanged?(
             filter == .unavailable
                 ? orderedUnavailableVideos(videos)
-                : videos
+                : videos,
+            generation
         )
     }
 
@@ -3413,7 +3667,7 @@ final class LibraryAccessCoordinator {
     }
 
     private func presentedVideo(_ video: VideoRecord) -> VideoRecord {
-        let cloud = cloudPlaceholderIDs.contains(video.id)
+        let cloud = cloudPlaceholderURLs[video.id] != nil
         if !cloud, relocationConflictVideoIDs.contains(video.id) {
             return video.withAvailability(.unavailable, unavailableReason: .missingFromKnownLocation)
         }

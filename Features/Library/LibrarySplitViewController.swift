@@ -26,7 +26,14 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private let libraryContentViewController: LibraryContentViewController
     private let inspectorViewController: InspectorViewController
     private let sidebarViewController: SidebarViewController
-    private let onQueryChanged: (LibraryQueryRequest, Bool) -> Void
+    var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in } {
+        didSet {
+            sidebarViewController.onExportToEditor = onExportToEditor
+            videoGridViewController.onExportToEditor = onExportToEditor
+        }
+    }
+    /// The query, whether to debounce it, and its filter-change generation.
+    private let onQueryChanged: (LibraryQueryRequest, Bool, Int) -> Void
     private let onCreateSmartCollection: (
         String,
         LibraryQueryRule,
@@ -66,10 +73,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     private var selectedSmartCollection: SmartCollectionRecord?
     private var pendingNavigationTarget: NavigationTarget?
     private var isPresentingSmartCollectionAlert = false
-    private var pendingVideoSelectionIDs: [String]?
+    private var dropsConditionsOfRemovedSmartCollection = false
     private var pendingVideoRevealRequest: VideoRevealRequest?
     private var resetBrowsingStateForNextVideoUpdate = false
-    private var isPresentingSelectionAlert = false
+    private var filterQueryGenerations = FilterQueryGenerations()
     private var didApplyInitialLayout = false
     private var shouldApplyInitialLayout = false
     private var isLibraryAvailable = true
@@ -103,13 +110,15 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onUndoLastMutation: @escaping () -> Void,
         onEndVideoRemovalUndo: @escaping () -> Void,
         onOpenVideo: @escaping (VideoRecord) -> Void,
-        onRevealVideo: @escaping (VideoRecord) -> Void,
-        onCopyPath: @escaping (VideoRecord) -> Void,
+        onRevealVideos: @escaping ([VideoRecord]) -> Void,
+        onCopyPaths: @escaping ([VideoRecord]) -> Void,
         onPreviewVideos: @escaping ([VideoRecord]) -> Void,
         thumbnailURL: @escaping (VideoRecord) -> URL?,
+        resolveVideos: @escaping ([VideoRecord]) -> ResolvedVideos,
+        resolveVideosInScopes: @escaping @MainActor ([VideoScope]) async -> ResolvedVideos,
         filePath: @escaping (VideoRecord) -> String?,
         offlineSourceName: @escaping (VideoRecord) -> String?,
-        onQueryChanged: @escaping (LibraryQueryRequest, Bool) -> Void,
+        onQueryChanged: @escaping (LibraryQueryRequest, Bool, Int) -> Void,
         onCreateSmartCollection: @escaping (
             String,
             LibraryQueryRule,
@@ -124,10 +133,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onDeleteSmartCollection: @escaping (String, @escaping (Bool) -> Void) -> Void,
         onCreateTag: @escaping (String, String?) -> Void,
         onRenameTag: @escaping (TagRecord, String) -> Void,
-        onDeleteTag: @escaping (TagRecord) -> Void,
+        onDeleteTags: @escaping ([TagRecord]) -> Void,
         onMoveTags: @escaping ([TagRecord], String?, Int) -> Void,
-        onSetTagColor: @escaping (TagRecord, String?) -> Void,
-        onMergeTag: @escaping (TagRecord, TagRecord) -> Void,
+        onSetTagColor: @escaping ([TagRecord], String?) -> Void,
+        onMergeTags: @escaping ([TagRecord], TagRecord) -> Void,
         onAssignVideos: @escaping (TagRecord, [String]) -> Void,
         onAssignTagID: @escaping (String, [String]) -> Void,
         onApplyTagDraft: @escaping ([TagCreationDraft], [String: Bool], [String], @escaping (Bool) -> Void) -> Void,
@@ -160,33 +169,26 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             onCloseScanResults: {},
             onCreateTag: onCreateTag,
             onRenameTag: onRenameTag,
-            onDeleteTag: onDeleteTag,
+            onDeleteTags: onDeleteTags,
             onMoveTags: onMoveTags,
             onSetColor: onSetTagColor,
-            onMergeTag: onMergeTag,
+            onMergeTags: onMergeTags,
             onAssignVideos: onAssignVideos
         )
         videoGridViewController = VideoGridViewController(
             onOpenVideo: onOpenVideo,
-            onRevealVideo: onRevealVideo,
-            onCopyPath: onCopyPath,
+            onRevealVideos: onRevealVideos,
+            onCopyPaths: onCopyPaths,
             onRelinkVideo: onRelinkVideo,
             onRetryRelinkVideo: onRetryRelinkVideo,
             onPreviewVideos: onPreviewVideos,
             onSelectionChanged: { [weak inspector] videos in inspector?.setSelection(videos) },
             thumbnailURL: thumbnailURL,
+            resolveVideos: resolveVideos,
             onAssignTagID: onAssignTagID,
             onCancelImport: onCancelImport,
             onImportDroppedItems: onImportDroppedItems,
-            onRemoveVideos: { [weak inspector] videoIDs, completion in
-                let pendingDraft = inspector?.takePendingTagChanges()
-                onRemoveVideos(videoIDs) { succeeded in
-                    if succeeded == false, let pendingDraft {
-                        inspector?.restorePendingTagChanges(pendingDraft)
-                    }
-                    completion(succeeded)
-                }
-            },
+            onRemoveVideos: onRemoveVideos,
             onUndoLastMutation: onUndoLastMutation,
             onDismissNotification: onEndVideoRemovalUndo
         )
@@ -198,18 +200,22 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             scanResultsViewController: scanResults
         )
         super.init(nibName: nil, bundle: nil)
+        sidebarViewController.resolveVideosInScopes = resolveVideosInScopes
+        sidebarViewController.canSelectAllVideos = { [weak self] in
+            guard let self else { return false }
+            return showsLibraryGrid && videoGridViewController.hasVisibleVideos
+        }
+        sidebarViewController.onSelectAllVideos = { [weak self] in
+            self?.videoGridViewController.selectAllVisibleVideosAndFocus()
+        }
         inspectorViewController.onVideoRemoved = { [weak self] count in
             self?.videoGridViewController.showVideoRemovalUndo(videoCount: count)
         }
         videoGridViewController.onSelectionChanged = { [weak self] videos in
-            self?.handleVideoSelectionChange(videos)
+            self?.inspectorViewController.setSelection(videos)
         }
         videoGridViewController.onViewVideos = { [weak self] request in
             self?.viewVideos(request)
-        }
-        inspectorViewController.onTagApplicationFinished = { [weak self] succeeded in
-            guard succeeded else { return }
-            self?.syncInspectorSelectionFromGrid()
         }
         sidebarViewController.setNavigationHandlers(
             filter: { [weak self] filter in self?.requestNavigation(to: .filter(filter)) },
@@ -317,6 +323,10 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func makeToolbar() -> NSToolbar { libraryToolbar }
 
+    func setSidebarBottomAccessory(_ accessory: NSView) {
+        sidebarViewController.setBottomAccessory(accessory)
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         updateSplitViewToggleState()
@@ -336,7 +346,7 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         splitView.setPosition(max(640, width - 280), ofDividerAt: 1)
     }
 
-    func setVideos(_ videos: [VideoRecord]) {
+    func setVideos(_ videos: [VideoRecord], queryGeneration: Int) {
         if isLibraryAvailable == false {
             // A later successful load recovers from an earlier library error.
             isLibraryAvailable = true
@@ -347,7 +357,12 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         visibleVideoCount = videos.count
         let resetBrowsingState = resetBrowsingStateForNextVideoUpdate
         resetBrowsingStateForNextVideoUpdate = false
-        videoGridViewController.setVideos(videos, resetBrowsingState: resetBrowsingState)
+        let isFilterChange = filterQueryGenerations.resultIsFilterChange(generation: queryGeneration)
+        videoGridViewController.setVideos(
+            videos,
+            resetBrowsingState: resetBrowsingState,
+            isFilterChange: isFilterChange
+        )
         if let request = pendingVideoRevealRequest,
            videoGridViewController.selectAndRevealVideos(ids: request.videoIDs) {
             pendingVideoRevealRequest = nil
@@ -514,6 +529,101 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         isLibraryAvailable
     }
 
+    /// Untagged and Unavailable Videos are in the sidebar only while they have videos.
+    func canNavigateToPreset(_ filter: LibraryFilter) -> Bool {
+        canNavigateLibraryPresets && isPresetVisible(filter)
+    }
+
+    // MARK: Video menu, acting on the grid's selection
+
+    private var showsLibraryGrid: Bool {
+        isLibraryAvailable && isShowingScanResults == false
+    }
+
+    var selectedVideosThatCanBeOpened: [VideoRecord] {
+        showsLibraryGrid ? videoGridViewController.selectedVideosThatCanBeOpened : []
+    }
+
+    var selectedVideosThatCanBeExported: [VideoRecord] {
+        showsLibraryGrid ? videoGridViewController.selectedVideosThatCanBeExported : []
+    }
+
+    var canQuickLookSelectedVideos: Bool {
+        selectedVideosThatCanBeOpened.isEmpty == false
+    }
+
+    func openSelectedVideos() {
+        guard showsLibraryGrid else { return }
+        videoGridViewController.openSelectedVideos()
+    }
+
+    func quickLookSelectedVideos() {
+        guard showsLibraryGrid else { return }
+        videoGridViewController.previewSelection()
+    }
+
+    func revealSelectedVideos() {
+        guard showsLibraryGrid else { return }
+        videoGridViewController.revealSelectedVideos()
+    }
+
+    func copySelectedVideoPaths() {
+        guard showsLibraryGrid else { return }
+        videoGridViewController.copySelectedVideoPaths()
+    }
+
+    func exportSelectedVideos(format: NLEExportFormat) {
+        guard showsLibraryGrid else { return }
+        videoGridViewController.exportSelectedVideos(format: format)
+    }
+
+    var removeSelectedVideosTitle: String? {
+        videoGridViewController.removeSelectedVideosTitle
+    }
+
+    /// Only while the grid has focus, so Command-Delete in the sidebar still deletes tags.
+    var canRemoveSelectedVideos: Bool {
+        showsLibraryGrid
+            && videoGridViewController.hasKeyboardFocus
+            && videoGridViewController.selectedVideos().isEmpty == false
+    }
+
+    func removeSelectedVideos() {
+        guard canRemoveSelectedVideos else { return }
+        videoGridViewController.requestRemoveSelectedVideos()
+    }
+
+    var canFocusTagInputForSelection: Bool {
+        showsLibraryGrid && inspectorViewController.canFocusTagInput
+    }
+
+    /// Opens the inspector if it is hidden, then puts the cursor in its tag field.
+    func focusTagInputForSelection() {
+        guard canFocusTagInputForSelection, let inspectorSplitViewItem else { return }
+        guard inspectorSplitViewItem.isCollapsed else {
+            inspectorViewController.focusTagInput()
+            return
+        }
+        inspectorToggleButton?.state = .on
+        NSAnimationContext.runAnimationGroup { _ in
+            inspectorSplitViewItem.animator().isCollapsed = false
+        } completionHandler: { [weak self] in
+            self?.inspectorViewController.focusTagInput()
+        }
+    }
+
+    var canSaveAsSmartCollection: Bool {
+        guard canUseRuleCommands else { return false }
+        if selectedSmartCollection != nil { return smartCollectionIsDirty }
+        return ruleBarContext.canSaveRuleAsSmartCollection
+    }
+
+    /// The same as Save in the search bar, or Save As… while a smart collection's rule is modified.
+    func saveAsSmartCollection() {
+        guard canSaveAsSmartCollection else { return }
+        presentSaveSmartCollection()
+    }
+
     private func isPresetVisible(_ filter: LibraryFilter) -> Bool {
         switch filter {
         case .untagged: sidebarFilterCounts.untagged > 0
@@ -564,12 +674,36 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func setSmartCollections(_ collections: [SmartCollectionRecord]) {
         smartCollections = collections
-        if let selectedID = selectedSmartCollection?.id,
-           let updated = collections.first(where: { $0.id == selectedID }) {
-            selectedSmartCollection = updated
+        var needsQuery = false
+        if let selected = selectedSmartCollection {
+            if let updated = collections.first(where: { $0.id == selected.id }) {
+                // An undo can put back the saved rule; follow it unless the filter has unsaved edits.
+                if currentRule.normalized() == selected.rule.normalized(),
+                   updated.rule.normalized() != selected.rule.normalized() {
+                    currentRule = updated.rule
+                    needsQuery = true
+                }
+                selectedSmartCollection = updated
+                if updated.name != selected.name { setContextTitle(updated.name, tagID: nil) }
+            } else {
+                // Gone, for example by undoing its creation: show All Videos; an undo keeps its conditions
+                // unsaved, a delete drops them.
+                if dropsConditionsOfRemovedSmartCollection {
+                    currentRule = .standard
+                    setTemporaryFilenameSearch("", applyQuery: false)
+                }
+                dropsConditionsOfRemovedSmartCollection = false
+                selectedSmartCollection = nil
+                currentBaseFilter = .all
+                updateContext(for: .all)
+                updateInspectorBrowsingContext()
+                needsQuery = true
+            }
         }
         sidebarViewController.setSmartCollections(collections)
+        if selectedSmartCollection == nil, needsQuery { sidebarViewController.selectFilter(.all) }
         refreshRuleBar()
+        if needsQuery { applyCurrentQuery() }
     }
 
     private var smartCollectionIsDirty: Bool {
@@ -631,7 +765,11 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     private func refreshRuleBar() {
         updateGridEmptyContent()
-        ruleBarViewController.configure(LibraryRuleBarContext(
+        ruleBarViewController.configure(ruleBarContext)
+    }
+
+    private var ruleBarContext: LibraryRuleBarContext {
+        LibraryRuleBarContext(
             scopeTitle: selectedSmartCollection == nil ? currentScopeTitle : nil,
             temporarySearch: temporaryFilenameSearch,
             rule: currentRule,
@@ -639,20 +777,9 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
             tags: tags,
             smartCollection: selectedSmartCollection,
             isDirty: smartCollectionIsDirty,
-            hasPersistableBaseScope: hasPersistableBaseScope,
             canSaveAsSmartCollection: canSaveCurrentContext,
             grouping: currentGrouping
-        ))
-    }
-
-    private var hasPersistableBaseScope: Bool {
-        guard selectedSmartCollection == nil else { return false }
-        switch currentBaseFilter {
-        case .tag, .tags, .untagged, .recent:
-            return true
-        case .all, .unavailable:
-            return false
-        }
+        )
     }
 
     private var canSaveCurrentContext: Bool {
@@ -683,7 +810,8 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
                 temporaryFilenameSearch: temporaryFilenameSearch,
                 rule: currentRule
             ),
-            debounce
+            debounce,
+            filterQueryGenerations.next()
         )
     }
 
@@ -1036,18 +1164,11 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         alert.addButton(withTitle: String(localized: .actionCancel))
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
-            onDeleteSmartCollection(collection.id) { [weak self] succeeded in
-                guard let self, succeeded else { return }
-                if selectedSmartCollection?.id == collection.id {
-                    selectedSmartCollection = nil
-                    currentBaseFilter = .all
-                    currentRule = .standard
-                    sidebarViewController.selectFilter(.all)
-                    updateContext(for: .all)
-                    updateInspectorBrowsingContext()
-                    refreshRuleBar()
-                    applyCurrentQuery()
-                }
+            if selectedSmartCollection?.id == collection.id {
+                dropsConditionsOfRemovedSmartCollection = true
+            }
+            onDeleteSmartCollection(collection.id) { [weak self] _ in
+                self?.dropsConditionsOfRemovedSmartCollection = false
             }
         }
     }
@@ -1062,60 +1183,6 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
 
     func beginCreatingRootTag() {
         sidebarViewController.beginCreatingRootTag()
-    }
-
-    private func handleVideoSelectionChange(_ videos: [VideoRecord]) {
-        if inspectorViewController.isApplyingTagChanges { return }
-        let videoIDs = videos.map(\.id)
-        guard inspectorViewController.hasPendingTagChanges,
-              videoIDs != inspectorViewController.selectedVideoIDs else {
-            inspectorViewController.setSelection(videos)
-            return
-        }
-        pendingVideoSelectionIDs = videoIDs
-        videoGridViewController.setSelectedVideoIDs(inspectorViewController.selectedVideoIDs, notify: false)
-        presentSelectionChangeConfirmationIfNeeded()
-    }
-
-    private func presentSelectionChangeConfirmationIfNeeded() {
-        guard isPresentingSelectionAlert == false,
-              pendingVideoSelectionIDs != nil,
-              let window = view.window else { return }
-        isPresentingSelectionAlert = true
-        let alert = NSAlert()
-        alert.messageText = String(localized: .unsavedTagsTitle)
-        alert.informativeText = String(localized: .unsavedTagsDetail)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: String(localized: .actionApply))
-        alert.addButton(withTitle: String(localized: .unsavedTagsDiscard))
-        alert.addButton(withTitle: String(localized: .actionCancel))
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self else { return }
-            self.isPresentingSelectionAlert = false
-            switch response {
-            case .alertFirstButtonReturn:
-                self.inspectorViewController.applyPendingTagChanges { [weak self] succeeded in
-                    guard let self else { return }
-                    if succeeded { self.commitPendingVideoSelection() }
-                    else { self.pendingVideoSelectionIDs = nil }
-                }
-            case .alertSecondButtonReturn:
-                self.inspectorViewController.discardPendingTagChanges()
-                self.commitPendingVideoSelection()
-            default:
-                self.pendingVideoSelectionIDs = nil
-            }
-        }
-    }
-
-    private func commitPendingVideoSelection() {
-        guard let videoIDs = pendingVideoSelectionIDs else { return }
-        pendingVideoSelectionIDs = nil
-        videoGridViewController.setSelectedVideoIDs(videoIDs)
-    }
-
-    private func syncInspectorSelectionFromGrid() {
-        inspectorViewController.setSelection(videoGridViewController.selectedVideos())
     }
 
     func setImportState(_ state: LibraryImportState) {
@@ -1461,14 +1528,22 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         onScanForNewVideos()
     }
 
+    var isSidebarCollapsed: Bool { sidebarSplitViewItem?.isCollapsed ?? false }
+    var isInspectorCollapsed: Bool { inspectorSplitViewItem?.isCollapsed ?? false }
+
+    /// From the View menu; the toolbar button follows.
     func toggleSidebar() {
         guard let item = sidebarSplitViewItem else { return }
-        item.animator().isCollapsed = !item.isCollapsed
+        let collapse = !item.isCollapsed
+        sidebarToggleButton?.state = collapse ? .off : .on
+        item.animator().isCollapsed = collapse
     }
 
     func toggleInspector() {
         guard let item = inspectorSplitViewItem else { return }
-        item.animator().isCollapsed = !item.isCollapsed
+        let collapse = !item.isCollapsed
+        inspectorToggleButton?.state = collapse ? .off : .on
+        item.animator().isCollapsed = collapse
     }
 
     @objc private func toggleSidebarFromToolbar(_ sender: NSButton) {
@@ -1496,6 +1571,28 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
     func adjustZoom(by delta: Double) {
         guard let slider = zoomSlider else { return }
         slider.doubleValue = min(slider.maxValue, max(slider.minValue, slider.doubleValue + delta))
+        changeZoom(slider)
+    }
+
+    var canZoomIn: Bool {
+        guard let slider = zoomSlider else { return false }
+        return slider.doubleValue < slider.maxValue
+    }
+
+    var canZoomOut: Bool {
+        guard let slider = zoomSlider else { return false }
+        return slider.doubleValue > slider.minValue
+    }
+
+    var canResetZoom: Bool {
+        guard let slider = zoomSlider else { return false }
+        return slider.doubleValue != VideoGridViewController.defaultGridItemWidth
+    }
+
+    /// Actual Size: back to the thumbnail size a new library starts with.
+    func resetZoom() {
+        guard let slider = zoomSlider else { return }
+        slider.doubleValue = VideoGridViewController.defaultGridItemWidth
         changeZoom(slider)
     }
 

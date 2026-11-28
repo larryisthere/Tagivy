@@ -274,6 +274,56 @@ actor DatabaseStore {
         return records
     }
 
+    /// Removes sources stored without access data whose every video is also recorded in an available
+    /// location of a source that has access data. Such a source can never be opened, and its locations
+    /// only duplicate ones the library already reaches. Sources that are the only record of a video stay,
+    /// so the video remains listed for recovery.
+    func removeRedundantSourcesWithoutAccess() throws -> [String] {
+        try prepareIfNeeded()
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let lookup = try prepare(
+                """
+                SELECT id FROM source_authorizations AS source
+                WHERE length(source.root_bookmark_data) = 0
+                  AND NOT EXISTS (
+                    SELECT 1 FROM video_locations AS location
+                    WHERE location.source_id = source.id
+                      AND NOT EXISTS (
+                        SELECT 1 FROM video_locations AS other
+                        JOIN source_authorizations AS other_source ON other_source.id = other.source_id
+                        WHERE other.video_id = location.video_id
+                          AND other.source_id <> source.id
+                          AND other.is_available = 1
+                          AND length(other_source.root_bookmark_data) > 0
+                      )
+                  )
+                """
+            )
+            var sourceIDs: [String] = []
+            while sqlite3_step(lookup) == SQLITE_ROW {
+                if let id = text(at: 0, in: lookup) { sourceIDs.append(id) }
+            }
+            sqlite3_finalize(lookup)
+            let delete = try prepare("DELETE FROM source_authorizations WHERE id = ?")
+            for id in sourceIDs {
+                sqlite3_reset(delete)
+                sqlite3_clear_bindings(delete)
+                bindText(id, to: 1, in: delete)
+                guard sqlite3_step(delete) == SQLITE_DONE else {
+                    sqlite3_finalize(delete)
+                    throw DatabaseError.statementFailed
+                }
+            }
+            sqlite3_finalize(delete)
+            try execute("COMMIT")
+            return sourceIDs
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
     func removeUnreferencedSourceAuthorizations(candidateIDs: [String]? = nil) throws -> [String] {
         try prepareIfNeeded()
         try execute("BEGIN IMMEDIATE")
@@ -1309,7 +1359,7 @@ actor DatabaseStore {
         now: Date = Date()
     ) throws -> [VideoRecord] {
         try prepareIfNeeded()
-        let rule = query.rule.normalized()
+        let rule = query.rule.normalized().removingUnboundedRanges()
         var conditions = ["videos.library_id = ?"]
         var bindings: [LibraryQueryBinding] = [.text(libraryID)]
 
@@ -1378,7 +1428,7 @@ actor DatabaseStore {
         case .modified: sortColumn = "videos.modification_date"
         case .duration: sortColumn = "videos.duration"
         case .fileSize: sortColumn = "videos.file_size"
-        case .resolution: sortColumn = "videos.width"
+        case .resolution: sortColumn = ResolutionTier.sql
         }
         let sortDirection = effectiveSort.direction == .ascending ? "ASC" : "DESC"
         let nullOrdering = effectiveSort.key == .filename ? "" : "\(sortColumn) IS NULL, "
@@ -1473,16 +1523,55 @@ actor DatabaseStore {
                 now.addingTimeInterval(-Double(max(1, days)) * 24 * 60 * 60).timeIntervalSince1970
             ))
             return "videos.creation_date >= ?"
-        case let .durationAtLeast(seconds):
-            bindings.append(.double(max(0, seconds)))
-            return "videos.duration >= ?"
-        case let .fileSizeAtLeast(bytes):
-            bindings.append(.integer(max(0, bytes)))
-            return "videos.file_size >= ?"
-        case let .resolutionWidthAtLeast(width):
-            bindings.append(.integer(Int64(max(0, width))))
-            return "videos.width >= ?"
+        case let .durationRange(low, high):
+            // Durations are shown rounded to whole seconds, so 300.4 s reads 5:00 and matches
+            // "≤ 5 min". Comparing against the rounding boundaries keeps the duration index usable.
+            return rangePredicate(
+                column: "videos.duration",
+                min: low.map { .double(max(0, $0) - 0.5) },
+                max: high.map { .double(max(0, $0) + 0.5) },
+                maxIsInclusive: false,
+                bindings: &bindings
+            )
+        case let .fileSizeRange(low, high):
+            return rangePredicate(
+                column: "videos.file_size",
+                min: low.map { .integer(max(0, $0)) },
+                max: high.map { .integer(max(0, $0)) },
+                bindings: &bindings
+            )
+        case let .resolutionTierRange(low, high):
+            let upper = high.flatMap(ResolutionTier.upperLimit(forMax:))
+            let predicate = rangePredicate(
+                column: ResolutionTier.sql,
+                min: low.map { .integer(Int64(max(0, $0))) },
+                max: upper.map { .double($0.value) },
+                maxIsInclusive: upper?.isInclusive ?? true,
+                bindings: &bindings
+            )
+            // "≤ 8K" has no upper limit but still leaves out videos whose resolution is unknown.
+            return predicate == "1" ? "\(ResolutionTier.sql) IS NOT NULL" : predicate
         }
+    }
+
+    /// A missing bound leaves that end open.
+    private func rangePredicate(
+        column: String,
+        min: LibraryQueryBinding?,
+        max: LibraryQueryBinding?,
+        maxIsInclusive: Bool = true,
+        bindings: inout [LibraryQueryBinding]
+    ) -> String {
+        var clauses: [String] = []
+        if let min {
+            bindings.append(min)
+            clauses.append("\(column) >= ?")
+        }
+        if let max {
+            bindings.append(max)
+            clauses.append("\(column) \(maxIsInclusive ? "<=" : "<") ?")
+        }
+        return clauses.isEmpty ? "1" : "(\(clauses.joined(separator: " AND ")))"
     }
 
     func fetchSidebarFilterCounts(
@@ -2515,13 +2604,31 @@ actor DatabaseStore {
     }
 
     func setTagColor(id: String, color: String?) throws {
+        try setTagColor(ids: [id], color: color)
+    }
+
+    /// Gives every listed tag the same color in one transaction.
+    func setTagColor(ids: [String], color: String?) throws {
         try prepareIfNeeded()
-        let statement = try prepare("UPDATE tags SET color = ?, updated_at = ? WHERE id = ?")
-        defer { sqlite3_finalize(statement) }
-        bindOptionalText(color, to: 1, in: statement)
-        sqlite3_bind_double(statement, 2, Date().timeIntervalSince1970)
-        bindText(id, to: 3, in: statement)
-        guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
+        guard ids.isEmpty == false else { return }
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let statement = try prepare("UPDATE tags SET color = ?, updated_at = ? WHERE id = ?")
+            defer { sqlite3_finalize(statement) }
+            let now = Date().timeIntervalSince1970
+            for id in ids {
+                sqlite3_reset(statement)
+                sqlite3_clear_bindings(statement)
+                bindOptionalText(color, to: 1, in: statement)
+                sqlite3_bind_double(statement, 2, now)
+                bindText(id, to: 3, in: statement)
+                guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
+            }
+            try execute("COMMIT")
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
     }
 
     func deleteTag(id: String) throws {
@@ -2530,6 +2637,15 @@ actor DatabaseStore {
         defer { sqlite3_finalize(statement) }
         bindText(id, to: 1, in: statement)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.statementFailed }
+    }
+
+    func deleteTags(ids: [String]) throws {
+        try prepareIfNeeded()
+        try execute("BEGIN IMMEDIATE")
+        do {
+            for id in ids { try deleteTag(id: id) }
+            try execute("COMMIT")
+        } catch { try? execute("ROLLBACK"); throw error }
     }
 
     func moveTag(id: String, parentID: String?, sortOrder: Int) throws {
@@ -2638,36 +2754,49 @@ actor DatabaseStore {
     }
 
     func mergeTag(sourceID: String, targetID: String) throws {
+        try mergeTags(sourceIDs: [sourceID], targetID: targetID)
+    }
+
+    /// Merges every source tag into the target in one transaction: their videos get the target tag and
+    /// their child tags move under it. The target can't be one of the sources or nested inside one.
+    func mergeTags(sourceIDs: [String], targetID: String) throws {
         try prepareIfNeeded()
-        guard sourceID != targetID else { return }
-        guard try isTag(targetID, descendantOf: sourceID) == false else {
+        let sourceIDs = sourceIDs.reduce(into: [String]()) { result, id in
+            if id != targetID, result.contains(id) == false { result.append(id) }
+        }
+        guard sourceIDs.isEmpty == false else { return }
+        for sourceID in sourceIDs where try isTag(targetID, descendantOf: sourceID) {
             throw DatabaseError.statementFailed
         }
         try execute("BEGIN IMMEDIATE")
         do {
-            let relations = try prepare(
-                "INSERT OR IGNORE INTO video_tags (video_id, tag_id, created_at) SELECT video_id, ?, created_at FROM video_tags WHERE tag_id = ?"
-            )
-            bindText(targetID, to: 1, in: relations)
-            bindText(sourceID, to: 2, in: relations)
-            guard sqlite3_step(relations) == SQLITE_DONE else { sqlite3_finalize(relations); throw DatabaseError.statementFailed }
-            sqlite3_finalize(relations)
-            let children = try prepare("UPDATE tags SET parent_id = ? WHERE parent_id = ?")
-            bindText(targetID, to: 1, in: children)
-            bindText(sourceID, to: 2, in: children)
-            guard sqlite3_step(children) == SQLITE_DONE else { sqlite3_finalize(children); throw DatabaseError.statementFailed }
-            sqlite3_finalize(children)
-            let mappings = try prepare("UPDATE finder_tag_import_mappings SET tag_id = ? WHERE tag_id = ?")
-            bindText(targetID, to: 1, in: mappings)
-            bindText(sourceID, to: 2, in: mappings)
-            guard sqlite3_step(mappings) == SQLITE_DONE else { sqlite3_finalize(mappings); throw DatabaseError.statementFailed }
-            sqlite3_finalize(mappings)
-            try deleteTag(id: sourceID)
+            for sourceID in sourceIDs { try mergeTagInTransaction(sourceID: sourceID, targetID: targetID) }
             try execute("COMMIT")
         } catch {
             try? execute("ROLLBACK")
             throw error
         }
+    }
+
+    private func mergeTagInTransaction(sourceID: String, targetID: String) throws {
+        let relations = try prepare(
+            "INSERT OR IGNORE INTO video_tags (video_id, tag_id, created_at) SELECT video_id, ?, created_at FROM video_tags WHERE tag_id = ?"
+        )
+        bindText(targetID, to: 1, in: relations)
+        bindText(sourceID, to: 2, in: relations)
+        guard sqlite3_step(relations) == SQLITE_DONE else { sqlite3_finalize(relations); throw DatabaseError.statementFailed }
+        sqlite3_finalize(relations)
+        let children = try prepare("UPDATE tags SET parent_id = ? WHERE parent_id = ?")
+        bindText(targetID, to: 1, in: children)
+        bindText(sourceID, to: 2, in: children)
+        guard sqlite3_step(children) == SQLITE_DONE else { sqlite3_finalize(children); throw DatabaseError.statementFailed }
+        sqlite3_finalize(children)
+        let mappings = try prepare("UPDATE finder_tag_import_mappings SET tag_id = ? WHERE tag_id = ?")
+        bindText(targetID, to: 1, in: mappings)
+        bindText(sourceID, to: 2, in: mappings)
+        guard sqlite3_step(mappings) == SQLITE_DONE else { sqlite3_finalize(mappings); throw DatabaseError.statementFailed }
+        sqlite3_finalize(mappings)
+        try deleteTag(id: sourceID)
     }
 
     func setTagAssignment(tagID: String, videoIDs: [String], enabled: Bool) throws {

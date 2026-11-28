@@ -54,6 +54,7 @@ xcrun notarytool store-credentials "FileFacet-Notary" \
 ```
 
 5. 使用 `gh auth login` 登录 GitHub，并为仓库配置 remote 或明确提供仓库名。
+6. App 内更新用 Sparkle 的 EdDSA 私钥签名。私钥只在发布 Mac 的登录钥匙串里（Sparkle `generate_keys` 生成，对应 `Config/Info.plist` 的 `SUPublicEDKey`），需另行安全备份；丢失后已安装的版本无法再验证新更新。
 
 ### 发布
 
@@ -76,8 +77,24 @@ bundle exec fastlane mac github_release
 3. 使用 Manual signing 指定 Developer ID Application 身份，关闭开发调试 entitlement 注入并加入可信时间戳，执行 Release 构建和签名检查。
 4. 公证、stapling、生成 ZIP 与 SHA-256。
 5. 创建指向当前提交的 `v<版本>` 草稿 Release，上传产物（失败自动重试），全部上传成功后再正式发布。
+6. 用 Sparkle 私钥签名安装包，把这一版加入 `appcast` 分支的 `appcast.xml`（App 检查更新读的就是它）。Beta 版进 beta 频道，只有在设置里打开“接收测试版”的用户会收到。
+
+Release 已发布但 appcast 更新失败时，用 `bundle exec fastlane mac appcast_publish`（Beta 加 `beta:<序号>`）重试。
 
 需要覆盖 tag 时可设置 `RELEASE_TAG`。
+
+### Beta 版
+
+给测试者的 Beta 版走同一条签名、公证流程，只是加上 `beta:<序号>`：
+
+```bash
+bundle exec fastlane mac github_release beta:1
+```
+
+- tag 为 `v<版本>-beta.<序号>`，标题为 `Tagivy <版本> Beta <序号>`，安装包名为 `Tagivy-<版本>-beta.<序号>-<构建号>-macOS-universal.zip`。
+- Release 标记为 GitHub Pre-release，不会成为 `releases/latest`，README 的下载链接仍指向正式版。
+- App 内的版本号保持纯数字（`MARKETING_VERSION`），`CHANGELOG.md` 同样需要 `## [<版本>]` 区块；可以从功能分支发布，只要提交已推到 GitHub。
+- 产物保存在 `.build/releases/<版本>-<构建号>/github-beta.<序号>/`，上传失败后用 `bundle exec fastlane mac github_publish beta:<序号>` 重试。
 
 ### 上传失败后重试
 

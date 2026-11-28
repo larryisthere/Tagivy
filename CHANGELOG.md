@@ -4,10 +4,47 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-11-28
+
+### Added
+
+- Drag selected videos, a tag, or a smart filter from the library to Finder, video editors such as Premiere Pro, or other apps to copy or import the original files. A tag includes the videos of its subtags. Unavailable and offline videos are left out, and dragging into Finder copies the files instead of moving them. Videos that are still in iCloud are included, and the app that receives them downloads them. While a drag is outside Tagivy, the dragged image shows how many videos it exports and, if any, how many it leaves out.
+- Export a tag, a smart filter, or selected videos to Premiere Pro, DaVinci Resolve, Final Cut Pro, or JianYing (剪映) with Export to Editing App in their shortcut menus. Premiere Pro and DaVinci Resolve share one XML item, and import the saved file as a bin named after the exported tag or the saved file, with subtags as bins inside it and videos without tags in their own bin (in DaVinci Resolve, use Import > Media from File); Final Cut Pro imports the FCPXML file as an event with keywords and keyword collections. A subtag keeps the tags above it: its bin, or its keyword collection in Final Cut Pro, sits inside folders named after its parent tags, and the export is named after the tag path, such as 旅行_海边. JianYing imports a timeline with the videos placed one after another. Each clip's tags also appear in its Log Note or notes, and the original videos are not changed. Videos still in iCloud are included; unavailable and offline videos, and videos whose length isn't known yet, are left out.
+- Select one or more tags, or a smart filter, in the sidebar and press Delete or Command-Delete to delete them. Tags are deleted right away, and the notice that follows has an Undo button; deleting several tags at once is a single undo step. A smart filter still asks first. Only tags can be selected together; with several selected, the sidebar's shortcut menu acts on all of them: Delete N Tags, Color, and Merge Into, each a single undo step. Right-clicking a tag outside the selection acts on that tag only.
+- Notices that need no answer, such as a finished export, appear at the bottom of the window and show how long until they close. Pointing at a notice keeps it open.
+- Tagivy checks for updates at launch and every hour. By default it downloads a new version in the background, then shows Relaunch to Install in the bottom-left corner of the window, and Check for Updates… in the Tagivy menu becomes Relaunch to Install Update; point at the button to see which version it installs. If you don't relaunch, the update installs when you quit. Check for Updates shows its progress in the same place. In Settings > Updates you can turn off automatic checks or background downloads, or choose to receive beta versions. Checking for updates is the only network access, and it goes through the updater rather than the app itself.
+- If you run a beta, Settings > Updates and the About window show its beta number, such as 1.0.18 Beta 6 (Build 24), and Receive beta versions is turned on for you; it stays on after an update to a release until you turn it off.
+- Keyboard shortcuts for common commands, each listed in the menu bar. A new Video menu acts on the selected videos: Open (Command-O, or Command-Down Arrow in the grid), Quick Look (Command-Y), Show in Finder (Shift-Command-R), Copy Pathname (Option-Command-C, one path per line for several videos), Add Tags (Command-K, which opens the Inspector and puts the cursor in its tag field), Export to Editing App, and Remove from Library (Command-Delete). In the View menu, Command-3 and Command-4 show Untagged and Unavailable Videos; Zoom In (Command-+), Zoom Out (Command-−), and Actual Size (Command-0) change the thumbnail size; Control-Command-S and Option-Command-I show or hide the sidebar and Inspector; and the menu has Hide Toolbar and Enter Full Screen. In the File menu, Scan for New Videos is Command-R and Save as Smart Collection… is Command-S. The Window menu adds Zoom and Bring All to Front. Press Return on a selected tag or smart filter in the sidebar to rename it.
+
+### Changed
+
+- Tag changes in the Inspector take effect right away, without an Apply step.
+- Inspector tags appear as capsules, in a List or Compact layout you can switch beside the search field.
+- Switching videos no longer reloads the Inspector's tag list; the selection's tags slide to the top.
+- Tag counts in the sidebar update right away and roll to their new value.
+- Thumbnails that load later fade in instead of appearing abruptly.
+- When resizing thumbnails changes how many fit in a row, they glide to their new positions instead of jumping.
+- When you change filters or search, thumbnails that still match glide to their new positions, ones that no longer match fade out, and new matches fade in. Large changes switch at once, and with Reduce Motion on the grid crossfades instead.
+- Changes in a filter's editor apply as you make them, so the editor no longer has Cancel, Done, or Remove buttons; press Return or Escape, or click outside it, to close it, and use the × on a filter to remove it. Untagged applies as soon as you choose it, without opening an editor.
+- Date, duration, file size, and resolution filters use a slider that clicks into common values and otherwise slides freely, with a field beside it where you can type an exact value such as 90 s or 1.5 GB. Hold Option while dragging to slide past the common values.
+- Duration, file size, and resolution filters take a minimum and a maximum, such as Duration 1–5 min or Resolution 1080p–4K. Drag either knob to the end of the slider, clear its field, type 0, or click the × beside it to leave that end open; if both ends are left open, the filter is removed when its editor closes. The file size slider starts at 1 MB. Filters saved earlier keep their minimum with no maximum. Resolution filters, grouping, and sorting treat portrait and widescreen videos like standard 16:9 ones: a portrait 1080 × 1920 video counts as 1080p, and a widescreen 3840 × 1608 video as 4K. Date filters keep a single value, labeled Within last.
+- Settings uses the standard Mac layout: a toolbar with Import, Privacy, and Updates panes, a window that fits each pane, and help text under each option. Settings reopens on the pane you viewed last, and About Tagivy opens the standard About window.
+- The View menu no longer shows Show Tab Bar, since Tagivy windows don't use tabs.
+- In the grid's shortcut menu, Open, Show in Finder, and Copy Pathname (formerly Copy Full Path) act on all selected videos, the same as in the Video menu.
+
 ### Fixed
 
+- Thumbnails that were already on screen no longer flash blank when a filter change reloads the grid.
+- Libraries carried over from earlier versions no longer keep folders that can never be opened again. When every video in such a folder is also found through another folder, or the folder has no videos, Tagivy removes the folder at launch, so scanning no longer counts it as a folder it could not scan; the videos and their tags stay. To scan a removed folder again, add it again. Videos found only through such a folder stay listed as needing access, and are not retried in the background.
 - When a different file replaces a video at the same location, the earlier video and its tags move to Unavailable instead of appearing available without a file.
 - When the library cannot be loaded, the system log records only the error type and code, without file paths.
+- Save in the search bar is now disabled until you add a search, filter, or sort beyond the current tag or view, matching Clear.
+- Command-A selects all videos in the grid, also while the sidebar has focus, as in Finder and Photos, and Cut, Copy, Paste, and Select All work in text fields.
+- Undo after creating, renaming, updating, or deleting a smart filter reverts that change, instead of an earlier, unrelated change such as an import.
+- Changing a tag's color, renaming, creating, or deleting a tag no longer opens every collapsed tag in the sidebar. Tags you collapse stay collapsed after relaunching, and a new or moved tag opens its parent so you can see it.
+- In a tag's shortcut menu, Color checks the current color, and Merge Into no longer lists the tag's own subtags.
+- The Window menu item that brings back the library window is now named Show Main Window instead of Show Library.
+- The Tagivy menu has the standard Services, Hide Tagivy (Command-H), Hide Others (Option-Command-H), and Show All items.
 
 ## [1.0.17] - 2026-11-23
 
