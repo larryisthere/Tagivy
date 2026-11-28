@@ -42,6 +42,7 @@ This file records user-visible changes across Tagivy and earlier FileFacet relea
 - Command-A selects all videos in the grid, also while the sidebar has focus, as in Finder and Photos, and Cut, Copy, Paste, and Select All work in text fields.
 - Undo after creating, renaming, updating, or deleting a smart filter reverts that change, instead of an earlier, unrelated change such as an import.
 - Changing a tag's color, renaming, creating, or deleting a tag no longer opens every collapsed tag in the sidebar. Tags you collapse stay collapsed after relaunching, and a new or moved tag opens its parent so you can see it.
+- In a tag's shortcut menu, Color checks the current color, and Merge Into no longer lists the tag's own subtags.
 - The Window menu item that brings back the library window is now named Show Main Window instead of Show Library.
 - The Tagivy menu has the standard Services, Hide Tagivy (Command-H), Hide Others (Option-Command-H), and Show All items.
 
