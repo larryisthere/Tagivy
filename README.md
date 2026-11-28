@@ -1,7 +1,5 @@
 # Tagivy — Local-first Video Tagging for macOS
 
-> Tagivy has a new macOS app identity. An existing FileFacet library, settings, thumbnails and folder permissions are not imported automatically. Keep FileFacet and its data if you need that library.
-
 <p align="center">
   <img src="Resources/Assets.xcassets/AppIcon.appiconset/app-icon-256@2x.png" width="128" alt="Tagivy macOS video tag manager app icon">
 </p>
@@ -10,12 +8,12 @@ English | [简体中文](README.zh-CN.md)
 
 Tagivy is a native, local-first macOS video tag manager for organizing videos across multiple folders with hierarchical tags. Your original files stay in place and remain read-only.
 
-[Download the latest release](https://github.com/larryisthere/FileFacet/releases/latest) · [Browse all releases](https://github.com/larryisthere/FileFacet/releases)
+[Download the latest release](https://github.com/larryisthere/Tagivy/releases/latest) · [Browse all releases](https://github.com/larryisthere/Tagivy/releases) · [Website](https://zhxl.me/tagivy/en/)
 
 > Tagivy supports English and Simplified Chinese and follows the language configured for the app in macOS.
 
 <p align="center">
-  <img src="docs/assets/readme/filefacet-video-tag-manager.png" alt="Tagivy local-first macOS video tag manager with a hierarchical tag tree, searchable video grid, and batch tag editing">
+  <img src="docs/assets/readme/tagivy-video-tag-manager.png" alt="Tagivy local-first macOS video tag manager with a hierarchical tag tree, searchable video grid, and batch tag editing">
 </p>
 
 ## Who Tagivy is for
@@ -39,7 +37,7 @@ Tagivy is designed for people who keep videos locally and want a flexible way to
 - **Local-first and private** — the library index, tags, access permissions, and thumbnails stay on your Mac. The only network access is checking GitHub for Tagivy updates, which you can turn off in Settings.
 - **Native macOS workflow** — use Quick Look, open videos in your default player, reveal files in Finder, and protect the library with optional system authentication.
 
-If Tagivy fits your workflow, [star the repository](https://github.com/larryisthere/FileFacet) to support its development and find it again.
+If Tagivy fits your workflow, [star the repository](https://github.com/larryisthere/Tagivy) to support its development and find it again.
 
 ## How it works
 
@@ -117,12 +115,16 @@ See [Use Tagivy videos in editing apps](docs/editing-apps.md) for step-by-step i
 
 ### Installation
 
-1. Open the [latest GitHub Release](https://github.com/larryisthere/FileFacet/releases/latest).
+1. Open the [latest GitHub Release](https://github.com/larryisthere/Tagivy/releases/latest).
 2. Download the `Tagivy-<version>-<build>-macOS-universal.zip` asset.
 3. Unzip it and move `Tagivy.app` to your Applications folder.
 4. Open Tagivy and import the videos or folders you want to organize.
 
-Public release builds are Universal Apps signed with Developer ID and notarized by Apple. Each release also includes a SHA-256 checksum.
+Public release builds are Universal Apps signed with Developer ID and notarized by Apple. Each release also includes a SHA-256 checksum. Beta builds are marked as pre-releases on the [releases page](https://github.com/larryisthere/Tagivy/releases) and never replace the latest release.
+
+### Coming from FileFacet
+
+Tagivy was previously called FileFacet and now uses a new macOS app identity. An existing FileFacet library, settings, thumbnails, and folder permissions are not imported automatically. Keep FileFacet and its data if you still need that library.
 
 ## Supported video formats
 
