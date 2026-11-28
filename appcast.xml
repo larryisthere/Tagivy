@@ -3,6 +3,16 @@
   <channel>
     <title>Tagivy</title>
     <item>
+      <title>Tagivy 1.0.19 Beta 1</title>
+      <pubDate>Sat, 28 Nov 2026 01:32:50 -0000</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>1.0.19 Beta 1</sparkle:shortVersionString>
+      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:fullReleaseNotesLink>https://github.com/larryisthere/Tagivy/releases/tag/v1.0.19-beta.1</sparkle:fullReleaseNotesLink>
+      <enclosure url='https://github.com/larryisthere/Tagivy/releases/download/v1.0.19-beta.1/Tagivy-1.0.19-beta.1-29-macOS-universal.zip' length='6699159' type='application/octet-stream' sparkle:edSignature='sVbLfQBlEY09KvZ+12S4o6EzW6rltFtuj5OQysXEqDR6AGjjdzh/Y8vDA7vm0BdLKSgTNPf1PqrYEdCktwDnCA=='/>
+    </item>
+    <item>
       <title>Tagivy 1.0.18</title>
       <pubDate>Sat, 28 Nov 2026 00:45:35 -0000</pubDate>
       <sparkle:version>28</sparkle:version>
