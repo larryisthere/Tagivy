@@ -277,6 +277,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
     }
 
+    /// View → Focus Sidebar.
+    func focusOutline() {
+        view.window?.makeFirstResponder(outlineView)
+    }
+
     func selectFilter(_ filter: LibraryFilter) {
         loadViewIfNeeded()
         guard let row = (0..<outlineView.numberOfRows).first(where: { row in
@@ -539,7 +544,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             }
             cell.imageView?.image = tagDotSymbol(description: name)
             cell.imageView?.imageAlignment = .alignRight
-            cell.imageView?.contentTintColor = color(named: tag.tag.color) ?? .secondaryLabelColor
+            cell.imageView?.contentTintColor = TagColor(storedValue: tag.tag.color)?.color ?? .secondaryLabelColor
         } else if item is SidebarDraftTagNode {
             cell.textField?.identifier = SidebarInlineTextField.draftIdentifier
             cell.textField?.stringValue = ""
@@ -839,24 +844,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             }
         }
         menu.addItem(.separator())
-        let colorMenu = NSMenu()
-        let colorOptions = [
-            (String(localized: .colorNone), ""),
-            (String(localized: .colorRed), "red"),
-            (String(localized: .colorOrange), "orange"),
-            (String(localized: .colorYellow), "yellow"),
-            (String(localized: .colorGreen), "green"),
-            (String(localized: .colorBlue), "blue"),
-            (String(localized: .colorPurple), "purple"),
-        ]
-        let sharedColor = targets.sharedColor
-        for (title, value) in colorOptions {
-            let item = NSMenuItem(title: title, action: #selector(setColor(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = TagActionContext(tags: targets.tags, value: value)
-            item.state = sharedColor == value ? .on : .off
-            colorMenu.addItem(item)
-        }
+        let colorMenu = TagColor.menu(
+            sharedStoredValue: targets.sharedColor,
+            action: #selector(setColor(_:)),
+            target: self
+        ) { value in TagActionContext(tags: targets.tags, value: value) }
         let colorItem = NSMenuItem(title: String(localized: .tagActionColor), action: nil, keyEquivalent: "")
         colorItem.submenu = colorMenu
         menu.addItem(colorItem)
@@ -1584,10 +1576,6 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let result = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return result.isEmpty ? nil : result
-    }
-
-    private func color(named name: String?) -> NSColor? {
-        switch name { case "red": .systemRed; case "orange": .systemOrange; case "yellow": .systemYellow; case "green": .systemGreen; case "blue": .systemBlue; case "purple": .systemPurple; default: nil }
     }
 
     private func sidebarSymbol(named name: String, description: String) -> NSImage? {

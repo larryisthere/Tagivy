@@ -3,12 +3,14 @@ import SwiftUI
 
 /// Settings panes, in toolbar order.
 enum SettingsPane: String, CaseIterable {
+    case general
     case importOptions
     case privacy
     case updates
 
     var title: String {
         switch self {
+        case .general: String(localized: "settings.general", defaultValue: "General")
         case .importOptions: String(localized: .settingsImport)
         case .privacy: String(localized: .settingsPrivacy)
         case .updates: String(localized: .settingsUpdates)
@@ -17,6 +19,7 @@ enum SettingsPane: String, CaseIterable {
 
     var systemImage: String {
         switch self {
+        case .general: "gearshape"
         case .importOptions: "tray.and.arrow.down"
         case .privacy: "hand.raised"
         case .updates: "arrow.triangle.2.circlepath"
@@ -82,6 +85,22 @@ private struct SettingsPaneForm<Content: View>: View {
             .scrollDisabled(true)
             .frame(width: 500)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct GeneralSettingsView: View {
+    @ObservedObject var preferences: PreferencesStore
+
+    var body: some View {
+        SettingsPaneForm {
+            Section {
+                Picker(String(localized: "settings.appearance", defaultValue: "Appearance"), selection: $preferences.appearance) {
+                    ForEach(AppAppearancePreference.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+            }
+        }
     }
 }
 

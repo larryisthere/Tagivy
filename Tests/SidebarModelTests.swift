@@ -347,3 +347,33 @@ final class SidebarModelTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class TagColorMenuTests: XCTestCase {
+    func testStoredValuesMapToColors() {
+        XCTAssertEqual(TagColor(storedValue: "red"), .red)
+        XCTAssertEqual(TagColor(storedValue: "purple")?.color, .systemPurple)
+        XCTAssertNil(TagColor(storedValue: nil))
+        XCTAssertNil(TagColor(storedValue: ""))
+        XCTAssertNil(TagColor(storedValue: "teal"))
+    }
+
+    func testColorMenuListsNoneThenEveryColorWithASwatch() {
+        let menu = TagColor.menu(sharedStoredValue: "green", action: #selector(NSText.copy(_:)), target: nil) { $0 }
+
+        XCTAssertEqual(menu.items.compactMap { $0.representedObject as? String }, ["", "red", "orange", "yellow", "green", "blue", "purple"])
+        XCTAssertTrue(menu.items.allSatisfy { $0.image != nil && $0.image?.isTemplate == false })
+        if #available(macOS 27.0, *) {
+            XCTAssertTrue(menu.items.allSatisfy { $0.preferredImageVisibility == .visible })
+        }
+        XCTAssertEqual(menu.items.filter { $0.state == .on }.compactMap { $0.representedObject as? String }, ["green"])
+    }
+
+    func testMixedColorsCheckNothingAndNoColorChecksNone() {
+        let mixed = TagColor.menu(sharedStoredValue: nil, action: #selector(NSText.copy(_:)), target: nil) { $0 }
+        XCTAssertTrue(mixed.items.allSatisfy { $0.state == .off })
+
+        let none = TagColor.menu(sharedStoredValue: "", action: #selector(NSText.copy(_:)), target: nil) { $0 }
+        XCTAssertEqual(none.items.first?.state, .on)
+    }
+}

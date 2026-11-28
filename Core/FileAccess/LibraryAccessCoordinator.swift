@@ -1719,6 +1719,21 @@ final class LibraryAccessCoordinator {
         resolvedVideoURLs[video.id]
     }
 
+    /// A sharper thumbnail frame, only for videos whose file is on this Mac: never for offline or
+    /// unavailable videos, and never one that would download from iCloud.
+    func sharpThumbnail(for video: VideoRecord, maximumPixelSize: Int) async -> CGImage? {
+        guard video.availability == .available,
+              recoveredMediaExclusions.permitsAutomaticWork(video.id),
+              let mediaService,
+              let fileURL = resolvedVideoURLs[video.id],
+              await mediaService.hasLocalMedia(at: fileURL) else { return nil }
+        return try? await mediaService.sharpFrame(
+            fileURL: fileURL,
+            duration: video.duration,
+            maximumPixelSize: maximumPixelSize
+        )
+    }
+
     /// The videos in the scopes, as a drag out of Tagivy or an export to an editing app hands them over.
     func resolveVideos(in scopes: [VideoScope]) async throws -> ResolvedVideos {
         let database = database

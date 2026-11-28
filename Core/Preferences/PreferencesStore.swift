@@ -1,5 +1,5 @@
+import AppKit
 import Combine
-import Foundation
 
 enum IdleLockInterval: Int, CaseIterable, Identifiable, Sendable {
     case immediately = 0
@@ -35,6 +35,31 @@ enum FolderImportPreference: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Settings → General → Appearance. Automatic follows the system setting.
+enum AppAppearancePreference: String, CaseIterable, Identifiable, Sendable {
+    case automatic
+    case light
+    case dark
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .automatic: String(localized: "settings.appearance.automatic", defaultValue: "Automatic")
+        case .light: String(localized: "settings.appearance.light", defaultValue: "Light")
+        case .dark: String(localized: "settings.appearance.dark", defaultValue: "Dark")
+        }
+    }
+
+    /// The value for `NSApp.appearance`; nil follows the system.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .automatic: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @MainActor
 final class PreferencesStore: ObservableObject {
     enum Key {
@@ -43,6 +68,8 @@ final class PreferencesStore: ObservableObject {
         static let folderImportPreference = "folderImportPreference"
         static let includeSelectedFolderAsRootTag = "includeSelectedFolderAsRootTag"
         static let receivesBetaUpdates = "receivesBetaUpdates"
+        static let appearance = "appearance"
+        static let floatsMainWindowOnTop = "floatsMainWindowOnTop"
     }
 
     private let defaults: UserDefaults
@@ -67,6 +94,14 @@ final class PreferencesStore: ObservableObject {
         didSet { defaults.set(receivesBetaUpdates, forKey: Key.receivesBetaUpdates) }
     }
 
+    @Published var appearance: AppAppearancePreference {
+        didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
+    }
+
+    @Published var floatsMainWindowOnTop: Bool {
+        didSet { defaults.set(floatsMainWindowOnTop, forKey: Key.floatsMainWindowOnTop) }
+    }
+
     /// Running a beta build turns on receiving betas once and remembers it, so testers keep getting betas
     /// (and releases) until they turn it off, even after an update moves them to a release build.
     init(defaults: UserDefaults = .standard, isBetaBuild: Bool = AppConfiguration.isBetaBuild) {
@@ -85,6 +120,8 @@ final class PreferencesStore: ObservableObject {
             defaults.set(true, forKey: Key.receivesBetaUpdates)
         }
         receivesBetaUpdates = defaults.object(forKey: Key.receivesBetaUpdates) as? Bool ?? false
+        appearance = AppAppearancePreference(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .automatic
+        floatsMainWindowOnTop = defaults.bool(forKey: Key.floatsMainWindowOnTop)
     }
 
     func setAuthenticationEnabled(_ enabled: Bool) {

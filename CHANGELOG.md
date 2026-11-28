@@ -2,7 +2,19 @@
 
 This file records user-visible changes across Tagivy and earlier FileFacet releases.
 
-## [Unreleased]
+## [1.0.19] - Unreleased
+
+### Added
+
+- View > Focus Sidebar (Option-Command-1) and Focus Video Grid (Option-Command-2) move the keyboard focus to that part of the window, bringing the window forward if needed. Focus Sidebar shows a hidden sidebar, and Focus Video Grid selects the first video when none is selected. Like every Tagivy command, you can give them other shortcuts in System Settings > Keyboard > Keyboard Shortcuts > App Shortcuts.
+- Window > Float on Top keeps the Tagivy window in front of other apps' windows. Tagivy remembers the choice the next time it opens.
+- Settings has a General pane with an Appearance option: Automatic follows the system, or choose Light or Dark for Tagivy only. The change applies right away.
+- The Color menu for tags shows each color next to its name.
+
+### Changed
+
+- Thumbnail zoom changes the grid one column at a time, as in Photos: the − and + buttons, the slider between them, and View > Zoom In (Command-+) and Zoom Out (Command-−) each add or remove a column, and the thumbnails always fill the row. Resizing the window keeps the number of columns and resizes the thumbnails, using fewer columns only when thumbnails would get too small. With few columns, large thumbnails are redrawn sharper from the video while they are shown; Tagivy keeps these in memory only, so the thumbnail cache on disk doesn't grow. Actual Size (Command-0) returns to as many columns as fit at the default size. The zoom you chose earlier becomes the matching number of columns.
+- The ⌘1–⌘4 hints in the sidebar appear only while you hold Command by itself.
 
 ## [1.0.18] - 2026-11-28
 

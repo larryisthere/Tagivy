@@ -123,6 +123,23 @@ final class MediaProcessingServiceTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: service.thumbnailURL(for: secondID)).prefix(3), Data([0xff, 0xd8, 0xff]))
     }
 
+    func testSharpFrameFitsTheRequestedSizeAndWritesNothingToTheCache() async throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "SyntheticThumbnailFixture", withExtension: "m4v"))
+        let file = fixture.rootURL.appendingPathComponent("synthetic.m4v")
+        try FileManager.default.copyItem(at: source, to: file)
+        let service = try MediaProcessingService(cacheDirectory: fixture.rootURL)
+        let thumbnails = service.thumbnailURL(for: "x").deletingLastPathComponent()
+        let before = try FileManager.default.contentsOfDirectory(atPath: thumbnails.path)
+
+        let image = try await service.sharpFrame(fileURL: file, duration: 2, maximumPixelSize: 960)
+
+        XCTAssertGreaterThan(image.width, 0)
+        XCTAssertLessThanOrEqual(max(image.width, image.height), 960)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: thumbnails.path), before)
+    }
+
     @MainActor
     func testThumbnailReadinessKeepsCloudAndUnavailableDistinct() {
         XCTAssertTrue(VideoCloudReadiness.isPlaceholder(status: .notDownloaded, dataless: false))
@@ -172,4 +189,28 @@ private struct MediaFixture {
     }
 
     func remove() { try? FileManager.default.removeItem(at: rootURL) }
+}
+
+final class SharpThumbnailSizeTests: XCTestCase {
+    func testCachedThumbnailIsEnoughUpToItsWidth() {
+        XCTAssertNil(SharpThumbnailSize.tier(forDisplayedPixelWidth: 360))
+        XCTAssertNil(SharpThumbnailSize.tier(forDisplayedPixelWidth: 640))
+    }
+
+    func testWiderThumbnailsRoundUpToAFewSizes() {
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 641), 960)
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 960), 960)
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 1100), 1280)
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 1800), 1920)
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 2400), 2560)
+    }
+
+    func testVeryWideThumbnailsStopAtTheLargestSize() {
+        XCTAssertEqual(SharpThumbnailSize.tier(forDisplayedPixelWidth: 5000), 2560)
+    }
+
+    func testResizingWithinASizeKeepsTheSameFrame() {
+        let tiers = Set(stride(from: 1300.0, through: 1920.0, by: 7).compactMap(SharpThumbnailSize.tier(forDisplayedPixelWidth:)))
+        XCTAssertEqual(tiers, [1920])
+    }
 }
