@@ -1538,6 +1538,12 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         item.animator().isCollapsed = collapse
     }
 
+    /// A frame sharper than the cached thumbnail, for thumbnails shown wider than it.
+    var sharpThumbnail: ((VideoRecord, Int) async -> CGImage?)? {
+        get { videoGridViewController.sharpThumbnail }
+        set { videoGridViewController.sharpThumbnail = newValue }
+    }
+
     var canFocusVideoGrid: Bool { showsLibraryGrid }
 
     /// View → Focus Video Grid.
@@ -1546,10 +1552,18 @@ final class LibrarySplitViewController: NSSplitViewController, NSToolbarDelegate
         videoGridViewController.focusGrid()
     }
 
-    /// View → Focus Sidebar shows a hidden sidebar first.
+    /// View → Focus Sidebar shows a hidden sidebar first, and focuses it once it has slid in.
     func focusSidebar() {
-        if isSidebarCollapsed { toggleSidebar() }
-        sidebarViewController.focusOutline()
+        guard let item = sidebarSplitViewItem, item.isCollapsed else {
+            sidebarViewController.focusOutline()
+            return
+        }
+        sidebarToggleButton?.state = .on
+        NSAnimationContext.runAnimationGroup { _ in
+            item.animator().isCollapsed = false
+        } completionHandler: { [weak self] in
+            self?.sidebarViewController.focusOutline()
+        }
     }
 
     func toggleInspector() {

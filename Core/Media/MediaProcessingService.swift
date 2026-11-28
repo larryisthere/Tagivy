@@ -46,6 +46,21 @@ struct VideoMediaInspection: Sendable {
     let height: Int?
 }
 
+/// Cached thumbnails are at most 640 pixels wide. A thumbnail shown wider than that, such as with
+/// few columns on a Retina display, gets a sharper frame in one of a few sizes, so resizing the
+/// grid does not decode a new frame at every step.
+enum SharpThumbnailSize {
+    static let cachedPixelWidth = 640
+    static let tiers = [960, 1280, 1920, 2560]
+
+    /// The frame size for a thumbnail shown `displayedPixelWidth` pixels wide, or nil when the
+    /// cached thumbnail is already sharp enough.
+    static func tier(forDisplayedPixelWidth displayedPixelWidth: Double) -> Int? {
+        guard displayedPixelWidth > Double(cachedPixelWidth) else { return nil }
+        return tiers.first { Double($0) >= displayedPixelWidth } ?? tiers.last
+    }
+}
+
 actor MediaProcessingService {
     static let defaultMaximumCacheBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
 
@@ -122,12 +137,8 @@ actor MediaProcessingService {
                 do {
                     let generator = AVAssetImageGenerator(asset: asset)
                     generator.appliesPreferredTrackTransform = true
-                    generator.maximumSize = CGSize(width: 640, height: 360)
-                    let requestedTime = CMTime(
-                        seconds: min(max(duration ?? 0, 0), 1),
-                        preferredTimescale: 600
-                    )
-                    (image, _) = try await generator.image(at: requestedTime)
+                    generator.maximumSize = CGSize(width: SharpThumbnailSize.cachedPixelWidth, height: 360)
+                    (image, _) = try await generator.image(at: Self.thumbnailTime(duration: duration))
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
@@ -175,6 +186,20 @@ actor MediaProcessingService {
                 contentFingerprint: fingerprint
             )
         }
+    }
+
+    /// The thumbnail frame: one second in, or the start of a shorter video.
+    private static func thumbnailTime(duration: Double?) -> CMTime {
+        CMTime(seconds: min(max(duration ?? 0, 0), 1), preferredTimescale: 600)
+    }
+
+    /// The thumbnail frame at a larger size than the cached one, for thumbnails shown wider than it.
+    /// It is kept in memory only, by the caller, so the thumbnail cache on disk does not grow.
+    func sharpFrame(fileURL: URL, duration: Double?, maximumPixelSize: Int) async throws -> CGImage {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: fileURL))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maximumPixelSize, height: maximumPixelSize)
+        return try await generator.image(at: Self.thumbnailTime(duration: duration)).image
     }
 
     func inspectVideo(fileURL: URL) async throws -> VideoMediaInspection {

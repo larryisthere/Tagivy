@@ -226,6 +226,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
         lockCoordinator.onStateChange = { [weak self] state in
             self?.render(lockState: state)
         }
+        libraryViewController.sharpThumbnail = { [weak self] video, pixelSize in
+            await self?.libraryAccessCoordinator?.sharpThumbnail(for: video, maximumPixelSize: pixelSize)
+        }
         libraryViewController.onExportToEditor = { [weak self] scope, format in
             self?.exportToEditor(scope, format: format)
         }
@@ -663,8 +666,9 @@ final class ApplicationCoordinator: NSObject, NSMenuItemValidation, MainMenuActi
             .sink { [weak self] floats in
                 guard let self else { return }
                 windowController.floatsOnTop = floats
-                // Settings opened from a floating window stays in front of it.
+                // Settings and Quick Look opened from a floating window stay in front of it.
                 presentedSettingsWindow?.level = windowController.window?.level ?? .normal
+                quickLookCoordinator.followHostWindowLevel()
             }
             .store(in: &preferenceSubscriptions)
     }
@@ -1030,6 +1034,22 @@ private final class QuickLookPreviewCoordinator: NSResponder,
         activePanel = panel
         panel.updateController()
         panel.makeKeyAndOrderFront(nil)
+        followHostWindowLevel()
+    }
+
+    private var panelLevelBeforeRaising: NSWindow.Level?
+
+    /// With Float on Top, the library window would cover the panel, even after a click in the window;
+    /// the panel then sits one level above it, and goes back to its own level when floating ends.
+    func followHostWindowLevel() {
+        guard let panel = activePanel, let hostWindow else { return }
+        if hostWindow.level.rawValue > NSWindow.Level.normal.rawValue {
+            if panelLevelBeforeRaising == nil { panelLevelBeforeRaising = panel.level }
+            panel.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
+        } else if let original = panelLevelBeforeRaising {
+            panel.level = original
+            panelLevelBeforeRaising = nil
+        }
     }
 
     func close() {

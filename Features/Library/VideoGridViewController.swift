@@ -147,6 +147,8 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
     private var preferredColumnCount: Int?
     /// Called when the column count or the most columns the grid can show changes.
     var onZoomChanged: (() -> Void)?
+    /// A frame sharper than the cached thumbnail, for thumbnails shown wider than it.
+    var sharpThumbnail: ((VideoRecord, Int) async -> CGImage?)?
     var onExportToEditor: (VideoScope, NLEExportFormat) -> Void = { _, _ in }
 
     private let emptyState = NSStackView()
@@ -1102,6 +1104,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
                     sections[section].videos[item] = video
                     let path = IndexPath(item: item, section: section)
                     if let cell = collectionView.item(at: path) as? VideoCollectionViewItem {
+                        cell.sharpThumbnail = sharpThumbnail
                         cell.configure(with: video, thumbnailURL: thumbnailURL(video), refreshThumbnail: refreshThumbnail)
                     }
                     break
@@ -1196,6 +1199,7 @@ final class VideoGridViewController: NSViewController, NSCollectionViewDataSourc
             return NSCollectionViewItem()
         }
         guard let video = video(at: indexPath) else { return item }
+        item.sharpThumbnail = sharpThumbnail
         item.configure(with: video, thumbnailURL: thumbnailURL(video))
         return item
     }
@@ -2439,6 +2443,10 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
     private var configuredVideo: VideoRecord?
     private var configuredURL: URL?
     private var placeholderWait = ThumbnailWait()
+    var sharpThumbnail: ((VideoRecord, Int) async -> CGImage?)?
+    private var sharpTask: Task<Void, Never>?
+    /// The sharper frame size shown or being made; a smaller one is never fetched after a larger.
+    private var sharpTier: Int?
     /// Set while a new filter result stays hidden waiting for its image; the image then shows
     /// at once and the whole item fades in, so the placeholder never fades in first.
     private var awaitsImageToFadeInUntil: CFTimeInterval = 0
@@ -2467,6 +2475,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         awaitsImageToFadeInUntil = 0
         imageTask?.cancel()
         imageTask = nil
+        resetSharpThumbnail()
         isLoadingImage = false
         imageRequest = UUID()
         configuredVideo = nil
@@ -2538,6 +2547,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         configuredURL = thumbnailURL
         if needsImage {
             imageTask?.cancel()
+            resetSharpThumbnail()
             let request = UUID()
             imageRequest = request
             let previewMayStillArrive = video.thumbnailStatus == .pending
@@ -2566,6 +2576,7 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
                         awaitsImageToFadeInUntil = 0
                         FilterResultTransition.fadeIn(layer, after: 0)
                     }
+                    requestSharpThumbnailIfNeeded()
                 }
             } else {
                 imageTask = nil
@@ -2579,6 +2590,48 @@ private final class VideoCollectionViewItem: NSCollectionViewItem {
         let duration = video.duration.map { formattedDuration($0) } ?? video.fileExtension.uppercased()
         detailLabel.stringValue = duration
         view.toolTip = video.filename
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        requestSharpThumbnailIfNeeded()
+    }
+
+    private func resetSharpThumbnail() {
+        sharpTask?.cancel()
+        sharpTask = nil
+        sharpTier = nil
+    }
+
+    /// With few columns the thumbnail is wider than the cached image, which then looks soft. The
+    /// cached image stays on screen while a sharper frame of the right size is made, and is
+    /// replaced once it is ready. Sharper frames are kept in memory only.
+    private func requestSharpThumbnailIfNeeded() {
+        guard let video = configuredVideo,
+              let sharpThumbnail,
+              video.availability == .available,
+              isLoadingImage == false,
+              thumbnailView.image != nil,
+              let tier = SharpThumbnailSize.tier(
+                forDisplayedPixelWidth: thumbnailView.bounds.width * (view.window?.backingScaleFactor ?? 2)
+              ),
+              tier > (sharpTier ?? 0) else { return }
+        sharpTask?.cancel()
+        sharpTier = tier
+        let key = SharpThumbnails.key(video: video, tier: tier)
+        if let image = SharpThumbnails.image(for: key) {
+            thumbnailView.setImage(image, reveal: .immediate)
+            return
+        }
+        let request = imageRequest
+        sharpTask = Task { [weak self] in
+            // Live resizing and zoom glides pass through sizes; make a frame once the size settles.
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let image = await sharpThumbnail(video, tier), !Task.isCancelled,
+                  let self, imageRequest == request else { return }
+            SharpThumbnails.remember(image, for: key)
+            thumbnailView.setImage(image, reveal: .immediate)
+        }
     }
 
     private func formattedDuration(_ duration: Double) -> String {
@@ -2805,6 +2858,29 @@ private enum ShownThumbnails {
 
     static func remember(_ image: CGImage, at url: URL) {
         cache.setObject(image, forKey: url as NSURL, cost: image.bytesPerRow * image.height)
+    }
+}
+
+/// Sharper frames for wide thumbnails, in memory only, so the thumbnail cache on disk does not grow.
+@MainActor
+private enum SharpThumbnails {
+    private static let cache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
+        cache.totalCostLimit = 128 * 1_024 * 1_024
+        return cache
+    }()
+
+    /// A regenerated thumbnail gets a new identifier, so its sharper frames are made again too.
+    static func key(video: VideoRecord, tier: Int) -> NSString {
+        "\(video.id)|\(video.thumbnailID ?? "")|\(tier)" as NSString
+    }
+
+    static func image(for key: NSString) -> CGImage? {
+        cache.object(forKey: key)
+    }
+
+    static func remember(_ image: CGImage, for key: NSString) {
+        cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
     }
 }
 
