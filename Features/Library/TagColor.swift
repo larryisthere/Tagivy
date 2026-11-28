@@ -75,6 +75,10 @@ enum TagColor: String, CaseIterable {
             )
             item.target = target
             item.image = menuSwatch(for: option)
+            // macOS 27 hides menu item images unless asked; the swatch is the point of this menu.
+            if #available(macOS 27.0, *) {
+                item.preferredImageVisibility = .visible
+            }
             item.representedObject = representedObject(storedValue)
             item.state = sharedStoredValue == storedValue ? .on : .off
             menu.addItem(item)

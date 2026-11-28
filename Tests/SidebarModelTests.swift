@@ -363,6 +363,9 @@ final class TagColorMenuTests: XCTestCase {
 
         XCTAssertEqual(menu.items.compactMap { $0.representedObject as? String }, ["", "red", "orange", "yellow", "green", "blue", "purple"])
         XCTAssertTrue(menu.items.allSatisfy { $0.image != nil && $0.image?.isTemplate == false })
+        if #available(macOS 27.0, *) {
+            XCTAssertTrue(menu.items.allSatisfy { $0.preferredImageVisibility == .visible })
+        }
         XCTAssertEqual(menu.items.filter { $0.state == .on }.compactMap { $0.representedObject as? String }, ["green"])
     }
 
